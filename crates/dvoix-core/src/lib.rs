@@ -20,7 +20,7 @@ pub use index::{GraphData, Index, NoteSummary, ProjectSummary, SearchHit, TagCou
 pub use markdown::{ParsedNote, RenderedNote};
 pub use project::{ProjectMeta, ProjectStatus};
 pub use tasks::{Priority, Task};
-pub use vault::{Vault, VaultEntry};
+pub use vault::{HiddenFilter, Vault, VaultEntry};
 pub use watcher::{ChangeKind, VaultChange, VaultWatcher};
 
 /// Name of the hidden folder inside a vault where dvoix keeps caches and settings.

@@ -100,7 +100,9 @@ pub struct TagCount {
 /// Which files the index understands. Other file types (canvas, boards, ...)
 /// can add their own extraction here later.
 pub fn is_indexable(path: &str) -> bool {
-    path.to_lowercase().ends_with(".md")
+    // Hidden folders stay out even when a note in them is opened and saved
+    // (the "Versteckte Dateien" plugin can show them).
+    !Vault::is_ignored(path) && path.to_lowercase().ends_with(".md")
 }
 
 impl Index {
@@ -540,6 +542,18 @@ mod tests {
         let hits = index.search("zeitpl", 10).unwrap();
         assert_eq!(hits[0].path, "beta.md");
         assert!(index.search("\"(", 10).unwrap().is_empty());
+    }
+
+    #[test]
+    fn notes_in_hidden_folders_are_never_indexed() {
+        let (_dir, vault) = sample_vault();
+        let mut index = Index::for_vault(&vault).unwrap();
+        index.rebuild(&vault).unwrap();
+        vault
+            .write(".obsidian/geheim.md", "# Geheim\nwortxyz")
+            .unwrap();
+        index.update(&vault, ".obsidian/geheim.md").unwrap();
+        assert!(index.search("wortxyz", 10).unwrap().is_empty());
     }
 
     #[test]

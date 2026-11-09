@@ -2,15 +2,17 @@
   // File explorer: toolbar plus the folder tree of the vault.
   import { ChevronsDownUp, FolderPlus } from "@lucide/svelte";
   import TreeItem from "./TreeItem.svelte";
-  import { buildTree } from "./tree";
+  import { buildTree, mergeEntries } from "./tree";
   import { contextMenu } from "../../../components/contextMenuState.svelte";
   import { DRAG_TYPE, createItems, newFolder } from "./fileMenu";
   import { creatableFileTypes } from "../../../filetypes";
   import { ui } from "../../../ui.svelte";
   import { vault } from "../../../vault.svelte";
   import { explorerSettings } from "./settings";
+  import { plugins } from "../../manager.svelte";
 
-  const tree = $derived(buildTree(vault.entries));
+  // Other plugins can add entries only the explorer shows (hidden folders).
+  const tree = $derived(buildTree(mergeEntries(vault.entries, plugins.explorerEntries)));
   let rootDrop = $state(false);
 
   /** New items go into the folder of the open file, like in Obsidian (or the root, see settings). */

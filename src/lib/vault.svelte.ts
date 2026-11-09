@@ -67,7 +67,8 @@ class VaultStore {
       if (!this.tearingDown) void this.closeTabsWhere((t) => t.view === id);
     });
     this.unlisten = await onVaultChanged((change) => {
-      this.scheduleRefresh();
+      // Hidden files are not part of `entries` (only the hidden-files plugin lists them).
+      if (!change.hidden) this.scheduleRefresh();
       if (change.kind === "removed") void this.closeIfGone(change.path);
       else if (change.path === this.openPath && !this.dirty) void this.reloadOpenFile();
     });

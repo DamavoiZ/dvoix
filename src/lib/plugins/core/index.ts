@@ -3,6 +3,7 @@
 // added to this list. See `../types.ts` for what a plugin can register.
 import type { Plugin } from "../types";
 import { fileExplorerPlugin } from "./file-explorer";
+import { hiddenFilesPlugin } from "./hidden-files";
 import { searchPlugin } from "./search";
 import { tagsPlugin } from "./tags";
 import { backlinksPlugin } from "./backlinks";
@@ -17,6 +18,7 @@ import { editorModesPlugin } from "./editor-modes";
 
 export const corePlugins: Plugin[] = [
   fileExplorerPlugin,
+  hiddenFilesPlugin,
   searchPlugin,
   tagsPlugin,
   backlinksPlugin,

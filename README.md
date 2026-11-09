@@ -22,7 +22,7 @@ Eine Desktop-App für Notizen, Projektmanagement, Tracking und alles, was späte
 - Aufgaben: ganz normale Markdown-Checkboxen in jeder Notiz, optional mit Fälligkeit und Priorität. Im Editor sind sie anklickbar, die Aufgabenübersicht in der Seitenleiste sammelt alle Aufgaben des Vaults (nach Fälligkeit oder nach Notiz gruppiert)
 - Projekte: Notizen mit `type: projekt` im Frontmatter, mit Status, Fälligkeit und Fortschritt aus ihren Checkboxen in einer eigenen Projektliste
 - Graph-Ansicht (Strg/Cmd + G oder das Netz-Symbol in der Icon-Leiste) in einem eigenen Tab: Notizen als Punkte, verbunden über Links, über ihre Ordner (Ordner als eigene Knoten) und/oder über gemeinsame Tags (Tags als Knoten oder direkte Linien). Einstellbar sind Filter (`projekte #idee -archiv`), einzelne Notizen, Anhänge und noch fehlende Notizen ein/aus, Farben nach Ordner oder Tag, Größe nach Anzahl der Verbindungen, Pfeile, Linienstärke, ab welcher Zoomstufe Titel erscheinen und die Kräfte des Layouts. Klick öffnet die Notiz in einem neuen Tab, Hover hebt die Nachbarn hervor
-- Alles ist ein Plugin, wie bei Obsidian: Datei-Explorer, Suche, Tags, Backlinks, Aufgaben, Projekte, Canvas, Graph, Schnellöffner, Tabs und Ansichten lassen sich in den Einstellungen (Zahnrad unten in der Icon-Leiste oder Strg/Cmd + ,) einzeln ausschalten
+- Alles ist ein Plugin, wie bei Obsidian: Datei-Explorer, Suche, Tags, Backlinks, Aufgaben, Projekte, Canvas, Graph, Schnellöffner, Tabs, Ansichten und versteckte Dateien (Ordner wie `.obsidian`, anfangs aus) lassen sich in den Einstellungen (Zahnrad unten in der Icon-Leiste oder Strg/Cmd + ,) einzeln ausschalten
 - Einstellungen: Editor (Zeilenlänge, Zeilennummern, Rechtschreibprüfung), Darstellung (Schriftgrößen) und eigene Optionen je Plugin
 - Alle Einstellungen eines Vaults liegen im Vault selbst unter `.dvoix/` (siehe unten), wandern also mit, wenn du den Ordner kopierst oder synchronisierst
 - Git: der Vault wird über das `git`-Programm des Systems versioniert. Ein Panel in der Seitenleiste zeigt, was sich geändert hat (gestaged, geändert, unversioniert), man kann einzelne Dateien stagen, Änderungen verwerfen, committen (Strg/Cmd + Enter), Branches wechseln und anlegen, pushen und ziehen. Ein eigener Tab zeigt den Verlauf mit den Dateien je Commit und dem Diff dazu
@@ -77,7 +77,7 @@ Wie `.obsidian/` bei Obsidian. Alles, was zum Vault gehört, liegt hier; nur „
   index.sqlite              Suchindex, nur Cache
 ```
 
-Fehlt eine Datei, gelten die Standardwerte. `index.sqlite` kannst du jederzeit löschen, er wird neu aufgebaut. Ordner, die mit `.` beginnen, werden nicht angezeigt und nicht indexiert. Das Layout, das frühere Versionen im Browser-Speicher der App hatten, wird beim ersten Öffnen eines Vaults automatisch nach `workspace.json` übernommen.
+Fehlt eine Datei, gelten die Standardwerte. `index.sqlite` kannst du jederzeit löschen, er wird neu aufgebaut. Ordner, die mit `.` beginnen, werden nicht indexiert und standardmäßig nicht angezeigt (siehe „Versteckte Dateien“ unten). Das Layout, das frühere Versionen im Browser-Speicher der App hatten, wird beim ersten Öffnen eines Vaults automatisch nach `workspace.json` übernommen.
 
 ## Plugins
 
@@ -92,9 +92,16 @@ Jede Funktion ist ein Plugin mit Manifest, das sich über eine kleine API in die
 | `ctx.registerEditorExtension(...)` | CodeMirror-Erweiterung für den Markdown-Editor |
 | `ctx.addFileFooter(...)` / `ctx.addPaneHeader(...)` | etwas unter oder über der offenen Datei (Backlinks, Tab-Leiste) |
 | `ctx.addOverlay(...)` | Dialog auf oberster Ebene (Schnellöffner) |
+| `ctx.addExplorerEntries(...)` | zusätzliche Einträge nur im Datei-Explorer (versteckte Ordner) |
 | `ctx.registerView(...)` | eigene Ansicht, die wie eine Datei in einem Tab läuft (Graph); öffnen mit `vault.openViewTab(id)` |
 | `ctx.addSettingTab(...)` | eigene Seite in den Einstellungen |
 | `ctx.loadData()` / `ctx.saveData()` | eigene Daten in `.dvoix/plugins/<id>/data.json` |
+
+### Versteckte Dateien
+
+Das Plugin „Versteckte Dateien“ ist anfangs aus. Eingeschaltet zeigt es Ordner und Dateien, deren Name mit einem Punkt beginnt (z. B. `.obsidian`, `.trash`, `.gitignore`), etwas blasser im Datei-Explorer. Dort lassen sie sich öffnen, bearbeiten, umbenennen und löschen wie alles andere. In Suche, Tags, Backlinks, Graph und Schnellöffner tauchen sie nie auf, und auch Notizen darin werden nicht indexiert.
+
+Einstellungen (in `.dvoix/plugins/hidden-files/data.json`): anzeigen ja/nein (auch über den Befehl „Versteckte Dateien ein-/ausblenden“), ob auch einzelne Punkt-Dateien erscheinen, ob der eigene Ordner `.dvoix` erscheint (aus) und welche Namen trotzdem verborgen bleiben (Standard: `.git`). Pro Vault werden höchstens 10.000 versteckte Einträge aufgelistet. Änderungen in `.git` und `.dvoix` meldet der Dateiwächter nicht, damit ein Commit die App nicht mit Ereignissen flutet; ihr Inhalt im Explorer wird beim nächsten Umschalten oder beim nächsten Anlegen bzw. Löschen einer Datei neu geladen.
 
 Die API ist so gebaut, dass später auch Community-Plugins (z. B. aus `.dvoix/plugins/<id>/main.js`) darauf aufsetzen können; im Moment gibt es nur die Core-Plugins.
 

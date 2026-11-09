@@ -22,6 +22,18 @@ pub struct VaultChange {
     pub kind: ChangeKind,
     /// Vault-relative path.
     pub path: String,
+    /// Inside a hidden folder or a dot-file (see `Vault::is_ignored`). Such
+    /// changes are only reported for the "Versteckte Dateien" plugin and are
+    /// never indexed.
+    pub hidden: bool,
+}
+
+/// Hidden places whose changes are never reported: `.git` churns through
+/// hundreds of object files on every commit and `.dvoix` is written by dvoix
+/// itself all the time, so reporting them would flood the UI for nothing.
+fn is_noisy(rel: &str) -> bool {
+    let top = rel.split('/').next().unwrap_or_default();
+    top == ".git" || top == crate::APP_DIR || rel.ends_with(".dvoix-tmp")
 }
 
 /// Keeps the OS watcher alive; dropping it stops watching.
@@ -30,8 +42,9 @@ pub struct VaultWatcher {
 }
 
 impl VaultWatcher {
-    /// Calls `on_change` for every change of a visible file or folder.
-    /// Hidden paths (`.dvoix`, `.git`, temp files, ...) are filtered out.
+    /// Calls `on_change` for every change of a file or folder. Changes in
+    /// hidden places are marked `hidden`; those in `.git`, `.dvoix` and temp
+    /// files are dropped (see `is_noisy`).
     pub fn start<F>(vault: &Vault, on_change: F) -> Result<Self>
     where
         F: Fn(VaultChange) + Send + 'static,
@@ -72,11 +85,12 @@ fn to_changes(vault: &Vault, event: &notify::Event) -> Vec<VaultChange> {
         .iter()
         .filter_map(|p| {
             let rel = vault.relative(p)?;
-            if Vault::is_ignored(&rel) {
+            if is_noisy(&rel) {
                 return None;
             }
             Some(VaultChange {
                 kind: kind_for(p)?,
+                hidden: Vault::is_ignored(&rel),
                 path: rel,
             })
         })
@@ -90,7 +104,7 @@ mod tests {
     use std::time::Duration;
 
     #[test]
-    fn reports_external_writes_but_not_hidden_files() {
+    fn reports_external_writes_but_not_app_files() {
         let dir = tempfile::tempdir().unwrap();
         let vault = Vault::open(dir.path()).unwrap();
         let (tx, rx) = mpsc::channel();
@@ -106,5 +120,15 @@ mod tests {
             .recv_timeout(Duration::from_secs(5))
             .expect("no change reported");
         assert_eq!(change.path, "neu.md");
+        assert!(!change.hidden);
+    }
+
+    #[test]
+    fn marks_hidden_changes_and_drops_noisy_ones() {
+        assert!(is_noisy(".git/objects/ab/cdef"));
+        assert!(is_noisy(".dvoix/workspace.json"));
+        assert!(is_noisy("notes/.a.md.dvoix-tmp"));
+        assert!(!is_noisy(".obsidian/app.json"));
+        assert!(!is_noisy("sub/.git-notes.md"));
     }
 }
