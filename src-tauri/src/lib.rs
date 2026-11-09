@@ -86,6 +86,21 @@ pub fn run() {
             commands::read_config,
             commands::write_config,
             commands::rebuild_index,
+            commands::git_status,
+            commands::git_stage,
+            commands::git_unstage,
+            commands::git_stage_all,
+            commands::git_discard,
+            commands::git_commit,
+            commands::git_log,
+            commands::git_commit_files,
+            commands::git_branches,
+            commands::git_checkout,
+            commands::git_create_branch,
+            commands::git_push,
+            commands::git_pull,
+            commands::git_init,
+            commands::git_diff,
         ])
         .run(tauri::generate_context!())
         .expect("error while running dvoix");

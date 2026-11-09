@@ -6,7 +6,8 @@
 //! window (on Windows it stays white until the work is done).
 
 use dvoix_core::{
-    GraphData, NoteSummary, ProjectSummary, SearchHit, TaskItem, VaultEntry, index::TagCount, tasks,
+    GraphData, NoteSummary, ProjectSummary, SearchHit, TaskItem, VaultEntry, git,
+    git::{Branch, Commit, GitStatus}, index::TagCount, tasks,
 };
 use serde::Serialize;
 use tauri::{AppHandle, State};
@@ -241,4 +242,102 @@ pub fn rebuild_index(state: State<AppState>) -> CmdResult<usize> {
             .rebuild(&ws.vault)
             .map_err(err)
     })
+}
+
+// ---------------------------------------------------------------------- git
+
+/// The state of the repository the vault is in: what is staged, what is
+/// changed and what is new. A vault without a repository is not an error.
+#[tauri::command(async)]
+pub fn git_status(state: State<AppState>) -> CmdResult<GitStatus> {
+    with_ws(&state, |ws| git::status(&ws.vault).map_err(err))
+}
+
+/// Stages the given files.
+#[tauri::command(async)]
+pub fn git_stage(state: State<AppState>, paths: Vec<String>) -> CmdResult<()> {
+    with_ws(&state, |ws| git::stage(&ws.vault, &paths).map_err(err))
+}
+
+/// Moves the given files back out of the index.
+#[tauri::command(async)]
+pub fn git_unstage(state: State<AppState>, paths: Vec<String>) -> CmdResult<()> {
+    with_ws(&state, |ws| git::unstage(&ws.vault, &paths).map_err(err))
+}
+
+/// Stages every change of the vault.
+#[tauri::command(async)]
+pub fn git_stage_all(state: State<AppState>) -> CmdResult<()> {
+    with_ws(&state, |ws| git::stage_all(&ws.vault).map_err(err))
+}
+
+/// Throws the changes of one file away.
+#[tauri::command(async)]
+pub fn git_discard(state: State<AppState>, path: String, untracked: bool) -> CmdResult<()> {
+    with_ws(&state, |ws| git::discard(&ws.vault, &path, untracked).map_err(err))
+}
+
+/// Creates a commit, with the short id of the new commit as result.
+#[tauri::command(async)]
+pub fn git_commit(state: State<AppState>, message: String, stage_all: bool) -> CmdResult<String> {
+    with_ws(&state, |ws| git::commit(&ws.vault, &message, stage_all).map_err(err))
+}
+
+/// The last commits, newest first.
+#[tauri::command(async)]
+pub fn git_log(state: State<AppState>, limit: u32) -> CmdResult<Vec<Commit>> {
+    with_ws(&state, |ws| git::log(&ws.vault, limit).map_err(err))
+}
+
+/// The files a commit changed.
+#[tauri::command(async)]
+pub fn git_commit_files(state: State<AppState>, id: String) -> CmdResult<Vec<String>> {
+    with_ws(&state, |ws| git::commit_files(&ws.vault, &id).map_err(err))
+}
+
+/// The local branches and the ones on the remotes.
+#[tauri::command(async)]
+pub fn git_branches(state: State<AppState>) -> CmdResult<Vec<Branch>> {
+    with_ws(&state, |ws| git::branches(&ws.vault).map_err(err))
+}
+
+/// Checks out another branch.
+#[tauri::command(async)]
+pub fn git_checkout(state: State<AppState>, name: String) -> CmdResult<()> {
+    with_ws(&state, |ws| git::checkout(&ws.vault, &name).map_err(err))
+}
+
+/// Creates a branch and checks it out.
+#[tauri::command(async)]
+pub fn git_create_branch(state: State<AppState>, name: String) -> CmdResult<()> {
+    with_ws(&state, |ws| git::create_branch(&ws.vault, &name).map_err(err))
+}
+
+/// Pushes the current branch to its remote.
+#[tauri::command(async)]
+pub fn git_push(state: State<AppState>) -> CmdResult<String> {
+    with_ws(&state, |ws| git::push(&ws.vault).map_err(err))
+}
+
+/// Fetches the remote branch and merges it into the current one.
+#[tauri::command(async)]
+pub fn git_pull(state: State<AppState>) -> CmdResult<String> {
+    with_ws(&state, |ws| git::pull(&ws.vault).map_err(err))
+}
+
+/// Makes the vault folder a repository of its own.
+#[tauri::command(async)]
+pub fn git_init(state: State<AppState>) -> CmdResult<()> {
+    with_ws(&state, |ws| git::init(&ws.vault).map_err(err))
+}
+
+/// The changes of one file as a diff.
+#[tauri::command(async)]
+pub fn git_diff(
+    state: State<AppState>,
+    path: String,
+    staged: bool,
+    commit: Option<String>,
+) -> CmdResult<String> {
+    with_ws(&state, |ws| git::diff(&ws.vault, &path, staged, commit.as_deref()).map_err(err))
 }

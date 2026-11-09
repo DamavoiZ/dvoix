@@ -27,7 +27,7 @@ Eine Desktop-App für Notizen, Projekte, Aufgaben und Tracking, ähnlich wie Obs
 ## Aufbau
 
 ```
-crates/dvoix-core/src/   Logik ohne UI: vault.rs, markdown.rs, tasks.rs, project.rs, index.rs, watcher.rs
+crates/dvoix-core/src/   Logik ohne UI: vault.rs, markdown.rs, tasks.rs, project.rs, git.rs, index.rs, watcher.rs
 src-tauri/src/           Tauri-Hülle: lib.rs (Setup, Handler-Liste), commands.rs (alle Befehle), settings.rs
 src/lib/api.ts           typisierte Wrapper für jeden Rust-Befehl
 src/lib/config.ts        JSON in <vault>/.dvoix/ lesen/schreiben (verzögert, gebündelt)

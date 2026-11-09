@@ -13,7 +13,7 @@ Eine Desktop-App für Notizen, Projektmanagement, Tracking und alles, was späte
 - Datei-Explorer mit Ordnerbaum: Ordner auf- und zuklappen (wird gemerkt), Rechtsklick-Menü zum Anlegen, Umbenennen und Löschen (landet in `.trash/` im Vault), Dateien per Drag & Drop in Ordner verschieben
 - Tabs: Klick im Datei-Explorer öffnet im aktiven Tab, Strg/Cmd + Klick oder mittlere Maustaste in einem neuen; Tabs per Drag & Drop verschieben, mit mittlerer Maustaste oder × schließen. Offene Tabs werden pro Vault gemerkt
 - Schnellöffner (Strg/Cmd + O) mit unscharfer Suche über alle Dateien: `mtg plan` findet `Projekte/Meeting-Planung`. Enter öffnet, Strg + Enter in neuem Tab, gibt es die Notiz nicht, wird sie angelegt
-- Tastenkürzel: Strg + T neuer Tab, Strg + W Tab schließen, Strg + Tab / Strg + Umschalt + Tab (oder Strg + Bild ab/auf) Tab wechseln
+- Tastenkürzel: Strg + T neuer Tab, Strg + W Tab schließen, Strg + Tab / Strg + Umschalt + Tab (oder Strg + Bild ab/auf) Tab wechseln, Strg + Enter Änderungen committen, Strg + Umschalt + H Verlauf öffnen
 - Markdown-Editor (CodeMirror 6) mit YAML-Frontmatter, `[[Wikilinks]]` (Strg/Cmd + Klick öffnet oder legt die Notiz an) und `#tags`
 - Automatisches Speichern, atomar geschrieben (erst Temp-Datei, dann umbenennen)
 - Änderungen von außen (VS Code, Sync-Tools, git) erscheinen sofort in der App
@@ -21,7 +21,8 @@ Eine Desktop-App für Notizen, Projektmanagement, Tracking und alles, was späte
 - Aufgaben: ganz normale Markdown-Checkboxen in jeder Notiz, optional mit Fälligkeit und Priorität. Im Editor sind sie anklickbar, die Aufgabenübersicht in der Seitenleiste sammelt alle Aufgaben des Vaults (nach Fälligkeit oder nach Notiz gruppiert)
 - Projekte: Notizen mit `type: projekt` im Frontmatter, mit Status, Fälligkeit und Fortschritt aus ihren Checkboxen in einer eigenen Projektliste
 - Graph-Ansicht (Strg/Cmd + G oder das Netz-Symbol in der Icon-Leiste) in einem eigenen Tab: Notizen als Punkte, verbunden über Links, über ihre Ordner (Ordner als eigene Knoten) und/oder über gemeinsame Tags (Tags als Knoten oder direkte Linien). Einstellbar sind Filter (`projekte #idee -archiv`), einzelne Notizen, Anhänge und noch fehlende Notizen ein/aus, Farben nach Ordner oder Tag, Größe nach Anzahl der Verbindungen, Pfeile, Linienstärke, ab welcher Zoomstufe Titel erscheinen und die Kräfte des Layouts. Klick öffnet die Notiz in einem neuen Tab, Hover hebt die Nachbarn hervor
-- Alles ist ein Plugin, wie bei Obsidian: Datei-Explorer, Suche, Tags, Backlinks, Aufgaben, Projekte, Canvas, Graph, Schnellöffner und Tabs lassen sich in den Einstellungen (Zahnrad unten in der Icon-Leiste oder Strg/Cmd + ,) einzeln ausschalten
+- Git: der Vault wird über das `git`-Programm des Systems versioniert. Ein Panel in der Seitenleiste zeigt, was sich geändert hat (gestaged, geändert, unversioniert), man kann einzelne Dateien stagen, Änderungen verwerfen, committen (Strg/Cmd + Enter), Branches wechseln und anlegen, pushen und ziehen. Ein eigener Tab zeigt den Verlauf mit den Dateien je Commit und dem Diff dazu
+- Alles ist ein Plugin, wie bei Obsidian: Datei-Explorer, Suche, Tags, Backlinks, Aufgaben, Projekte, Canvas, Graph, Git, Schnellöffner und Tabs lassen sich in den Einstellungen (Zahnrad unten in der Icon-Leiste oder Strg/Cmd + ,) einzeln ausschalten
 - Einstellungen: Editor (Zeilenlänge, Zeilennummern, Rechtschreibprüfung), Darstellung (Schriftgrößen) und eigene Optionen je Plugin
 - Alle Einstellungen eines Vaults liegen im Vault selbst unter `.dvoix/` (siehe unten), wandern also mit, wenn du den Ordner kopierst oder synchronisierst
 - Erster eigener Dateityp: `.canvas` im offenen [JSON-Canvas-Format](https://jsoncanvas.org) (Karten verschieben, Doppelklick legt eine Karte an)
@@ -31,7 +32,7 @@ Eine Desktop-App für Notizen, Projektmanagement, Tracking und alles, was späte
 | Schicht | Technik |
 | --- | --- |
 | App-Hülle | [Tauri 2](https://v2.tauri.app) |
-| Kern (Rust) | `notify` (Dateiwächter), `pulldown-cmark` + `serde_yaml_ng` (Markdown & Frontmatter), `rusqlite` mit FTS5 (Index & Suche) |
+| Kern (Rust) | `notify` (Dateiwächter), `pulldown-cmark` + `serde_yaml_ng` (Markdown & Frontmatter), `rusqlite` mit FTS5 (Index & Suche), `git` (das Programm des Systems, für das Git-Plugin) |
 | Frontend | Svelte 5, TypeScript, Vite, Tailwind CSS 4, [force-graph](https://github.com/vasturiano/force-graph) (Graph-Ansicht auf Canvas) |
 | Editor | CodeMirror 6 |
 
@@ -43,6 +44,7 @@ crates/dvoix-core/      Rust-Kern ohne Tauri, eigenständig testbar
   src/markdown.rs       Frontmatter, Titel, Tags, Links, Überschriften, Suchtext
   src/tasks.rs          Checkbox-Aufgaben lesen und abhaken
   src/project.rs        Frontmatter-Schema für Projekte
+  src/git.rs            Git-Befehle für den Vault (über das git-Programm des Systems)
   src/index.rs          SQLite-Index in <vault>/.dvoix/index.sqlite (nur Cache)
   src/watcher.rs        meldet Änderungen auf der Platte
 src-tauri/              Tauri-App: hält den offenen Vault, verbindet Watcher, Index und UI
@@ -152,6 +154,24 @@ area: Arbeit           # optional, frei wählbar
 ```
 
 Englische Werte (`active`, `waiting`, `done`, ...) gehen auch. Abhaken in der Aufgabenübersicht ändert genau die eine Zeile in der Datei.
+
+## Git
+
+Das Git-Plugin versioniert den Vault über das `git`-Programm, das auf dem Rechner installiert sein muss (z. B. mit Git für Windows, macOS oder Linux). Im Kern steckt dabei kein zusätzlicher Rust-Baustein: `crates/dvoix-core/src/git.rs` ruft `git` auf und übersetzt die Ausgabe.
+
+Im Panel in der Seitenleiste steht, was sich geändert hat:
+
+| Gruppe | Bedeutung |
+| --- | --- |
+| Gestaged | Änderungen, die beim nächsten Commit mitgehen |
+| Geändert | Änderungen an der Datei, die noch nicht gestaged sind |
+| Unversioniert | Dateien, die git noch nicht kennt |
+
+Dateien lassen sich einzeln stagen, aus dem Index nehmen, verwerfen (unversionierte Dateien werden dabei gelöscht) und im Diff ansehen. Der Commit nimmt die gestageden Änderungen; sind keine gestaged, kommen alle Änderungen hinein (in den Einstellungen abschaltbar). Branches lassen sich im Panel wechseln und anlegen, dazu kommen Push und Pull.
+
+Der Verlauf (Strg/Cmd + Umschalt + H) zeigt die letzten Commits; aufgeklappt zeigt jeder Commit die geänderten Dateien, ein Klick darauf den Diff.
+
+Liegt der Vault in einem Ordner eines größeren Repository, bleiben Dateien außerhalb des Vaults unsichtbar: gestaged und committet wird nur, was im Vault liegt. Wichtig ist auch, dass `user.name` und `user.email` gesetzt sind, sonst meldet git beim Commit, dass es die Absenderdaten nicht kennt.
 
 ## Entwickeln
 

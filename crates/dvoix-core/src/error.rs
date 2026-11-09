@@ -16,6 +16,8 @@ pub enum Error {
     AlreadyExists(String),
     #[error("Die Aufgabe hat sich in der Datei geändert, bitte neu laden: {0}")]
     StaleTask(String),
+    #[error("Git-Fehler: {0}")]
+    Git(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
