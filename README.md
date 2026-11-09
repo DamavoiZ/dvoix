@@ -8,6 +8,8 @@ Eine Desktop-App für Notizen, Projektmanagement, Tracking und alles, was späte
 
 - Vault-Ordner wählen, der zuletzt geöffnete wird beim Start wieder geladen
 - Seitenleiste wie in Obsidian: schmale Icon-Leiste ganz links (Dateien, Suche, Tags, Aufgaben, Projekte), daneben das Panel, in der Breite ziehbar und per Klick aufs aktive Icon einklappbar
+- Eigene Titelleiste unter Windows: kein heller Systemrahmen, die Tab-Leiste und die obere Zeile der Seitenleiste verschieben das Fenster (Doppelklick maximiert), Minimieren, Maximieren und Schließen sitzen rechts neben den Tabs. Schmale, dunkle Scrollbalken überall in der App
+- Datei-Explorer sortiert natürlich: `2 - Notes` kommt vor `10 - Archiv`
 - Datei-Explorer mit Ordnerbaum: Ordner auf- und zuklappen (wird gemerkt), Rechtsklick-Menü zum Anlegen, Umbenennen und Löschen (landet in `.trash/` im Vault), Dateien per Drag & Drop in Ordner verschieben
 - Tabs: Klick im Datei-Explorer öffnet im aktiven Tab, Strg/Cmd + Klick oder mittlere Maustaste in einem neuen; Tabs per Drag & Drop verschieben, mit mittlerer Maustaste oder × schließen. Offene Tabs werden pro Vault gemerkt
 - Schnellöffner (Strg/Cmd + O) mit unscharfer Suche über alle Dateien: `mtg plan` findet `Projekte/Meeting-Planung`. Enter öffnet, Strg + Enter in neuem Tab, gibt es die Notiz nicht, wird sie angelegt
@@ -50,6 +52,7 @@ src/                    Svelte-Frontend
   lib/config.ts         JSON-Dateien in <vault>/.dvoix/ lesen und schreiben
   lib/settings.svelte.ts  Editor- und Darstellungs-Einstellungen
   lib/ui.svelte.ts      Workspace: aktives Panel, Breite, aufgeklappte Ordner, offene Tabs
+  lib/window.svelte.ts  eigene Titelleiste: Fenster ziehen, Fenster-Knöpfe
   lib/filetypes/        Dateityp-Registry und der eingebaute Markdown-Editor
   lib/plugins/          Plugin-API (types.ts) und Plugin-Verwaltung (manager.svelte.ts)
   lib/plugins/core/     die Core-Plugins, je eins pro Ordner

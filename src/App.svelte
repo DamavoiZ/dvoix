@@ -5,16 +5,19 @@
   import ContextMenu from "./lib/components/ContextMenu.svelte";
   import FilePane from "./lib/components/FilePane.svelte";
   import Welcome from "./lib/components/Welcome.svelte";
+  import WindowControls from "./lib/components/WindowControls.svelte";
   import SettingsDialog, { SETTINGS } from "./lib/components/settings/SettingsDialog.svelte";
   import { flushConfig } from "./lib/config";
   import { plugins } from "./lib/plugins";
   import { settings } from "./lib/settings.svelte";
   import { ui } from "./lib/ui.svelte";
   import { vault } from "./lib/vault.svelte";
+  import { appWindow, dragRegion } from "./lib/window.svelte";
 
   let ready = $state(false);
 
   onMount(() => {
+    void appWindow.init();
     vault.init().finally(() => (ready = true));
     // Save pending edits and settings before the window closes.
     const beforeUnload = () => {
@@ -52,7 +55,7 @@
 <svelte:window onkeydowncapture={shortcuts} />
 
 {#if !ready}
-  <div class="h-full"></div>
+  <div class="h-full" use:dragRegion></div>
 {:else if vault.info}
   <div class="flex h-full">
     <Ribbon />
@@ -65,5 +68,8 @@
   {/each}
   <SettingsDialog />
 {:else}
-  <Welcome />
+  <div class="flex h-full flex-col">
+    <div class="flex h-9 shrink-0 justify-end" use:dragRegion><WindowControls /></div>
+    <div class="min-h-0 flex-1"><Welcome /></div>
+  </div>
 {/if}

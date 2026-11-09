@@ -31,7 +31,7 @@ crates/dvoix-core/src/   Logik ohne UI: vault.rs, markdown.rs, tasks.rs, project
 src-tauri/src/           Tauri-Hülle: lib.rs (Setup, Handler-Liste), commands.rs (alle Befehle), settings.rs
 src/lib/api.ts           typisierte Wrapper für jeden Rust-Befehl
 src/lib/config.ts        JSON in <vault>/.dvoix/ lesen/schreiben (verzögert, gebündelt)
-src/lib/*.svelte.ts      App-Zustand (vault, ui, settings) mit Runes
+src/lib/*.svelte.ts      App-Zustand (vault, ui, settings, window) mit Runes
 src/lib/filetypes/       Dateityp-Registry, Markdown-Editor, Fallback-Ansicht
 src/lib/plugins/         Plugin-API (types.ts), Verwaltung (manager.svelte.ts), Einstellungen (pluginSettings.svelte.ts)
 src/lib/plugins/core/    ein Ordner pro Core-Plugin, Liste in core/index.ts

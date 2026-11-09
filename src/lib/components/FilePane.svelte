@@ -1,9 +1,12 @@
 <script lang="ts">
   // The open file: headers from plugins (tab bar), the file type's view,
-  // footers from plugins (backlinks).
+  // footers from plugins (backlinks). The top row doubles as the title bar:
+  // empty space there moves the window, the window buttons sit on the right.
   import { fileTypeFor } from "../filetypes";
+  import WindowControls from "./WindowControls.svelte";
   import { plugins } from "../plugins";
   import { vault } from "../vault.svelte";
+  import { dragRegion } from "../window.svelte";
 
   const path = $derived(vault.openPath);
   const type = $derived(path ? fileTypeFor(path) : undefined);
@@ -11,9 +14,16 @@
 </script>
 
 <main class="flex min-w-0 flex-1 flex-col">
-  {#each plugins.paneHeaders as header (header.pluginId + header.id)}
-    <header.component />
-  {/each}
+  <div class="flex shrink-0 items-start" use:dragRegion>
+    <div class="flex min-w-0 flex-1 flex-col">
+      {#each plugins.paneHeaders as header (header.pluginId + header.id)}
+        <header.component />
+      {:else}
+        <div class="h-9 border-b border-zinc-800 bg-zinc-900/60"></div>
+      {/each}
+    </div>
+    <div class="h-9 border-b border-zinc-800 bg-zinc-900/60"><WindowControls /></div>
+  </div>
   {#if path && type}
     <header class="flex items-center justify-between border-b border-zinc-800 px-4 py-2 text-xs text-zinc-500">
       <span class="truncate">{path}</span>
