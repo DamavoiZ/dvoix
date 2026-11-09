@@ -209,7 +209,8 @@ pub fn render(content: &str) -> RenderedNote {
 /// Wikilinks become links with `data-wikilink` so the app can open the target,
 /// and HTML inside a note is escaped: a note is data, never code.
 pub fn render_body(body: &str) -> String {
-    let options = Options::ENABLE_TABLES | Options::ENABLE_TASKLISTS | Options::ENABLE_STRIKETHROUGH;
+    let options =
+        Options::ENABLE_TABLES | Options::ENABLE_TASKLISTS | Options::ENABLE_STRIKETHROUGH;
     let mut events: Vec<Event> = Vec::new();
     // pulldown-cmark splits text at `[`, `#` and friends, so a wikilink can be
     // spread over several text events. They are collected before scanning.
