@@ -3,7 +3,7 @@ import type { VaultEntry } from "../../../api";
 import { creatableFileTypes } from "../../../filetypes";
 import { ui } from "../../../ui.svelte";
 import { vault } from "../../../vault.svelte";
-import type { MenuEntry } from "../../../components/contextMenu.svelte";
+import type { MenuEntry } from "../../../components/contextMenuState.svelte";
 
 /** "Neue Notiz", "Neues Canvas", ..., "Neuer Ordner" inside `folder` ("" = vault root). */
 export function createItems(folder: string): MenuEntry[] {

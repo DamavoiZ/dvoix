@@ -2,7 +2,7 @@
   import { ChevronRight } from "@lucide/svelte";
   import Self from "./TreeItem.svelte";
   import type { TreeNode } from "./tree";
-  import { contextMenu } from "../../../components/contextMenu.svelte";
+  import { contextMenu } from "../../../components/contextMenuState.svelte";
   import { DRAG_TYPE, entryMenu } from "./fileMenu";
   import { vault } from "../../../vault.svelte";
   import { ui } from "../../../ui.svelte";

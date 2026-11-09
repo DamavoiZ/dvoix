@@ -3,7 +3,7 @@
   import { ChevronsDownUp, FolderPlus } from "@lucide/svelte";
   import TreeItem from "./TreeItem.svelte";
   import { buildTree } from "./tree";
-  import { contextMenu } from "../../../components/contextMenu.svelte";
+  import { contextMenu } from "../../../components/contextMenuState.svelte";
   import { DRAG_TYPE, createItems, newFolder } from "./fileMenu";
   import { creatableFileTypes } from "../../../filetypes";
   import { ui } from "../../../ui.svelte";
