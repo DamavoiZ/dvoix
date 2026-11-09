@@ -6,7 +6,7 @@
 //! window (on Windows it stays white until the work is done).
 
 use dvoix_core::{
-    NoteSummary, ProjectSummary, SearchHit, TaskItem, VaultEntry, index::TagCount, tasks,
+    GraphData, NoteSummary, ProjectSummary, SearchHit, TaskItem, VaultEntry, index::TagCount, tasks,
 };
 use serde::Serialize;
 use tauri::{AppHandle, State};
@@ -176,6 +176,13 @@ pub fn notes_where(
 pub fn backlinks(state: State<AppState>, path: String) -> CmdResult<Vec<NoteSummary>> {
     with_ws(&state, |ws| {
         ws.index.lock().map_err(err)?.backlinks(&path).map_err(err)
+    })
+}
+
+#[tauri::command(async)]
+pub fn graph(state: State<AppState>) -> CmdResult<GraphData> {
+    with_ws(&state, |ws| {
+        ws.index.lock().map_err(err)?.graph().map_err(err)
     })
 }
 

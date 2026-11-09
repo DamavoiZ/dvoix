@@ -9,6 +9,7 @@ import { backlinksPlugin } from "./backlinks";
 import { tasksPlugin } from "./tasks";
 import { projectsPlugin } from "./projects";
 import { canvasPlugin } from "./canvas";
+import { graphPlugin } from "./graph";
 import { quickSwitcherPlugin } from "./quick-switcher";
 import { tabsPlugin } from "./tabs";
 
@@ -20,6 +21,7 @@ export const corePlugins: Plugin[] = [
   tasksPlugin,
   projectsPlugin,
   canvasPlugin,
+  graphPlugin,
   quickSwitcherPlugin,
   tabsPlugin,
 ];

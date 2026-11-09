@@ -64,6 +64,33 @@ pub struct ProjectSummary {
     pub next_due: Option<String>,
 }
 
+/// A note as a node of the graph view.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct GraphNote {
+    pub path: String,
+    pub title: String,
+    pub tags: Vec<String>,
+}
+
+/// A link as written in a note. `target` is the raw (lower-cased) link text;
+/// the UI resolves it against the file list, so links to attachments and to
+/// notes that don't exist yet can be shown too.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct GraphLink {
+    pub source: String,
+    pub target: String,
+}
+
+/// Everything the graph view needs, in one round trip.
+#[derive(Debug, Clone, Default, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct GraphData {
+    pub notes: Vec<GraphNote>,
+    pub links: Vec<GraphLink>,
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct TagCount {
     pub tag: String,
@@ -339,6 +366,45 @@ impl Index {
         Ok(projects)
     }
 
+    /// All notes with their tags, and all links between files, for the graph view.
+    pub fn graph(&self) -> Result<GraphData> {
+        let mut data = GraphData::default();
+        let mut by_path = std::collections::HashMap::new();
+        let mut stmt = self
+            .conn
+            .prepare("SELECT path, title FROM notes ORDER BY path")?;
+        for row in stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get(1)?)))? {
+            let (path, title) = row?;
+            by_path.insert(path.clone(), data.notes.len());
+            data.notes.push(GraphNote {
+                path,
+                title,
+                tags: Vec::new(),
+            });
+        }
+        let mut stmt = self
+            .conn
+            .prepare("SELECT path, tag FROM tags ORDER BY path, tag")?;
+        for row in stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get(1)?)))? {
+            let (path, tag) = row?;
+            if let Some(&i) = by_path.get(&path) {
+                data.notes[i].tags.push(tag);
+            }
+        }
+        let mut stmt = self
+            .conn
+            .prepare("SELECT DISTINCT source, target FROM links ORDER BY source, target")?;
+        data.links = stmt
+            .query_map([], |r| {
+                Ok(GraphLink {
+                    source: r.get(0)?,
+                    target: r.get(1)?,
+                })
+            })?
+            .collect::<std::result::Result<_, _>>()?;
+        Ok(data)
+    }
+
     fn summaries(&self, sql: &str, arg: &str) -> Result<Vec<NoteSummary>> {
         let mut stmt = self.conn.prepare(sql)?;
         let notes = stmt
@@ -514,6 +580,41 @@ mod tests {
         index.remove("projekte").unwrap();
         assert_eq!(index.tasks().unwrap().len(), 1);
         assert!(index.projects().unwrap().is_empty());
+    }
+
+    #[test]
+    fn graph_lists_notes_tags_and_links() {
+        let (_dir, vault) = sample_vault();
+        vault
+            .write(
+                "beta.md",
+                "# Beta\nEin #projekt, siehe [[Alpha]] und [Bild](bild.png).",
+            )
+            .unwrap();
+        let mut index = Index::for_vault(&vault).unwrap();
+        index.rebuild(&vault).unwrap();
+
+        let graph = index.graph().unwrap();
+        let paths: Vec<_> = graph.notes.iter().map(|n| n.path.as_str()).collect();
+        assert_eq!(paths, vec!["beta.md", "projekte/alpha.md"]);
+        assert_eq!(graph.notes[1].tags, vec!["projekt"]);
+        assert_eq!(
+            graph.links,
+            vec![
+                GraphLink {
+                    source: "beta.md".into(),
+                    target: "alpha".into()
+                },
+                GraphLink {
+                    source: "beta.md".into(),
+                    target: "bild.png".into()
+                },
+                GraphLink {
+                    source: "projekte/alpha.md".into(),
+                    target: "beta".into()
+                },
+            ]
+        );
     }
 
     #[test]

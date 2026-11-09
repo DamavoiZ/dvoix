@@ -7,7 +7,7 @@ import { readJsonRaw, writeJson } from "./config";
 /** Id of a side panel. Panels come from plugins, e.g. "file-explorer" or "tasks". */
 export type PanelId = string;
 
-/** Open tabs: file paths ("" = empty tab) and the active index. */
+/** Open tabs: file paths ("" = empty tab, `dvoix://view/<id>` = a plugin view) and the active index. */
 export interface SavedTabs {
   paths: string[];
   active: number;

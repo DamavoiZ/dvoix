@@ -16,6 +16,7 @@ import type {
   PluginManifest,
   RibbonActionSpec,
   SettingTabSpec,
+  ViewSpec,
 } from "./types";
 
 /** Which core plugins are on, by id. Like Obsidian's `core-plugins.json`. */
@@ -54,6 +55,8 @@ class PluginManager {
   private headerList = $state.raw<(PaneHeaderSpec & Owned)[]>([]);
   private overlayList = $state.raw<(OverlaySpec & Owned)[]>([]);
   private settingList = $state.raw<(SettingTabSpec & Owned)[]>([]);
+  private viewList = $state.raw<(ViewSpec & Owned)[]>([]);
+  private viewRemovedListeners = new Set<(id: string) => void>();
   private extensionList: { pluginId: string; extension: Extension }[] = [];
   private disposers = new Map<string, Dispose[]>();
   private queue: Promise<void> = Promise.resolve();
@@ -65,6 +68,7 @@ class PluginManager {
   paneHeaders = $derived(byOrder(this.headerList));
   overlays = $derived(this.overlayList);
   settingTabs = $derived(this.settingList);
+  views = $derived(this.viewList);
 
   /** Makes a plugin known to the app. Call before a vault is opened. */
   add(plugin: Plugin) {
@@ -82,6 +86,17 @@ class PluginManager {
     const p = this.get(id);
     if (!p) return false;
     return this.enabled[id] ?? p.manifest.enabledByDefault ?? true;
+  }
+
+  /** A registered view (see `PluginContext.registerView`), if its plugin is on. */
+  view(id: string): (ViewSpec & Owned) | undefined {
+    return this.viewList.find((v) => v.id === id);
+  }
+
+  /** Called when a view goes away (its plugin was turned off), so its tabs can close. */
+  onViewRemoved(fn: (id: string) => void): Dispose {
+    this.viewRemovedListeners.add(fn);
+    return () => this.viewRemovedListeners.delete(fn);
   }
 
   isLoaded(id: string): boolean {
@@ -245,6 +260,13 @@ class PluginManager {
         addTo(() => this.overlayList, (v) => (this.overlayList = v), { ...overlay, pluginId }, (o) => o.id),
       addSettingTab: (tab) =>
         addTo(() => this.settingList, (v) => (this.settingList = v), { ...tab, pluginId }, (t) => t.pluginId),
+      registerView: (view) => {
+        const remove = addTo(() => this.viewList, (v) => (this.viewList = v), { ...view, pluginId }, (v) => v.id);
+        return track(() => {
+          remove();
+          for (const fn of this.viewRemovedListeners) fn(view.id);
+        });
+      },
       register: (fn) => void track(fn),
       loadData: (defaults) => readJson(dataFile, defaults),
       saveData: (data) => writeJson(dataFile, data),
