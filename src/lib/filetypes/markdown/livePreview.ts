@@ -2,15 +2,19 @@
 // ...) is only visible while the cursor is on that line, the way Obsidian shows
 // it. The text itself is never changed, only what is displayed.
 import { syntaxTree } from "@codemirror/language";
-import { RangeSetBuilder, type EditorState, type Extension } from "@codemirror/state";
+import { Prec, RangeSetBuilder, StateField, type EditorState, type Extension } from "@codemirror/state";
 import {
   Decoration,
   EditorView,
   ViewPlugin,
+  keymap,
   WidgetType,
   type DecorationSet,
   type ViewUpdate,
 } from "@codemirror/view";
+import { parseFrontmatter } from "./frontmatter";
+import { PropertiesWidget } from "./propertiesWidget.svelte";
+import { TableWidget, focusTable } from "./tableWidget";
 
 /** `[[wikilinks]]` are not markdown, so they are found with a regex. */
 const WIKILINK = /\[\[[^\]\n]+\]\]/g;
@@ -126,6 +130,12 @@ function collectSyntax(
     enter(node) {
       const { from, to, name } = node;
       const parent = node.node.parent?.name;
+      // A table is drawn and edited by `blocks` below. Its source only shows
+      // when the editor's cursor gets into it (e.g. by search), unchanged.
+      if (name === "Table") {
+        addLineClasses(state, lineClasses, Math.max(from, range.from), Math.min(to, range.to), "cm-lp-table-source");
+        return false;
+      }
       switch (name) {
         case "HeaderMark":
           hide(from, to, true);
@@ -267,7 +277,99 @@ const livePreviewPlugin = ViewPlugin.fromClass(
   { decorations: (v) => v.decorations },
 );
 
-/** Hides the markdown syntax of every line the cursor is not on. */
+/**
+ * Replaces the frontmatter by the properties and every table by a
+ * `TableWidget`; both are edited inside the widget. Should the editor's own
+ * cursor get inside (search, selecting across), the source shows instead,
+ * so typing never lands in a hidden range. A
+ * replacement over several lines has to come from a state field, CodeMirror
+ * does not take it from a view plugin. Only top-level tables are drawn: a
+ * table inside a list or quote keeps its source.
+ */
+function buildBlocks(state: EditorState): DecorationSet {
+  const builder = new RangeSetBuilder<Decoration>();
+  const sel = state.selection.main;
+  const outside = (from: number, to: number) => sel.to < from || sel.from > to;
+  syntaxTree(state).iterate({
+    enter(node) {
+      if (node.name === "Document") return true;
+      if (node.name === "Frontmatter") {
+        // `parseFrontmatter` only takes what it can edit line by line; anything else stays YAML.
+        const source = state.doc.sliceString(0, node.to);
+        const fm = parseFrontmatter(source);
+        if (fm && outside(0, fm.to)) {
+          builder.add(0, fm.to, Decoration.replace({ widget: new PropertiesWidget(source.slice(0, fm.to)), block: true }));
+        }
+      }
+      if (node.name === "Table") {
+        const from = state.doc.lineAt(node.from).from;
+        // `to - 1`: should the node end after its line break, the next line is not part of it.
+        const to = state.doc.lineAt(Math.max(node.from, node.to - 1)).to;
+        // The editor's cursor touching the table, even at its edge, shows the source.
+        if (outside(from, to)) {
+          const widget = new TableWidget(state.doc.sliceString(from, to));
+          builder.add(from, to, Decoration.replace({ widget, block: true }));
+        }
+      }
+      return false;
+    },
+  });
+  return builder.finish();
+}
+
+const blocks = StateField.define<DecorationSet>({
+  create: buildBlocks,
+  update(decorations, tr) {
+    if (tr.docChanged || tr.selection || syntaxTree(tr.startState) !== syntaxTree(tr.state)) {
+      return buildBlocks(tr.state);
+    }
+    return decorations;
+  },
+  provide: (field) => EditorView.decorations.from(field),
+});
+
+/**
+ * Arrow up/down into a drawn table or the properties. CodeMirror moves over a
+ * block widget in one step, so the cursor jumped from the line above a table
+ * to the line below it. A table gets the focus in its first (down) or last
+ * (up) row; for the properties the cursor stops on the YAML, which shows it.
+ */
+function enterBlock(forward: boolean) {
+  return (view: EditorView): boolean => {
+    const { state } = view;
+    const range = state.selection.main;
+    if (!range.empty || state.selection.ranges.length > 1) return false;
+    const target = view.moveVertically(range, forward);
+    let block: { from: number; to: number; table: boolean } | null = null;
+    state.field(blocks).between(Math.min(range.head, target.head), Math.max(range.head, target.head), (from, to, deco) => {
+      if (forward ? from <= range.head : to >= range.head) return;
+      // Down takes the first block on the way, up the last one.
+      block = { from, to, table: deco.spec.widget instanceof TableWidget };
+      if (forward) return false;
+    });
+    if (!block) return false;
+    const { from, to, table } = block;
+    // A table is edited in its cells: the focus goes into its first or last row.
+    if (table && focusTable(view, from, !forward)) return true;
+    const row = state.doc.lineAt(forward ? from : to);
+    const column = range.head - state.doc.lineAt(range.head).from;
+    view.dispatch({
+      selection: { anchor: row.from + Math.min(column, row.length) },
+      scrollIntoView: true,
+      userEvent: "select",
+    });
+    return true;
+  };
+}
+
+const blockKeys = Prec.high(
+  keymap.of([
+    { key: "ArrowDown", run: enterBlock(true) },
+    { key: "ArrowUp", run: enterBlock(false) },
+  ]),
+);
+
+/** Hides the markdown syntax of every line the cursor is not on, draws tables and the properties. */
 export function livePreview(): Extension {
-  return livePreviewPlugin;
+  return [livePreviewPlugin, blocks, blockKeys];
 }
