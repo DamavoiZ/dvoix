@@ -171,3 +171,9 @@ cargo test --workspace # Rust-Kern
 - Live-Vorschau für Markdown (Formatierung im Editor ausblenden)
 - Kanban-Board (`.board`) und Tracking (`.track`) als eigene Dateitypen
 - `tantivy` statt FTS5, falls die Suche mehr können muss
+
+## Lizenz
+
+dvoix steht wahlweise unter der [MIT-Lizenz](LICENSE-MIT) oder der [Apache-Lizenz 2.0](LICENSE-APACHE), nach Wahl der Nutzerin oder des Nutzers.
+
+Beiträge, die du zu diesem Projekt einreichst, stehen ohne weitere Bedingungen unter denselben beiden Lizenzen, sofern du nicht ausdrücklich etwas anderes angibst.
