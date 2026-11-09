@@ -1,9 +1,9 @@
 import { FolderPlus, PanelTop, Pencil, Trash2 } from "@lucide/svelte";
-import type { VaultEntry } from "../api";
-import { creatableFileTypes } from "../filetypes";
-import { ui } from "../ui.svelte";
-import { vault } from "../vault.svelte";
-import type { MenuEntry } from "./contextMenu.svelte";
+import type { VaultEntry } from "../../../api";
+import { creatableFileTypes } from "../../../filetypes";
+import { ui } from "../../../ui.svelte";
+import { vault } from "../../../vault.svelte";
+import type { MenuEntry } from "../../../components/contextMenu.svelte";
 
 /** "Neue Notiz", "Neues Canvas", ..., "Neuer Ordner" inside `folder` ("" = vault root). */
 export function createItems(folder: string): MenuEntry[] {
@@ -26,7 +26,12 @@ export function entryMenu(entry: VaultEntry): MenuEntry[] {
   return [
     ...(entry.isDir
       ? [...createItems(entry.path), "separator" as const]
-      : [{ label: "In neuem Tab öffnen", icon: PanelTop, action: () => void vault.openFile(entry.path, { newTab: true }) }, "separator" as const]),
+      : [
+          ...(vault.tabsEnabled
+            ? [{ label: "In neuem Tab öffnen", icon: PanelTop, action: () => void vault.openFile(entry.path, { newTab: true }) }]
+            : []),
+          "separator" as const,
+        ]),
     { label: "Umbenennen", icon: Pencil, action: () => (ui.renaming = entry.path) },
     { label: "Löschen", icon: Trash2, danger: true, action: () => void vault.trash(entry.path) },
   ];

@@ -1,10 +1,10 @@
 <script lang="ts">
   // Quick switcher (Strg+O): fuzzy search over all files of the vault, like Obsidian's.
   import { FilePlus } from "@lucide/svelte";
-  import { fileTypeFor } from "../filetypes";
-  import { fuzzyMatch, highlight } from "../fuzzy";
-  import { ui } from "../ui.svelte";
-  import { vault } from "../vault.svelte";
+  import { fileTypeFor } from "../../../filetypes";
+  import { fuzzyMatch, highlight } from "../../../fuzzy";
+  import { ui } from "../../../ui.svelte";
+  import { vault } from "../../../vault.svelte";
 
   const LIMIT = 60;
 
@@ -65,7 +65,7 @@
   }
 
   function close() {
-    ui.switcherOpen = false;
+    if (ui.modal === "quick-switcher") ui.modal = null;
     query = "";
   }
 
@@ -89,7 +89,7 @@
   }
 </script>
 
-{#if ui.switcherOpen}
+{#if ui.modal === "quick-switcher"}
   <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
   <div class="fixed inset-0 z-40 bg-black/40" onclick={close}></div>
   <div
@@ -156,7 +156,7 @@
     <footer class="flex gap-4 border-t border-zinc-800 px-4 py-2 text-[11px] text-zinc-500">
       <span><kbd>↑↓</kbd> auswählen</span>
       <span><kbd>Enter</kbd> öffnen</span>
-      <span><kbd>Strg+Enter</kbd> in neuem Tab</span>
+      {#if vault.tabsEnabled}<span><kbd>Strg+Enter</kbd> in neuem Tab</span>{/if}
       <span><kbd>Umschalt+Enter</kbd> neu erstellen</span>
       <span><kbd>Esc</kbd> schließen</span>
     </footer>

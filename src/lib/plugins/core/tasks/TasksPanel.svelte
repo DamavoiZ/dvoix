@@ -1,8 +1,8 @@
 <script lang="ts">
   // All checkbox tasks of the vault, grouped by due date or by note.
   import { Flag } from "@lucide/svelte";
-  import { api, type TaskItem } from "../api";
-  import { vault } from "../vault.svelte";
+  import { api, type TaskItem } from "../../../api";
+  import { vault } from "../../../vault.svelte";
   import {
     bucketLabels,
     compareTasks,
@@ -14,15 +14,23 @@
     today,
     toggleTask,
     type DueBucket,
-  } from "../tasks/tasks";
+  } from "../../../tasks";
 
-  type Show = "open" | "done" | "all";
-  type Group = "due" | "note";
+  import { taskSettings, type TaskGroup, type TaskShow } from "./settings";
 
   let tasks = $state<TaskItem[]>([]);
   let loaded = $state(false);
-  let show = $state<Show>("open");
-  let group = $state<Group>("due");
+  // Filter and grouping are remembered in `.dvoix/plugins/tasks/data.json`.
+  const show = $derived(taskSettings.value.show);
+  const group = $derived(taskSettings.value.group);
+  function setShow(v: TaskShow) {
+    taskSettings.value.show = v;
+    taskSettings.save();
+  }
+  function setGroup(v: TaskGroup) {
+    taskSettings.value.group = v;
+    taskSettings.save();
+  }
   let query = $state("");
 
   $effect(() => {
@@ -103,13 +111,13 @@
   />
   <div class="flex items-center justify-between gap-2">
     <div class="flex rounded-md bg-zinc-800/60 p-0.5" role="group" aria-label="Anzeigen">
-      <button class={segment(show === "open")} onclick={() => (show = "open")}>Offen {openCount}</button>
-      <button class={segment(show === "done")} onclick={() => (show = "done")}>Erledigt</button>
-      <button class={segment(show === "all")} onclick={() => (show = "all")}>Alle</button>
+      <button class={segment(show === "open")} onclick={() => setShow("open")}>Offen {openCount}</button>
+      <button class={segment(show === "done")} onclick={() => setShow("done")}>Erledigt</button>
+      <button class={segment(show === "all")} onclick={() => setShow("all")}>Alle</button>
     </div>
     <div class="flex rounded-md bg-zinc-800/60 p-0.5" role="group" aria-label="Gruppieren">
-      <button class={segment(group === "due")} title="Nach Fälligkeit gruppieren" onclick={() => (group = "due")}>Datum</button>
-      <button class={segment(group === "note")} title="Nach Notiz gruppieren" onclick={() => (group = "note")}>Notiz</button>
+      <button class={segment(group === "due")} title="Nach Fälligkeit gruppieren" onclick={() => setGroup("due")}>Datum</button>
+      <button class={segment(group === "note")} title="Nach Notiz gruppieren" onclick={() => setGroup("note")}>Notiz</button>
     </div>
   </div>
 </div>

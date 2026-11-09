@@ -161,6 +161,19 @@ pub fn set_task_done(state: State<AppState>, path: String, line: u32, text: Stri
     })
 }
 
+/// Reads a file from the vault's `.dvoix/` folder (settings, workspace,
+/// plugin data). Returns `None` if it does not exist yet.
+#[tauri::command]
+pub fn read_config(state: State<AppState>, path: String) -> CmdResult<Option<String>> {
+    with_ws(&state, |ws| ws.vault.read_config(&path).map_err(err))
+}
+
+/// Writes a file into the vault's `.dvoix/` folder.
+#[tauri::command]
+pub fn write_config(state: State<AppState>, path: String, content: String) -> CmdResult<()> {
+    with_ws(&state, |ws| ws.vault.write_config(&path, &content).map_err(err))
+}
+
 #[tauri::command]
 pub fn rebuild_index(state: State<AppState>) -> CmdResult<usize> {
     with_ws(&state, |ws| ws.index.lock().map_err(err)?.rebuild(&ws.vault).map_err(err))

@@ -2,11 +2,11 @@
   import { ChevronRight } from "@lucide/svelte";
   import Self from "./TreeItem.svelte";
   import type { TreeNode } from "./tree";
-  import { contextMenu } from "./contextMenu.svelte";
+  import { contextMenu } from "../../../components/contextMenu.svelte";
   import { DRAG_TYPE, entryMenu } from "./fileMenu";
-  import { vault } from "../vault.svelte";
-  import { ui } from "../ui.svelte";
-  import { fileTypeFor } from "../filetypes";
+  import { vault } from "../../../vault.svelte";
+  import { ui } from "../../../ui.svelte";
+  import { fileTypeFor } from "../../../filetypes";
 
   let { node, depth = 0 }: { node: TreeNode; depth?: number } = $props();
 

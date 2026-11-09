@@ -2,6 +2,9 @@
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { api, onVaultChanged, type VaultEntry, type VaultInfo } from "./api";
 import { creatableFileTypes, type FileType } from "./filetypes";
+import { flushConfig } from "./config";
+import { plugins } from "./plugins/manager.svelte";
+import { settings } from "./settings.svelte";
 import { ui } from "./ui.svelte";
 
 const SAVE_DELAY_MS = 400;
@@ -35,6 +38,11 @@ class VaultStore {
   error = $state<string | null>(null);
   /** Bumped on every change on disk so panels (backlinks, tags) can refresh. */
   revision = $state(0);
+  /**
+   * Several tabs at once. Switched on by the tabs plugin; without it there is
+   * always exactly one tab and "open in new tab" opens in that one.
+   */
+  tabsEnabled = $state(false);
 
   private saveTimer: ReturnType<typeof setTimeout> | undefined;
   private refreshTimer: ReturnType<typeof setTimeout> | undefined;
@@ -58,13 +66,16 @@ class VaultStore {
 
   async open(path: string) {
     try {
-      await this.flush();
-      this.info = await api.openVault(path);
-      ui.useVault(this.info.path);
+      await this.teardown();
+      const info = await api.openVault(path);
+      // Settings, workspace and plugins of this vault, all from `<vault>/.dvoix/`.
+      await Promise.all([settings.load(), ui.load(info.path)]);
       this.openPath = null;
       this.content = "";
       this.dirty = false;
       this.error = null;
+      await plugins.loadVault();
+      this.info = info;
       await this.refresh();
       await this.restoreTabs();
     } catch (e) {
@@ -74,13 +85,33 @@ class VaultStore {
   }
 
   async close() {
-    await this.flush();
+    await this.teardown();
     await api.closeVault();
+  }
+
+  /** Saves everything of the open vault and unloads its plugins. */
+  private async teardown() {
+    if (!this.info) return;
+    await this.flush();
+    ui.unload(); // stop saving the workspace: unloading plugins (e.g. tabs) must not change it
+    await flushConfig();
+    await plugins.unloadVault();
+    settings.reset();
     this.info = null;
     this.entries = [];
     this.openPath = null;
     this.tabs = [];
     this.recent = [];
+  }
+
+  /** Called by the tabs plugin. Turning tabs off keeps only the active one. */
+  setTabsEnabled(on: boolean) {
+    this.tabsEnabled = on;
+    if (on || this.tabs.length < 2) return;
+    const active = this.activeTab ?? this.tabs[0];
+    this.tabs = [active];
+    this.activeTabId = active.id;
+    this.saveTabs();
   }
 
   async refresh() {
@@ -109,7 +140,7 @@ class VaultStore {
     const content = await this.read(path);
     if (content === null) return;
     const active = this.activeTab;
-    if (active && !opts.newTab) {
+    if (active && (!opts.newTab || !this.tabsEnabled)) {
       active.path = path;
     } else {
       const tab = newTabObj(path);
@@ -221,6 +252,7 @@ class VaultStore {
     // The previously active tab, or the closest one left of it if its file is gone.
     const before = paths.slice(0, (saved?.active ?? 0) + 1).filter(keep).length;
     const tab = this.tabs[Math.max(0, before - 1)];
+    if (!this.tabsEnabled) this.tabs = [tab];
     this.activeTabId = 0;
     await this.activateTab(tab.id);
   }
