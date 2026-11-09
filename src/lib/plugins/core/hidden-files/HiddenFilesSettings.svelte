@@ -18,19 +18,19 @@
   }
 </script>
 
-<Setting name="Versteckte Dateien anzeigen" description="Auch über den Befehl „Versteckte Dateien ein-/ausblenden“ umschaltbar.">
-  <Toggle label="Versteckte Dateien anzeigen" checked={s.visible} onchange={(v) => set("visible", v)} />
+<Setting name="Show hidden files" description="Also toggleable with the command „Show/hide hidden files“.">
+  <Toggle label="Show hidden files" checked={s.visible} onchange={(v) => set("visible", v)} />
 </Setting>
 
-<Setting name="Auch einzelne Dateien" description="Zeigt neben Ordnern wie .obsidian auch Dateien wie .gitignore.">
-  <Toggle label="Auch einzelne Dateien" checked={s.includeFiles} onchange={(v) => set("includeFiles", v)} />
+<Setting name="Include single files" description="Shows files such as .gitignore as well as folders such as .obsidian.">
+  <Toggle label="Include single files" checked={s.includeFiles} onchange={(v) => set("includeFiles", v)} />
 </Setting>
 
-<Setting name="Ordner .dvoix zeigen" description="Der Ordner mit den Einstellungen und dem Index dieses Vaults. Änderungen darin erscheinen erst nach erneutem Einblenden.">
-  <Toggle label="Ordner .dvoix zeigen" checked={s.includeAppDir} onchange={(v) => set("includeAppDir", v)} />
+<Setting name="Show .dvoix folder" description="The folder with this vault's settings and index. Changes inside it only appear after showing it again.">
+  <Toggle label="Show .dvoix folder" checked={s.includeAppDir} onchange={(v) => set("includeAppDir", v)} />
 </Setting>
 
-<Setting name="Trotzdem ausblenden" description="Namen, durch Komma getrennt, die verborgen bleiben, egal wo sie liegen. .git enthält Tausende interne Dateien und bleibt am besten draußen.">
+<Setting name="Always hide" description="Names, separated by commas, that stay hidden wherever they are. .git contains thousands of internal files and is best kept out.">
   <input
     type="text"
     spellcheck="false"

@@ -50,8 +50,8 @@
       {/if}
       <button
         class="ml-auto flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
-        title="Seitenleiste einklappen"
-        aria-label="Seitenleiste einklappen"
+        title="Collapse sidebar"
+        aria-label="Collapse sidebar"
         onclick={() => ui.togglePanel(panel.id)}
       >
         <PanelLeftClose size={16} strokeWidth={1.75} />

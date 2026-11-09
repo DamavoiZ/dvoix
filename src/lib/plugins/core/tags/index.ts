@@ -6,7 +6,7 @@ export const tagsPlugin: Plugin = {
   manifest: {
     id: "tags",
     name: "Tags",
-    description: "Übersicht aller #tags im Vault mit den Notizen dazu.",
+    description: "Overview of all #tags in the vault with their notes.",
     version: "1.0.0",
   },
   icon: Hash,

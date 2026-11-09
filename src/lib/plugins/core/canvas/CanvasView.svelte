@@ -19,7 +19,7 @@
       canvas = parseCanvas(content);
       error = undefined;
     } catch (e) {
-      error = `Ungültige Canvas-Datei: ${e}`;
+      error = `Invalid canvas file: ${e}`;
     }
   });
 
@@ -131,7 +131,7 @@
         >
           <button
             class="absolute -top-2 -right-2 hidden h-5 w-5 rounded-full bg-zinc-700 text-xs text-zinc-200 group-hover:block"
-            title="Entfernen"
+            title="Remove"
             onclick={() => removeNode(node)}>×</button
           >
           {#if node.type === "text"}
@@ -155,7 +155,7 @@
     </div>
 
     <div class="pointer-events-none absolute bottom-3 left-3 text-xs text-zinc-500">
-      Doppelklick: neue Karte · Ziehen: verschieben
+      Double-click: new card · Drag: move
     </div>
   </div>
 {/if}

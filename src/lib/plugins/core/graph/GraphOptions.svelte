@@ -56,31 +56,31 @@
     <h3 class="mb-1 text-xs font-semibold tracking-wide text-zinc-500 uppercase">Filter</h3>
     <input
       class="w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-sm text-zinc-200 outline-none placeholder:text-zinc-600 focus:border-violet-500"
-      placeholder="z. B. projekte #idee -archiv"
+      placeholder="e.g. projects #idea -archive"
       aria-label="Filter"
       value={s.filter}
       oninput={(e) => set("filter", e.currentTarget.value)}
     />
-    <p class="mt-1 text-xs text-zinc-500">Zeigt nur Dateien, deren Pfad, Titel oder #Tag alle Wörter enthält. Mit - davor ausblenden.</p>
-    {@render toggle("orphans", "Einzelne Notizen", "Notizen ohne Verbindung")}
-    {@render toggle("attachments", "Anhänge", "Bilder, PDFs und andere Dateien")}
-    {@render toggle("unresolved", "Fehlende Notizen", "Links auf Notizen, die es noch nicht gibt")}
+    <p class="mt-1 text-xs text-zinc-500">Shows only files whose path, title or #tag contains all the words. Put - in front to hide them.</p>
+    {@render toggle("orphans", "Single notes", "Notes without connections")}
+    {@render toggle("attachments", "Attachments", "Images, PDFs and other files")}
+    {@render toggle("unresolved", "Missing notes", "Links to notes that don't exist yet")}
   </section>
 
   <section>
-    <h3 class="mb-1 text-xs font-semibold tracking-wide text-zinc-500 uppercase">Verbindungen</h3>
-    {@render toggle("links", "Links", "[[Wikilinks]] und Markdown-Links")}
-    {@render toggle("folders", "Ordner", "Notizen hängen an ihrem Ordner")}
-    {@render toggle("tags", "Tags", "Notizen mit gleichem #Tag")}
+    <h3 class="mb-1 text-xs font-semibold tracking-wide text-zinc-500 uppercase">Connections</h3>
+    {@render toggle("links", "Links", "[[Wikilinks]] and Markdown links")}
+    {@render toggle("folders", "Folders", "Notes are attached to their folder")}
+    {@render toggle("tags", "Tags", "Notes with the same #tag")}
     {#if s.tags}
       <div class="flex items-center justify-between gap-4 py-1.5">
-        <span class="text-sm text-zinc-200">Tags zeigen als</span>
+        <span class="text-sm text-zinc-200">Show tags as</span>
         <Select
-          label="Tags zeigen als"
+          label="Show tags as"
           value={s.tagMode}
           options={[
-            { value: "nodes", label: "eigene Knoten" },
-            { value: "shared", label: "direkte Linien" },
+            { value: "nodes", label: "own nodes" },
+            { value: "shared", label: "direct lines" },
           ]}
           onchange={(v: GraphSettings["tagMode"]) => set("tagMode", v)}
         />
@@ -89,33 +89,33 @@
   </section>
 
   <section>
-    <h3 class="mb-1 text-xs font-semibold tracking-wide text-zinc-500 uppercase">Darstellung</h3>
+    <h3 class="mb-1 text-xs font-semibold tracking-wide text-zinc-500 uppercase">Appearance</h3>
     <div class="flex items-center justify-between gap-4 py-1.5">
-      <span class="text-sm text-zinc-200">Farben nach</span>
+      <span class="text-sm text-zinc-200">Colors by</span>
       <Select
-        label="Farben nach"
+        label="Colors by"
         value={s.colorBy}
         options={[
-          { value: "none", label: "keine" },
-          { value: "folder", label: "Ordner" },
+          { value: "none", label: "none" },
+          { value: "folder", label: "Folder" },
           { value: "tag", label: "Tag" },
         ]}
         onchange={(v: GraphSettings["colorBy"]) => set("colorBy", v)}
       />
     </div>
-    {@render toggle("sizeByLinks", "Größe nach Verbindungen", "Viel verlinkte Notizen werden größer")}
-    {@render toggle("arrows", "Pfeile", "Zeigt die Richtung von Links")}
-    {@render slider("nodeSize", "Knotengröße", 0.3, 3, 0.1)}
-    {@render slider("linkWidth", "Linienstärke", 0.2, 4, 0.1)}
-    {@render slider("labelZoom", "Titel ab Zoomstufe", 0, 4, 0.1)}
+    {@render toggle("sizeByLinks", "Size by connections", "Often linked notes get bigger")}
+    {@render toggle("arrows", "Arrows", "Shows the direction of links")}
+    {@render slider("nodeSize", "Node size", 0.3, 3, 0.1)}
+    {@render slider("linkWidth", "Line width", 0.2, 4, 0.1)}
+    {@render slider("labelZoom", "Titles from zoom level", 0, 4, 0.1)}
   </section>
 
   <section>
-    <h3 class="mb-1 text-xs font-semibold tracking-wide text-zinc-500 uppercase">Kräfte</h3>
-    {@render slider("repel", "Abstoßung", 0, 400, 5)}
-    {@render slider("linkDistance", "Linienlänge", 5, 300, 5)}
-    {@render slider("linkStrength", "Linienzug", 0, 1, 0.05)}
-    {@render slider("center", "Zug zur Mitte", 0, 0.5, 0.01)}
+    <h3 class="mb-1 text-xs font-semibold tracking-wide text-zinc-500 uppercase">Forces</h3>
+    {@render slider("repel", "Repulsion", 0, 400, 5)}
+    {@render slider("linkDistance", "Line length", 5, 300, 5)}
+    {@render slider("linkStrength", "Link strength", 0, 1, 0.05)}
+    {@render slider("center", "Pull to center", 0, 0.5, 0.01)}
   </section>
 
   <button class="rounded-md px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200" onclick={reset}>

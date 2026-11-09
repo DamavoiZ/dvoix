@@ -144,7 +144,7 @@ class PluginManager {
   async loadExtra(plugin: Plugin) {
     await this.serial(async () => {
       const id = plugin.manifest.id;
-      if (this.get(id)) throw new Error(`Ein Plugin mit der ID „${id}“ gibt es schon`);
+      if (this.get(id)) throw new Error(`A plugin with the ID "${id}" already exists`);
       this.extra = [...this.extra, plugin];
       await this.load(plugin);
     });
@@ -319,11 +319,11 @@ function matches(h: Hotkey, e: KeyboardEvent): boolean {
   );
 }
 
-/** Text for a hotkey, e.g. "Strg+Umschalt+Tab". */
+/** Text for a hotkey, e.g. "Ctrl+Shift+Tab". */
 export function hotkeyLabel(h: Hotkey): string {
   const mac = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
-  const parts = [h.mod && (mac ? "Cmd" : "Strg"), h.shift && "Umschalt", h.alt && "Alt"].filter(Boolean) as string[];
-  const names: Record<string, string> = { pagedown: "Bild ab", pageup: "Bild auf", tab: "Tab", ",": "," };
+  const parts = [h.mod && (mac ? "Cmd" : "Ctrl"), h.shift && "Shift", h.alt && "Alt"].filter(Boolean) as string[];
+  const names: Record<string, string> = { pagedown: "Page Down", pageup: "Page Up", tab: "Tab", ",": "," };
   parts.push(names[h.key.toLowerCase()] ?? h.key.toUpperCase());
   return parts.join("+");
 }

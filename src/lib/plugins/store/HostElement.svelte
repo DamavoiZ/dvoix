@@ -61,6 +61,6 @@
 </script>
 
 {#if error}
-  <p class="p-3 text-xs text-red-400">Plugin-Fehler: {error}</p>
+  <p class="p-3 text-xs text-red-400">Plugin error: {error}</p>
 {/if}
 <div bind:this={el} class="dvoix-plugin-host h-full min-h-0 w-full"></div>

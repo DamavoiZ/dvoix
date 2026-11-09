@@ -35,7 +35,7 @@
   {:else if path && type}
     <header class="flex items-center justify-between border-b border-zinc-800 px-4 py-2 text-xs text-zinc-500">
       <span class="truncate">{path}</span>
-      <span>{vault.dirty ? "Speichert …" : "Gespeichert"}</span>
+      <span>{vault.dirty ? "Saving …" : "Saved"}</span>
     </header>
     <div class="min-h-0 flex-1">
       {#key path}
@@ -52,10 +52,10 @@
     {/each}
   {:else}
     <div class="flex flex-1 flex-col items-center justify-center gap-3 text-sm text-zinc-500">
-      <p>Wähle links eine Datei oder lege eine neue an.</p>
+      <p>Pick a file on the left or create a new one.</p>
       {#if plugins.has(SWITCHER)}
         <button class="rounded-md px-3 py-1.5 text-violet-300 hover:bg-zinc-800" onclick={() => plugins.run(SWITCHER)}>
-          Datei suchen <kbd class="ml-1 rounded bg-zinc-800 px-1.5 py-0.5 text-xs text-zinc-400">Strg+O</kbd>
+          Find a file <kbd class="ml-1 rounded bg-zinc-800 px-1.5 py-0.5 text-xs text-zinc-400">Ctrl+O</kbd>
         </button>
       {/if}
     </div>
@@ -63,7 +63,7 @@
   {#if vault.error}
     <div class="border-t border-red-900 bg-red-950/50 px-4 py-2 text-xs text-red-300">
       {vault.error}
-      <button class="ml-2 underline" onclick={() => (vault.error = null)}>schließen</button>
+      <button class="ml-2 underline" onclick={() => (vault.error = null)}>close</button>
     </div>
   {/if}
 </main>

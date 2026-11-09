@@ -85,7 +85,7 @@
       .filter((b) => buckets.get(b)!.length)
       .map((b) => ({
         key: b,
-        label: b === "done" ? "Erledigt" : bucketLabels[b],
+        label: b === "done" ? "Done" : bucketLabels[b],
         tone: b === "overdue" ? "text-red-400" : b === "today" ? "text-violet-300" : undefined,
         items: buckets.get(b)!.sort(compareTasks),
       }));
@@ -106,18 +106,18 @@
 <div class="flex flex-col gap-2 px-3 pb-2 text-xs">
   <input
     class="w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-sm outline-none placeholder:text-zinc-600 focus:border-violet-500"
-    placeholder="Aufgaben filtern …"
+    placeholder="Filter tasks …"
     bind:value={query}
   />
   <div class="flex items-center justify-between gap-2">
-    <div class="flex rounded-md bg-zinc-800/60 p-0.5" role="group" aria-label="Anzeigen">
-      <button class={segment(show === "open")} onclick={() => setShow("open")}>Offen {openCount}</button>
-      <button class={segment(show === "done")} onclick={() => setShow("done")}>Erledigt</button>
-      <button class={segment(show === "all")} onclick={() => setShow("all")}>Alle</button>
+    <div class="flex rounded-md bg-zinc-800/60 p-0.5" role="group" aria-label="Show">
+      <button class={segment(show === "open")} onclick={() => setShow("open")}>Open {openCount}</button>
+      <button class={segment(show === "done")} onclick={() => setShow("done")}>Done</button>
+      <button class={segment(show === "all")} onclick={() => setShow("all")}>All</button>
     </div>
-    <div class="flex rounded-md bg-zinc-800/60 p-0.5" role="group" aria-label="Gruppieren">
-      <button class={segment(group === "due")} title="Nach Fälligkeit gruppieren" onclick={() => setGroup("due")}>Datum</button>
-      <button class={segment(group === "note")} title="Nach Notiz gruppieren" onclick={() => setGroup("note")}>Notiz</button>
+    <div class="flex rounded-md bg-zinc-800/60 p-0.5" role="group" aria-label="Group">
+      <button class={segment(group === "due")} title="Group by due date" onclick={() => setGroup("due")}>Date</button>
+      <button class={segment(group === "note")} title="Group by note" onclick={() => setGroup("note")}>Note</button>
     </div>
   </div>
 </div>
@@ -143,7 +143,7 @@
               type="checkbox"
               class="mt-1 shrink-0 cursor-pointer accent-violet-500"
               checked={task.done}
-              aria-label={task.done ? "Als offen markieren" : "Als erledigt markieren"}
+              aria-label={task.done ? "Mark as open" : "Mark as done"}
               onclick={(e) => {
                 e.preventDefault();
                 void toggleTask(task);
@@ -151,12 +151,12 @@
             />
             <button class="min-w-0 flex-1 text-left" onclick={() => openTask(task)}>
               <span class="block text-sm break-words {task.done ? 'text-zinc-500 line-through' : 'text-zinc-200'}">
-                {task.text || "(ohne Text)"}
+                {task.text || "(no text)"}
               </span>
               {#if task.due || task.priority || group === "due"}
                 <span class="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-zinc-500">
                   {#if task.priority}
-                    <span class="inline-flex items-center gap-0.5 {priorityClass[task.priority]}" title="Priorität {priorityLabels[task.priority]}">
+                    <span class="inline-flex items-center gap-0.5 {priorityClass[task.priority]}" title="Priority {priorityLabels[task.priority]}">
                       <Flag size={11} strokeWidth={2} />{priorityLabels[task.priority]}
                     </span>
                   {/if}
@@ -177,17 +177,17 @@
     {#if loaded}
       <div class="space-y-2 px-3 text-sm text-zinc-500">
         {#if tasks.length && query}
-          <p>Keine Aufgabe passt zu „{query}“.</p>
+          <p>No task matches "{query}".</p>
         {:else if tasks.length && show === "open"}
-          <p>Alles erledigt. 🎉</p>
+          <p>All done. 🎉</p>
         {:else if tasks.length}
-          <p>Hier ist nichts.</p>
+          <p>Nothing here.</p>
         {:else}
-          <p>Noch keine Aufgaben. Schreib in eine beliebige Notiz:</p>
-          <pre class="rounded bg-zinc-950 p-2 text-xs text-zinc-300">- [ ] Angebot schreiben 📅 2026-12-01
-- [ ] Anrufen due:2026-11-20 !hoch
-- [x] Erledigt</pre>
-          <p class="text-xs">Priorität: <code>!hoch</code>, <code>!mittel</code>, <code>!niedrig</code> (oder ⏫ 🔼 🔽).</p>
+          <p>No tasks yet. Write in any note:</p>
+          <pre class="rounded bg-zinc-950 p-2 text-xs text-zinc-300">- [ ] Write the offer 📅 2026-12-01
+- [ ] Call back due:2026-11-20 !high
+- [x] Done</pre>
+          <p class="text-xs">Priority: <code>!high</code>, <code>!medium</code>, <code>!low</code> (or ⏫ 🔼 🔽).</p>
         {/if}
       </div>
     {/if}

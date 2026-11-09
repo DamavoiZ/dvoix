@@ -47,7 +47,6 @@ function base(): Extension[] {
     EditorView.editable.of(false),
     EditorView.lineWrapping,
     lineNumbers(),
-    EditorState.phrases.of({ "$ unchanged lines": "$ unveränderte Zeilen" }),
     theme,
   ];
 }

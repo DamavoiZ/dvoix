@@ -4,7 +4,7 @@ import FallbackView from "./FallbackView.svelte";
 
 export const fallbackType: FileType = {
   id: "fallback",
-  label: "Datei",
+  label: "File",
   extensions: [],
   icon: File,
   view: FallbackView,

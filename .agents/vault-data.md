@@ -1,37 +1,37 @@
-# Vault, Dateiformate und `.dvoix/`
+# Vault, file formats and `.dvoix/`
 
-## Grundsatz
+## Principle
 
-Die Dateien im Vault sind die einzige Quelle der Wahrheit. Nutzer bearbeiten sie auch mit anderen Programmen (VS Code, Obsidian, git, Sync-Tools). dvoix muss damit klarkommen und darf ihre Formatierung nicht zerstören.
+The files in the vault are the only source of truth. Users also edit them with other programs (VS Code, Obsidian, git, sync tools). dvoix must cope with that and must not destroy their formatting.
 
-- Nie eine Datei neu formatieren, die der Nutzer nicht bearbeitet hat. Nur die nötigen Zeichen ändern.
-- Unbekanntes Frontmatter, unbekannte JSON-Felder und unbekannte Zeilen bleiben erhalten.
-- Kompatibel bleiben mit gängigen Markdown-Konventionen (Obsidian, CommonMark, YAML-Frontmatter), damit ein Vault auch ohne dvoix lesbar ist.
-- Externe Änderungen erkennt der Watcher (`watcher.rs`). Die UI muss sie übernehmen.
+- Never reformat a file the user has not edited. Change only the characters that are needed.
+- Unknown frontmatter, unknown JSON fields and unknown lines are kept.
+- Stay compatible with common Markdown conventions (Obsidian, CommonMark, YAML frontmatter), so a vault stays readable without dvoix.
+- The watcher (`watcher.rs`) detects external changes. The UI must take them over.
 
 ## `.dvoix/`
 
 ```
 .dvoix/
-  app.json                  Editor-Einstellungen
-  appearance.json           Schriftgrößen
-  core-plugins.json         welche Plugins an sind
-  workspace.json            offene Tabs, aktives Panel, Breite, aufgeklappte Ordner
-  plugins/<id>/data.json    Einstellungen eines Plugins
-  index.sqlite              Suchindex, nur Cache
+  app.json                  editor settings
+  appearance.json           font sizes
+  core-plugins.json         which plugins are on
+  workspace.json            open tabs, active panel, width, expanded folders
+  plugins/<id>/data.json    settings of a plugin
+  index.sqlite              search index, cache only
 ```
 
-- Fehlt eine Datei oder ein Schlüssel, gelten Standardwerte. Kaputtes JSON darf die App nicht abstürzen lassen (`readJsonRaw` liefert dann `undefined`).
-- Neue Dateien hier im README-Abschnitt „Der Ordner `.dvoix/`“ und in `src/lib/config.ts` (Kopfkommentar) dokumentieren.
-- Schlüssel nicht umbenennen. Wenn ein Format sich ändern muss, alte Werte beim Laden übernehmen (Migration), nicht verwerfen.
+- If a file or key is missing, default values apply. Broken JSON must not crash the app (`readJsonRaw` then returns `undefined`).
+- Document new files here in the README section "The `.dvoix/` folder" and in the header comment of `src/lib/config.ts`.
+- Do not rename keys. If a format has to change, take over old values when loading (migration), do not discard them.
 
-## Aufgaben und Projekte
+## Tasks and projects
 
-- Aufgabe = Markdown-Checkbox `- [ ]` / `- [x]` in einer beliebigen Notiz.
-- Fälligkeit: `📅 2026-12-01` oder `due:2026-12-01`. Priorität: `!hoch` `!mittel` `!niedrig` (auch englisch) oder ⏫ 🔼 🔽. Kompatibel zum Obsidian-Tasks-Plugin halten.
-- Projekt = Notiz mit `type: projekt` (oder `project`) im Frontmatter, Felder `status`, `due`, `start`, `priority`, `area`. Deutsche und englische Werte werden beide akzeptiert (`project.rs`).
-- Neue Felder oder Schreibweisen: Parser im Rust-Kern (`tasks.rs`, `project.rs`) mit Tests, TS-Typen in `api.ts`, README-Tabelle.
+- Task = Markdown checkbox `- [ ]` / `- [x]` in any note.
+- Due date: `📅 2026-12-01` or `due:2026-12-01`. Priority: `!high` `!medium` `!low` (German `!hoch` `!mittel` `!niedrig` are still accepted) or ⏫ 🔼 🔽. Keep it compatible with the Obsidian Tasks plugin.
+- Project = note with `type: project` (or the German alias `projekt`) in the frontmatter, fields `status`, `due`, `start`, `priority`, `area`. English and German values are both accepted (`project.rs`). New projects are written with the English values.
+- New fields or spellings: parser in the Rust core (`tasks.rs`, `project.rs`) with tests, TS types in `api.ts`, a table in the README.
 
-## Neue Datenarten (Tracking usw.)
+## New data kinds (tracking etc.)
 
-Zuerst prüfen, ob Frontmatter oder eine Markdown-Konvention reicht. Erst wenn nicht, einen eigenen Dateityp anlegen (siehe `filetypes.md`). Nie eine eigene Datenbank als Speicher.
+First check whether frontmatter or a Markdown convention is enough. Only if not, create a dedicated file type (see `filetypes.md`). Never use a separate database as storage.

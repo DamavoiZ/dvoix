@@ -79,11 +79,11 @@
 
 {#snippet communityWarning()}
   <div class="my-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
-    <div class="mb-1 flex items-center gap-1.5 font-medium"><ShieldAlert size={14} /> Community-Plugins einschalten?</div>
+    <div class="mb-1 flex items-center gap-1.5 font-medium"><ShieldAlert size={14} /> Enable community plugins?</div>
     <p class="text-amber-100/80">
-      Community-Plugins schreiben andere Leute. Sie laufen mit denselben Rechten wie dvoix selbst und könnten deine Dateien lesen,
-      ändern oder ins Internet schicken. Die Berechtigungen im Manifest zeigen, was ein Plugin vorhat, sind aber keine Sperre.
-      Installiere nur Plugins, deren Autor du vertraust.
+      Community plugins are written by other people. They run with the same rights as dvoix itself and could read your files,
+      change them or send them to the internet. The permissions in the manifest show what a plugin intends, but they are not a lock.
+      Only install plugins from authors you trust.
     </p>
     <div class="mt-2 flex gap-2">
       <button
@@ -105,42 +105,42 @@
   {@const busy = pluginStore.busy[id]}
   <div class="py-3">
     <button class="mb-3 inline-flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-200" onclick={() => (selected = null)}>
-      <ArrowLeft size={13} /> Zurück
+      <ArrowLeft size={13} /> Back
     </button>
     <div class="flex items-center gap-2">
       <h3 class="text-base font-medium text-zinc-100">{entry.name}</h3>
       {@render badge(entry.channel)}
     </div>
     <div class="mt-0.5 text-xs text-zinc-500">
-      von {entry.author} · <span class="select-text">github.com/{entry.repo}</span>
+      by {entry.author} · <span class="select-text">github.com/{entry.repo}</span>
       {#if latest} · Version {latest.version}{/if}
-      {#if installed} · installiert: {installed.version}{/if}
+      {#if installed} · installed: {installed.version}{/if}
     </div>
     <p class="mt-3 text-sm text-zinc-300">{entry.description}</p>
 
-    <div class="mt-4 text-[11px] font-medium tracking-wide text-zinc-500 uppercase">Berechtigungen</div>
+    <div class="mt-4 text-[11px] font-medium tracking-wide text-zinc-500 uppercase">Permissions</div>
     {#if !latest}
-      <p class="mt-1 text-xs text-zinc-500">{errorOf(id) ? "Konnte nicht geladen werden." : "Wird geladen …"}</p>
+      <p class="mt-1 text-xs text-zinc-500">{errorOf(id) ? "Could not be loaded." : "Loading …"}</p>
     {:else if latest.permissions.length}
       <ul class="mt-1 list-disc pl-5 text-xs text-zinc-300">
         {#each latest.permissions as p (p)}<li>{PERMISSION_LABELS[p]}</li>{/each}
       </ul>
     {:else}
-      <p class="mt-1 text-xs text-zinc-400">Keine: Das Plugin will nicht auf deine Dateien oder den Editor zugreifen.</p>
+      <p class="mt-1 text-xs text-zinc-400">None: the plugin does not want access to your files or the editor.</p>
     {/if}
     {#if entry.channel === "community"}
       <p class="mt-2 text-xs text-zinc-500">
-        Community-Plugin: nicht von dvoix geprüft. Die Berechtigungen sind eine Angabe des Autors, keine Sperre.
+        Community plugin: not reviewed by dvoix. The permissions are stated by the author and are not a lock.
       </p>
     {/if}
     {#if pluginStore.needsNewerApp(latest)}
-      <p class="mt-2 text-xs text-amber-300">Braucht dvoix {latest?.minAppVersion} oder neuer (du hast {pluginStore.appVersion}).</p>
+      <p class="mt-2 text-xs text-amber-300">Needs dvoix {latest?.minAppVersion} or newer (you have {pluginStore.appVersion}).</p>
     {/if}
 
     <div class="mt-4 flex flex-wrap items-center gap-2">
       {#if blocked && !installed}
-        <span class="text-xs text-zinc-400">Zum Installieren erst Community-Plugins erlauben.</span>
-        <button class={btn} onclick={() => setCommunity(true)}>Community-Plugins erlauben</button>
+        <span class="text-xs text-zinc-400">To install, first allow community plugins.</span>
+        <button class={btn} onclick={() => setCommunity(true)}>Allow community plugins</button>
       {:else if !installed}
         <button
           class={primary}
@@ -152,56 +152,56 @@
       {:else}
         {#if pluginStore.hasUpdate(id)}
           <button class={primary} disabled={!!busy || pluginStore.needsNewerApp(latest)} onclick={() => pluginStore.update(id)}>
-            <RefreshCw size={13} /> Auf {latest?.version} aktualisieren
+            <RefreshCw size={13} /> Update to {latest?.version}
           </button>
         {/if}
-        <button class={btn} disabled={!!busy} onclick={() => pluginStore.uninstall(id)}><Trash2 size={13} /> Deinstallieren</button>
+        <button class={btn} disabled={!!busy} onclick={() => pluginStore.uninstall(id)}><Trash2 size={13} /> Uninstall</button>
       {/if}
       {#if busy}<span class="text-xs text-zinc-400">{busy}</span>{/if}
     </div>
     {#if pluginStore.clashesWithCore(id)}
-      <p class="mt-2 text-xs text-red-400">Die ID „{id}“ gehört schon zu einem Core-Plugin.</p>
+      <p class="mt-2 text-xs text-red-400">The ID "{id}" already belongs to a core plugin.</p>
     {/if}
     {#if errorOf(id)}<p class="mt-2 text-xs text-red-400">{errorOf(id)}</p>{/if}
     {#if confirmCommunity}{@render communityWarning()}{/if}
   </div>
 {:else}
   <div class="flex items-center gap-2 pt-3">
-    <button class={tabBtn(tab === "browse")} onclick={() => (tab = "browse")}>Entdecken</button>
+    <button class={tabBtn(tab === "browse")} onclick={() => (tab = "browse")}>Browse</button>
     <button class={tabBtn(tab === "installed")} onclick={() => (tab = "installed")}>
       Installiert ({pluginStore.installed.length})
     </button>
     <div class="flex-1"></div>
     {#if tab === "browse"}
       <button class={btn} disabled={pluginStore.loadingRegistry} onclick={() => pluginStore.fetchRegistry()}>
-        <RefreshCw size={13} /> Neu laden
+        <RefreshCw size={13} /> Reload
       </button>
     {:else}
       <button class={btn} disabled={checking || !pluginStore.installed.length} onclick={checkUpdates}>
-        <RefreshCw size={13} /> {checking ? "Suche …" : "Nach Updates suchen"}
+        <RefreshCw size={13} /> {checking ? "Checking …" : "Check for updates"}
       </button>
     {/if}
   </div>
 
   <Setting
-    name="Community-Plugins erlauben"
-    description="Plugins von anderen Leuten. Offizielle Plugins gehen immer, Community-Plugins erst mit diesem Schalter."
+    name="Allow community plugins"
+    description="Plugins by other people. Official plugins are always allowed, community plugins only with this switch."
   >
-    <Toggle label="Community-Plugins erlauben" checked={pluginStore.file.allowCommunity} onchange={setCommunity} />
+    <Toggle label="Allow community plugins" checked={pluginStore.file.allowCommunity} onchange={setCommunity} />
   </Setting>
   {#if confirmCommunity}{@render communityWarning()}{/if}
 
   {#if tab === "browse"}
     <label class="mt-3 flex items-center gap-2 rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 focus-within:border-violet-500">
       <Search size={14} class="text-zinc-500" />
-      <input class="flex-1 bg-transparent text-sm text-zinc-200 outline-none" placeholder="Plugins durchsuchen" bind:value={query} />
+      <input class="flex-1 bg-transparent text-sm text-zinc-200 outline-none" placeholder="Search plugins" bind:value={query} />
     </label>
     {#if pluginStore.loadingRegistry && !pluginStore.registry}
-      <p class="py-4 text-xs text-zinc-500">Plugin-Liste wird geladen …</p>
+      <p class="py-4 text-xs text-zinc-500">Loading plugin list …</p>
     {:else if pluginStore.registryError}
-      <p class="py-4 text-xs text-red-400">Die Plugin-Liste konnte nicht geladen werden: {pluginStore.registryError}</p>
+      <p class="py-4 text-xs text-red-400">The plugin list could not be loaded: {pluginStore.registryError}</p>
     {:else if !results.length}
-      <p class="py-4 text-xs text-zinc-500">{query ? "Kein Plugin gefunden." : "Noch keine Plugins in der Liste."}</p>
+      <p class="py-4 text-xs text-zinc-500">{query ? "No plugin found." : "No plugins in the list yet."}</p>
     {:else}
       <ul class="py-2">
         {#each results as e (e.id)}
@@ -216,7 +216,7 @@
                   {@render badge(e.channel)}
                 </div>
                 <div class="mt-0.5 line-clamp-2 text-xs text-zinc-500">{e.description}</div>
-                <div class="mt-0.5 text-[11px] text-zinc-600">von {e.author}</div>
+                <div class="mt-0.5 text-[11px] text-zinc-600">by {e.author}</div>
               </div>
               <span class="shrink-0 pt-0.5 text-[11px] text-zinc-500">
                 {#if pluginStore.hasUpdate(e.id)}Update{:else if pluginStore.isInstalled(e.id)}Installiert{/if}
@@ -228,7 +228,7 @@
     {/if}
   {:else}
     {#if !pluginStore.installed.length}
-      <p class="py-4 text-xs text-zinc-500">Noch keine Plugins aus dem Store installiert.</p>
+      <p class="py-4 text-xs text-zinc-500">No plugins from the store installed yet.</p>
     {/if}
     {#each pluginStore.installed as p (p.manifest.id)}
       {@const id = p.manifest.id}
@@ -238,23 +238,23 @@
         <div class="flex items-center gap-3">
           {#if pluginStore.hasUpdate(id)}
             <button class="text-xs text-violet-300 hover:underline" disabled={!!pluginStore.busy[id]} onclick={() => pluginStore.update(id)}>
-              Update auf {pluginStore.latest[id]?.version}
+              Update to {pluginStore.latest[id]?.version}
             </button>
           {/if}
           {#if on && plugins.settingTabs.some((t) => t.pluginId === id)}
-            <button class="text-xs text-violet-300 hover:underline" onclick={() => onOptions(id)}>Optionen</button>
+            <button class="text-xs text-violet-300 hover:underline" onclick={() => onOptions(id)}>Options</button>
           {/if}
           <button
             class="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
-            aria-label="{p.manifest.name} deinstallieren"
-            title="Deinstallieren"
+            aria-label="Uninstall {p.manifest.name}"
+            title="Uninstall"
             disabled={!!pluginStore.busy[id]}
             onclick={() => pluginStore.uninstall(id)}
           >
             <Trash2 size={14} />
           </button>
           <Toggle
-            label="{p.manifest.name} ein/aus"
+            label="{p.manifest.name} on/off"
             checked={on}
             disabled={blocked || pluginStore.needsNewerApp(p.manifest)}
             onchange={(v) => pluginStore.setEnabled(id, v)}
@@ -263,8 +263,8 @@
       </Setting>
       <div class="-mt-2 flex flex-wrap items-center gap-2 pb-3 text-[11px] text-zinc-500">
         {@render badge(pluginStore.channelOf(id))}
-        {#if blocked}<span>Gesperrt, solange Community-Plugins nicht erlaubt sind.</span>{/if}
-        {#if pluginStore.needsNewerApp(p.manifest)}<span class="text-amber-300">Braucht dvoix {p.manifest.minAppVersion}.</span>{/if}
+        {#if blocked}<span>Locked until community plugins are allowed.</span>{/if}
+        {#if pluginStore.needsNewerApp(p.manifest)}<span class="text-amber-300">Needs dvoix {p.manifest.minAppVersion}.</span>{/if}
         {#if pluginStore.busy[id]}<span>{pluginStore.busy[id]}</span>{/if}
         {#if errorOf(id)}<span class="text-red-400">{errorOf(id)}</span>{/if}
       </div>

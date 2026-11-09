@@ -63,24 +63,24 @@ for (const [group, deps] of [
     const installed = JSON.parse(readFileSync(manifest, "utf8"));
     const entry = entryFile(installed);
     if (entry && !existsSync(join(dir, entry))) {
-      missing.push(`${name}@${installed.version} (unvollständig: ${entry} fehlt)`);
+      missing.push(`${name}@${installed.version} (incomplete: ${entry} is missing)`);
       continue;
     }
     if (!satisfies(installed.version, range)) {
-      outdated.push(`${name}: installiert ${installed.version}, gebraucht ${range}`);
+      outdated.push(`${name}: installed ${installed.version}, needs ${range}`);
     }
   }
 }
 
 if (outdated.length) {
-  console.warn("Hinweis: Installierte Versionen passen nicht zu package.json:");
+  console.warn("Note: installed versions do not match package.json:");
   for (const line of outdated) console.warn(`  - ${line}`);
-  console.warn('Bitte "npm install" ausführen, um sie zu aktualisieren.\n');
+  console.warn('Run "npm install" to update them.\n');
 }
 
 if (missing.length) {
-  console.error("Es fehlen installierte Abhängigkeiten:");
+  console.error("Installed dependencies are missing:");
   for (const line of missing) console.error(`  - ${line}`);
-  console.error('\nBitte "npm install" ausführen und den Befehl wiederholen.');
+  console.error('\nRun "npm install" and then repeat the command.');
   process.exit(1);
 }

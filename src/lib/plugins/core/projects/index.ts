@@ -5,12 +5,12 @@ import ProjectsPanel from "./ProjectsPanel.svelte";
 export const projectsPlugin: Plugin = {
   manifest: {
     id: "projects",
-    name: "Projekte",
-    description: "Notizen mit „type: projekt“ im Frontmatter als Projektliste mit Status, Fälligkeit und Fortschritt.",
+    name: "Projects",
+    description: "Notes with \"type: project\" in their frontmatter, listed as projects with status, due date and progress.",
     version: "1.0.0",
   },
   icon: FolderKanban,
   onload(ctx) {
-    ctx.addPanel({ id: "projects", label: "Projekte", icon: FolderKanban, component: ProjectsPanel, order: 50 });
+    ctx.addPanel({ id: "projects", label: "Projects", icon: FolderKanban, component: ProjectsPanel, order: 50 });
   },
 };

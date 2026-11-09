@@ -70,9 +70,9 @@ export interface DvoixPluginApi {
 }
 
 export const PERMISSION_LABELS: Record<PluginPermission, string> = {
-  "vault:read": "Dateien im Vault lesen",
-  "vault:write": "Dateien im Vault ändern und anlegen",
-  editor: "Den Markdown-Editor erweitern (sieht den Text der offenen Notiz)",
+  "vault:read": "Read files in the vault",
+  "vault:write": "Change and create files in the vault",
+  editor: "Extend the Markdown editor (can see the text of the open note)",
 };
 
 export function createApi(ctx: PluginContext, manifest: StoreManifest): DvoixPluginApi {
@@ -80,7 +80,7 @@ export function createApi(ctx: PluginContext, manifest: StoreManifest): DvoixPlu
   const own = (id: string) => `${pid}:${id}`;
   const need = (p: PluginPermission) => {
     if (!manifest.permissions.includes(p)) {
-      throw new Error(`Das Plugin „${manifest.name}“ hat die Berechtigung „${p}“ nicht im Manifest angegeben`);
+      throw new Error(`The plugin "${manifest.name}" uses the permission "${p}" but does not declare it in its manifest`);
     }
   };
 

@@ -3,17 +3,17 @@
   "plugins": [
     {
       "id": "hello",
-      "name": "Hallo Welt",
+      "name": "Hello World",
       "author": "damavoi",
-      "description": "Beispiel-Plugin: zeigt ein Panel und einen Befehl und zählt die Notizen im Vault.",
+      "description": "Example plugin: shows a panel and a command and counts the notes in the vault.",
       "repo": "DamavoiZ/dvoix-plugin-hello",
       "channel": "official"
     },
     {
       "id": "word-count",
-      "name": "Wortzähler",
-      "author": "jemand",
-      "description": "Zeigt unter jeder Notiz, wie viele Wörter sie hat.",
+      "name": "Word counter",
+      "author": "someone",
+      "description": "Shows how many words each note has.",
       "repo": "jemand/dvoix-word-count",
       "channel": "community"
     }

@@ -1,95 +1,95 @@
-# Plugins für den Plugin-Store schreiben
+# Writing plugins for the plugin store
 
-dvoix hat zwei Arten von Plugins:
+dvoix has two kinds of plugins:
 
-- **Core-Plugins** sind in die App eingebaut (Datei-Explorer, Suche, Aufgaben, Git, …) und lassen sich in den Einstellungen unter „Core-Plugins“ ausschalten. Sie liegen in `src/lib/plugins/core/`.
-- **Store-Plugins** installiert man bei Bedarf über **Einstellungen → Plugin-Store**. Sie liegen danach im Vault unter `.dvoix/plugins/<id>/`. Es gibt **offizielle** Plugins (von dvoix gepflegt, immer installierbar) und **Community-Plugins** (von anderen, erst nach dem Schalter „Community-Plugins erlauben“).
+- **Core plugins** are built into the app (file explorer, search, tasks, Git, …) and can be turned off in the settings under "Core plugins". They live in `src/lib/plugins/core/`.
+- **Store plugins** are installed when needed via **Settings → Plugin store**. They then live in the vault under `.dvoix/plugins/<id>/`. There are **official** plugins (maintained by dvoix, always installable) and **community plugins** (by others, only after the switch "Allow community plugins").
 
-Diese Seite beschreibt Store-Plugins. Ein vollständiges Beispiel steht in [`hello/`](hello/).
+This page describes store plugins. A complete example is in [`hello/`](hello/).
 
-## Aufbau
+## Structure
 
-Ein Plugin ist ein GitHub-Repository mit Releases. Jedes Release hat als Dateien (Assets):
+A plugin is a GitHub repository with releases. Each release has these files (assets):
 
-| Datei | Pflicht | Inhalt |
+| File | Required | Content |
 | --- | --- | --- |
-| `manifest.json` | ja | Name, Version, Berechtigungen (siehe unten) |
-| `main.js` | ja | der Code als ES-Modul, alles in einer Datei |
-| `styles.css` | nein | Styles, werden geladen, solange das Plugin an ist |
+| `manifest.json` | yes | name, version, permissions (see below) |
+| `main.js` | yes | the code as an ES module, all in one file |
+| `styles.css` | no | styles, loaded as long as the plugin is on |
 
-Der **Tag des Releases ist die Version** aus `manifest.json`, ohne `v` davor (z. B. `1.2.0`). Die App holt zuerst `manifest.json` aus dem neuesten Release (`releases/latest`) und dann `main.js` und `styles.css` aus dem Release mit diesem Tag.
+The **tag of the release is the version** from `manifest.json`, without a `v` in front (e.g. `1.2.0`). The app first fetches `manifest.json` from the newest release (`releases/latest`), then `main.js` and `styles.css` from the release with this tag.
 
 ### manifest.json
 
 ```json
 {
   "id": "hello",
-  "name": "Hallo Welt",
+  "name": "Hello World",
   "version": "1.0.0",
-  "description": "Ein Satz, was das Plugin macht.",
-  "author": "dein-name",
+  "description": "One sentence about what the plugin does.",
+  "author": "your-name",
   "minAppVersion": "0.1.0",
   "permissions": ["vault:read"]
 }
 ```
 
-- `id`: klein, `a-z0-9-`, nie ändern. Sie ist der Ordnername in `.dvoix/plugins/<id>/` und muss zur `id` im Plugin-Verzeichnis passen. IDs von Core-Plugins (`tasks`, `git`, …) sind vergeben.
-- `version`: `Major.Minor.Patch`, nur Zahlen.
-- `minAppVersion`: älteste dvoix-Version, auf der das Plugin läuft (optional).
-- `permissions`: was das Plugin von der API braucht:
+- `id`: lowercase, `a-z0-9-`, never change it. It is the folder name in `.dvoix/plugins/<id>/` and must match the `id` in the plugin directory. IDs of core plugins (`tasks`, `git`, …) are reserved.
+- `version`: `Major.Minor.Patch`, numbers only.
+- `minAppVersion`: the oldest dvoix version the plugin runs on (optional).
+- `permissions`: what the plugin needs from the API:
 
-| Berechtigung | erlaubt |
+| Permission | allows |
 | --- | --- |
 | `vault:read` | `dvoix.vault.list()`, `dvoix.vault.read(path)` |
 | `vault:write` | `dvoix.vault.write(path, content)` |
 | `editor` | `dvoix.registerEditorExtension(...)` |
 
-Die Berechtigungen stehen im Store, bevor jemand installiert. Ruft ein Plugin etwas auf, das es nicht angegeben hat, wirft die API einen Fehler. Eine Sandbox ist das nicht: Ein Plugin läuft wie bei Obsidian in der App und könnte die API umgehen. Deshalb sind Community-Plugins hinter einem Schalter mit Warnung.
+Permissions are shown in the store before anyone installs. If a plugin calls something it did not declare, the API throws an error. This is not a sandbox: like in Obsidian, a plugin runs inside the app and could bypass the API. That is why community plugins sit behind a switch with a warning.
 
 ### main.js
 
 ```js
 export default {
   async onload(dvoix) {
-    dvoix.addCommand({ id: "hallo", name: "Hallo sagen", run: () => alert("Hallo!") });
+    dvoix.addCommand({ id: "hello", name: "Say hello", run: () => alert("Hello!") });
   },
   onunload() {},
 };
 ```
 
-`onload` läuft beim Einschalten (oder beim Öffnen des Vaults), `onunload` beim Ausschalten. Alles, was über `dvoix` registriert wurde, entfernt die App beim Ausschalten selbst. Eigene Timer oder Listener gibt man mit `dvoix.register(() => ...)` ab.
+`onload` runs when the plugin is switched on (or when the vault is opened), `onunload` when it is switched off. The app removes everything that was registered through `dvoix` by itself when switching off. Your own timers or listeners are handed over with `dvoix.register(() => ...)`.
 
-`main.js` ist ein einzelnes ES-Modul ohne Importe. Wer Bibliotheken oder TypeScript nutzt, bündelt vorher (z. B. mit esbuild oder Vite im Library-Modus, Format `es`).
+`main.js` is a single ES module without imports. If you use libraries or TypeScript, bundle beforehand (e.g. with esbuild or Vite in library mode, format `es`).
 
-## Die API (`dvoix`)
+## The API (`dvoix`)
 
-Oberflächen sind `mount(el, props)`-Funktionen: Sie zeichnen in ein leeres Element und geben optional eine Aufräumfunktion oder `{ update(props), destroy() }` zurück. Icons sind SVG-Text (z. B. von lucide.dev kopiert). Alle IDs gelten nur im eigenen Plugin.
+Views are `mount(el, props)` functions: they draw into an empty element and optionally return a cleanup function or `{ update(props), destroy() }`. Icons are SVG text (e.g. copied from lucide.dev). All IDs are only valid within your own plugin.
 
-| Aufruf | wofür |
+| Call | What for |
 | --- | --- |
-| `addPanel({ id, label, icon, mount })` | Panel in der Seitenleiste mit Icon in der Icon-Leiste |
-| `addRibbonAction({ id, label, icon, action })` | Knopf in der Icon-Leiste |
-| `addCommand({ id, name, hotkeys, run })` | Befehl mit optionalem Tastenkürzel |
-| `addFileFooter({ id, mount })` | etwas unter der offenen Datei, `props.path` ist die Datei |
-| `addPaneHeader({ id, mount })` | etwas über der offenen Datei |
-| `addOverlay({ id, mount })` | Element auf oberster Ebene (Dialoge) |
-| `registerView({ id, label, icon, mount })` | eigene Ansicht in einem Tab, öffnen mit `dvoix.openView(id)` |
-| `registerFileType({ id, label, extensions, icon, template, mount })` | neuer Dateityp; `props` hat `path`, `content`, `onchange(text)`, `onopen(path)`, `update(props)` kommt bei Änderungen auf der Platte |
-| `registerEditorExtension(ext)` | CodeMirror-Erweiterung, gebaut mit `dvoix.lib.codemirror.state` / `.view` (gleiche Instanz wie der Editor) |
-| `addSettingTab({ mount })` | eigene Seite in den Einstellungen |
-| `loadData(defaults)` / `saveData(data)` | Einstellungen in `.dvoix/plugins/<id>/data.json` |
-| `vault.list()`, `vault.read(path)`, `vault.write(path, text)`, `vault.openFile(path)` | Dateien, Pfade relativ zum Vault |
-| `register(fn)` | `fn` läuft beim Ausschalten |
+| `addPanel({ id, label, icon, mount })` | panel in the sidebar, with an icon in the icon bar |
+| `addRibbonAction({ id, label, icon, action })` | button in the icon bar |
+| `addCommand({ id, name, hotkeys, run })` | command with an optional keyboard shortcut |
+| `addFileFooter({ id, mount })` | something below the open file; `props.path` is the file |
+| `addPaneHeader({ id, mount })` | something above the open file |
+| `addOverlay({ id, mount })` | element on the top layer (dialogs) |
+| `registerView({ id, label, icon, mount })` | own view in a tab, open with `dvoix.openView(id)` |
+| `registerFileType({ id, label, extensions, icon, template, mount })` | new file type; `props` has `path`, `content`, `onchange(text)`, `onopen(path)`, `update(props)` is called when the file changes on disk |
+| `registerEditorExtension(ext)` | CodeMirror extension, built with `dvoix.lib.codemirror.state` / `.view` (same instance as the editor) |
+| `addSettingTab({ mount })` | own page in the settings |
+| `loadData(defaults)` / `saveData(data)` | settings in `.dvoix/plugins/<id>/data.json` |
+| `vault.list()`, `vault.read(path)`, `vault.write(path, text)`, `vault.openFile(path)` | files, paths relative to the vault |
+| `register(fn)` | `fn` runs when the plugin is switched off |
 
-Farben: Die CSS-Variablen von Tailwind (z. B. `var(--color-zinc-300)`, `var(--color-violet-500)`) passen zum Rest der App. Klassen in `styles.css` mit einem eigenen Präfix versehen, die Datei gilt für die ganze App.
+Colors: the CSS variables of Tailwind (e.g. `var(--color-zinc-300)`, `var(--color-violet-500)`) match the rest of the app. Give classes in `styles.css` their own prefix; the file applies to the whole app.
 
-## Lokal testen
+## Testing locally
 
-Ohne Store: Die drei Dateien in `<vault>/.dvoix/plugins/<id>/` legen, den Vault neu öffnen und in **Plugin-Store → Installiert** einschalten. Von Hand kopierte Plugins zählen als Community-Plugin, dafür also „Community-Plugins erlauben“ einschalten.
+Without the store: put the three files into `<vault>/.dvoix/plugins/<id>/`, reopen the vault and turn the plugin on under **Plugin store → Installed**. Plugins copied by hand count as community plugins, so turn on "Allow community plugins" for them.
 
-## In den Store bringen
+## Getting into the store
 
-Die Liste der Plugins steht in [`DamavoiZ/dvoix-plugins`](https://github.com/DamavoiZ/dvoix-plugins) in `registry.json` (Beispiel: [`registry.example.json`](registry.example.json)):
+The list of plugins is in `registry.json` in [`DamavoiZ/dvoix-plugins`](https://github.com/DamavoiZ/dvoix-plugins) (example: [`registry.example.json`](registry.example.json)):
 
 ```json
 {
@@ -97,9 +97,9 @@ Die Liste der Plugins steht in [`DamavoiZ/dvoix-plugins`](https://github.com/Dam
   "plugins": [
     {
       "id": "hello",
-      "name": "Hallo Welt",
+      "name": "Hello World",
       "author": "damavoi",
-      "description": "Ein Satz, was das Plugin macht.",
+      "description": "One sentence about what the plugin does.",
       "repo": "DamavoiZ/dvoix-plugin-hello",
       "channel": "official"
     }
@@ -107,4 +107,4 @@ Die Liste der Plugins steht in [`DamavoiZ/dvoix-plugins`](https://github.com/Dam
 }
 ```
 
-Ein Community-Plugin kommt per Pull Request mit `"channel": "community"` dazu. `"official"` gilt nur für Repositories von `DamavoiZ`; bei allen anderen zeigt die App das Plugin als Community-Plugin, auch wenn in der Liste etwas anderes steht.
+A community plugin is added via pull request with `"channel": "community"`. `"official"` only applies to repositories of `DamavoiZ`; for all others the app shows the plugin as a community plugin, even if the list says something else.

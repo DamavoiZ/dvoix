@@ -1,19 +1,20 @@
 //! Frontmatter schema for projects. A project is an ordinary note whose
-//! frontmatter says `type: projekt`:
+//! frontmatter says `type: project`:
 //!
 //! ```yaml
 //! ---
-//! type: projekt          # oder: project
-//! status: aktiv          # idee | aktiv | wartend | erledigt | abgebrochen
-//! due: 2026-12-01        # Fälligkeit (optional)
-//! start: 2026-11-01      # Beginn (optional)
-//! priority: hoch         # hoch | mittel | niedrig (optional)
-//! area: Arbeit           # Bereich, frei wählbar (optional)
+//! type: project          # or: projekt (German alias)
+//! status: active         # idea | active | waiting | done | cancelled
+//! due: 2026-12-01        # due date (optional)
+//! start: 2026-11-01      # start date (optional)
+//! priority: high         # high | medium | low (optional)
+//! area: Work             # free-form area (optional)
 //! ---
 //! ```
 //!
-//! English values (`project`, `active`, `waiting`, `done`, ...) are accepted too.
-//! The tasks of a project are the checkboxes inside its note.
+//! German values (`aktiv`, `wartend`, `erledigt`, `hoch`, ...) are accepted as
+//! well, so existing vaults keep working. The tasks of a project are the
+//! checkboxes inside its note.
 
 use serde::Serialize;
 use serde_json::Value;
@@ -33,12 +34,12 @@ pub enum ProjectStatus {
 impl ProjectStatus {
     pub fn parse(s: &str) -> Option<Self> {
         match s.trim().to_lowercase().as_str() {
-            "aktiv" | "active" | "laufend" | "in arbeit" | "doing" => Some(Self::Active),
-            "wartend" | "waiting" | "pausiert" | "paused" | "on-hold" | "on hold" | "blockiert"
-            | "blocked" => Some(Self::Waiting),
-            "idee" | "idea" | "geplant" | "planned" | "todo" | "backlog" => Some(Self::Idea),
-            "erledigt" | "done" | "fertig" | "abgeschlossen" | "completed" => Some(Self::Done),
-            "abgebrochen" | "cancelled" | "canceled" | "verworfen" | "dropped" => {
+            "active" | "aktiv" | "doing" | "in progress" | "in arbeit" | "laufend" => Some(Self::Active),
+            "waiting" | "wartend" | "paused" | "pausiert" | "on-hold" | "on hold" | "blocked"
+            | "blockiert" => Some(Self::Waiting),
+            "idea" | "idee" | "planned" | "geplant" | "todo" | "backlog" => Some(Self::Idea),
+            "done" | "erledigt" | "finished" | "fertig" | "abgeschlossen" | "completed" => Some(Self::Done),
+            "cancelled" | "abgebrochen" | "canceled" | "dropped" | "verworfen" => {
                 Some(Self::Cancelled)
             }
             _ => None,
@@ -64,7 +65,7 @@ pub fn from_frontmatter(fm: &Value) -> Option<ProjectMeta> {
         .and_then(Value::as_str)?
         .trim()
         .to_lowercase();
-    if ty != "projekt" && ty != "project" {
+    if ty != "project" && ty != "projekt" {
         return None;
     }
     let text = |key: &str| match fm.get(key) {
@@ -91,13 +92,13 @@ mod tests {
     #[test]
     fn reads_project_frontmatter() {
         let meta = from_frontmatter(&json!({
-            "type": "Projekt", "status": "wartend", "due": "2026-12-01", "priority": "hoch", "area": "Arbeit"
+            "type": "Project", "status": "waiting", "due": "2026-12-01", "priority": "high", "area": "Work"
         }))
         .unwrap();
         assert_eq!(meta.status, ProjectStatus::Waiting);
         assert_eq!(meta.due.as_deref(), Some("2026-12-01"));
         assert_eq!(meta.priority, Some(Priority::High));
-        assert_eq!(meta.area.as_deref(), Some("Arbeit"));
+        assert_eq!(meta.area.as_deref(), Some("Work"));
     }
 
     #[test]

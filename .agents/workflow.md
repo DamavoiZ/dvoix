@@ -1,18 +1,18 @@
-# Arbeitsablauf
+# Workflow
 
-## Vor der Änderung
+## Before the change
 
-- `AGENTS.md` und die passende Datei in `.agents/` lesen.
-- Den betroffenen Code lesen, bevor du ihn änderst. Bestehende Muster übernehmen (ein ähnliches Plugin als Vorlage nehmen).
-- Unklare Anforderungen kurz klären oder die naheliegendste Lesart wählen und im PR nennen.
+- Read `AGENTS.md` and the matching file in `.agents/`.
+- Read the affected code before you change it. Follow the existing patterns (take a similar plugin as the template).
+- Clarify unclear requirements briefly, or pick the most obvious reading and name it in the PR.
 
-## Während der Änderung
+## During the change
 
-- Ein Thema pro Branch und PR. Nichts nebenbei umbauen oder umformatieren.
-- Versionen: neueste Version von Node.js, Rust, Abhängigkeiten und Actions (siehe Grundregel 6 in `AGENTS.md`).
-- Keine Geheimnisse, Tokens oder persönlichen Pfade ins Repo.
+- One topic per branch and PR. Do not rebuild or reformat anything on the side.
+- Versions: newest version of Node.js, Rust, dependencies and actions (see basic rule 6 in `AGENTS.md`).
+- No secrets, tokens or personal paths in the repo.
 
-## Vor dem Commit
+## Before the commit
 
 ```sh
 npm run check
@@ -20,13 +20,13 @@ npm run build
 cargo test --workspace
 ```
 
-Alle drei müssen grün sein, so wie in der CI. Konnte etwas nicht laufen (z. B. fehlende Systembibliotheken), steht das im PR.
+All three must be green, just like in the CI. If something could not run (e.g. missing system libraries), say so in the PR.
 
-- README aktualisieren, wenn sich für Nutzer oder Entwickler etwas ändert.
-- Diese Regeln (`AGENTS.md`, `.agents/`) aktualisieren, wenn sich Struktur, Befehle oder Konventionen ändern. Sie müssen immer zum Code passen.
+- Update the README when something changes for users or developers.
+- Update these rules (`AGENTS.md`, `.agents/`) when structure, commands or conventions change. They must always match the code.
 
-## Commits und PRs
+## Commits and PRs
 
-- Commit-Messages auf Englisch, im Imperativ, eine Zeile Zusammenfassung (z. B. „Add kanban board as a core plugin“), bei Bedarf ein kurzer Absatz mit dem Warum.
-- PR-Beschreibung: was sich ändert, warum, wie geprüft. Sichtbare Änderungen mit Screenshot.
-- Nie direkt auf `main` pushen, nie fremde Branches umschreiben, keine Tests abschalten, um die CI grün zu bekommen.
+- Commit messages in English, imperative mood, one summary line (e.g. "Add kanban board as a core plugin"), and if needed a short paragraph with the why.
+- PR description: what changes, why, how it was checked. Visible changes with a screenshot.
+- Never push directly to `main`, never rewrite other people's branches, never disable tests to get the CI green.

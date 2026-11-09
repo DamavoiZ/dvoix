@@ -1,8 +1,8 @@
 {
   "id": "hello",
-  "name": "Hallo Welt",
+  "name": "Hello World",
   "version": "1.0.0",
-  "description": "Beispiel-Plugin: zeigt ein Panel und einen Befehl und zählt die Notizen im Vault.",
+  "description": "Example plugin: shows a panel and a command and counts the notes in the vault.",
   "author": "damavoi",
   "minAppVersion": "0.1.0",
   "permissions": ["vault:read"]

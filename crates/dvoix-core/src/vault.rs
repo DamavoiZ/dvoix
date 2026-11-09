@@ -19,7 +19,7 @@ pub const TRASH_DIR: &str = ".trash";
 pub const MAX_HIDDEN_ENTRIES: usize = 10_000;
 
 /// Which hidden entries `Vault::list_hidden` returns. Set by the
-/// "Versteckte Dateien" plugin from its settings.
+/// "Hidden files" plugin from its settings.
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HiddenFilter {

@@ -8,14 +8,14 @@ import { taskSettings } from "./settings";
 export const tasksPlugin: Plugin = {
   manifest: {
     id: "tasks",
-    name: "Aufgaben",
-    description: "Markdown-Checkboxen als Aufgaben: anklickbar im Editor und gesammelt in einer Übersicht mit Fälligkeit und Priorität.",
+    name: "Tasks",
+    description: "Markdown checkboxes as tasks: clickable in the editor and collected in an overview with due date and priority.",
     version: "1.0.0",
   },
   icon: ListChecks,
   async onload(ctx) {
     await taskSettings.load(ctx);
-    ctx.addPanel({ id: "tasks", label: "Aufgaben", icon: ListChecks, component: TasksPanel, order: 40 });
+    ctx.addPanel({ id: "tasks", label: "Tasks", icon: ListChecks, component: TasksPanel, order: 40 });
     ctx.addSettingTab({ component: TasksSettings });
 
     // Editor extensions follow the settings: rebuilt when a toggle changes.

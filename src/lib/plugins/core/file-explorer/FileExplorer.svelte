@@ -32,6 +32,6 @@
   {#each tree as node (node.entry.path)}
     <TreeItem {node} />
   {:else}
-    <p class="px-3 py-2 text-sm text-zinc-500">Der Vault ist noch leer. Rechtsklick oder die Knöpfe oben legen etwas an.</p>
+    <p class="px-3 py-2 text-sm text-zinc-500">The vault is still empty. Right-click or use the buttons above to create something.</p>
   {/each}
 </div>

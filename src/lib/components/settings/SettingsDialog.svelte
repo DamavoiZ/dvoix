@@ -4,7 +4,7 @@
 </script>
 
 <script lang="ts">
-  // Settings (Strg+,): editor, appearance, core plugins on/off, the plugin store,
+  // Settings (Ctrl+,): editor, appearance, core plugins on/off, the plugin store,
   // and one page per plugin that has settings. Everything is saved in `<vault>/.dvoix/`.
   import { Puzzle, X } from "@lucide/svelte";
   import Select from "../Select.svelte";
@@ -74,16 +74,16 @@
     class="fixed top-1/2 left-1/2 z-50 flex h-[min(640px,88vh)] w-[min(880px,94vw)] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl"
     role="dialog"
     aria-modal="true"
-    aria-label="Einstellungen"
+    aria-label="Settings"
   >
     <nav class="w-52 shrink-0 overflow-y-auto border-r border-zinc-800 bg-zinc-950/60 p-2">
-      <div class="px-3 pt-2 pb-1 text-[11px] font-medium tracking-wide text-zinc-500 uppercase">Optionen</div>
+      <div class="px-3 pt-2 pb-1 text-[11px] font-medium tracking-wide text-zinc-500 uppercase">Options</div>
       <button class={navBtn(page === "editor")} onclick={() => (page = "editor")}>Editor</button>
-      <button class={navBtn(page === "appearance")} onclick={() => (page = "appearance")}>Darstellung</button>
-      <button class={navBtn(page === "plugins")} onclick={() => (page = "plugins")}>Core-Plugins</button>
-      <button class={navBtn(page === "store")} onclick={() => (page = "store")}>Plugin-Store</button>
+      <button class={navBtn(page === "appearance")} onclick={() => (page = "appearance")}>Appearance</button>
+      <button class={navBtn(page === "plugins")} onclick={() => (page = "plugins")}>Core plugins</button>
+      <button class={navBtn(page === "store")} onclick={() => (page = "store")}>Plugin store</button>
       {#if pluginPages.length}
-        <div class="px-3 pt-4 pb-1 text-[11px] font-medium tracking-wide text-zinc-500 uppercase">Plugin-Optionen</div>
+        <div class="px-3 pt-4 pb-1 text-[11px] font-medium tracking-wide text-zinc-500 uppercase">Plugin options</div>
         {#each pluginPages as p (p.id)}
           <button class={navBtn(page === p.id)} onclick={() => (page = p.id)}>{p.label}</button>
         {/each}
@@ -96,46 +96,46 @@
           {page === "editor"
             ? "Editor"
             : page === "appearance"
-              ? "Darstellung"
+              ? "Appearance"
               : page === "plugins"
-                ? "Core-Plugins"
+                ? "Core plugins"
                 : page === "store"
-                  ? "Plugin-Store"
+                  ? "Plugin store"
                   : (pluginPages.find((p) => p.id === page)?.label ?? "")}
         </h2>
-        <button class="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" aria-label="Schließen" onclick={close}>
+        <button class="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" aria-label="Close" onclick={close}>
           <X size={16} />
         </button>
       </header>
 
       <div class="min-h-0 flex-1 overflow-y-auto px-6 py-2">
         {#if page === "editor"}
-          <Setting name="Begrenzte Zeilenlänge" description="Text in einer angenehm lesbaren Breite statt über das ganze Fenster.">
-            <Toggle label="Begrenzte Zeilenlänge" checked={settings.app.readableLineLength} onchange={(v) => setApp("readableLineLength", v)} />
+          <Setting name="Limit line length" description="Shows text at a comfortable reading width instead of across the whole window.">
+            <Toggle label="Limit line length" checked={settings.app.readableLineLength} onchange={(v) => setApp("readableLineLength", v)} />
           </Setting>
-          <Setting name="Zeilennummern" description="Zeigt Zeilennummern links neben dem Text.">
-            <Toggle label="Zeilennummern" checked={settings.app.lineNumbers} onchange={(v) => setApp("lineNumbers", v)} />
+          <Setting name="Line numbers" description="Shows line numbers to the left of the text.">
+            <Toggle label="Line numbers" checked={settings.app.lineNumbers} onchange={(v) => setApp("lineNumbers", v)} />
           </Setting>
-          <Setting name="Rechtschreibprüfung" description="Markiert Tippfehler mit der Rechtschreibprüfung des Systems.">
-            <Toggle label="Rechtschreibprüfung" checked={settings.app.spellcheck} onchange={(v) => setApp("spellcheck", v)} />
+          <Setting name="Spellcheck" description="Marks typos with the system spellchecker.">
+            <Toggle label="Spellcheck" checked={settings.app.spellcheck} onchange={(v) => setApp("spellcheck", v)} />
           </Setting>
-          <Setting name="Standardansicht" description="Wie eine Notiz geöffnet wird: gelesen, in der Live-Vorschau bearbeitet oder als Quelltext.">
+          <Setting name="Default view" description="How a note opens: read, edited in the live preview, or as source.">
             <Select
-              label="Standardansicht"
+              label="Default view"
               value={settings.app.viewMode}
               options={[
                 { value: "read", label: "Lesen" },
-                { value: "edit", label: "Bearbeiten (Live-Vorschau)" },
-                { value: "source", label: "Quelltext" },
+                { value: "edit", label: "Edit (live preview)" },
+                { value: "source", label: "Source" },
               ]}
               onchange={(v: ViewMode) => setApp("viewMode", v)}
             />
           </Setting>
         {:else if page === "appearance"}
-          <Setting name="Schriftgröße im Editor" description="In Pixeln, Standard {APPEARANCE_DEFAULTS.fontSize}.">
+          <Setting name="Editor font size" description="In pixels, default {APPEARANCE_DEFAULTS.fontSize}.">
             <input class={input} type="number" min="10" max="28" value={settings.appearance.fontSize} onchange={(e) => setSize("fontSize", e.currentTarget.value)} />
           </Setting>
-          <Setting name="Schriftgröße der Oberfläche" description="Seitenleiste, Menüs und Dialoge, in Pixeln, Standard {APPEARANCE_DEFAULTS.interfaceFontSize}.">
+          <Setting name="Interface font size" description="Sidebar, menus and dialogs, in pixels, default {APPEARANCE_DEFAULTS.interfaceFontSize}.">
             <input
               class={input}
               type="number"
@@ -147,8 +147,8 @@
           </Setting>
         {:else if page === "plugins"}
           <p class="py-3 text-xs text-zinc-500">
-            Jede Funktion von dvoix ist ein Plugin. Ausgeschaltete Plugins verschwinden aus Seitenleiste, Menüs und Tastenkürzeln,
-            deine Dateien bleiben unverändert.
+            Every feature of dvoix is a plugin. Turned-off plugins disappear from the sidebar, menus and keyboard shortcuts,
+            your files stay unchanged.
           </p>
           {#each plugins.all as p (p.manifest.id)}
             {@const id = p.manifest.id}
@@ -156,13 +156,13 @@
             <Setting name={p.manifest.name} description={p.manifest.description}>
               <div class="flex items-center gap-3">
                 {#if on && plugins.settingTabs.some((t) => t.pluginId === id)}
-                  <button class="text-xs text-violet-300 hover:underline" onclick={() => (page = `plugin:${id}`)}>Optionen</button>
+                  <button class="text-xs text-violet-300 hover:underline" onclick={() => (page = `plugin:${id}`)}>Options</button>
                 {/if}
-                <Toggle label="{p.manifest.name} ein/aus" checked={on} onchange={(v) => plugins.setEnabled(id, v)} />
+                <Toggle label="{p.manifest.name} on/off" checked={on} onchange={(v) => plugins.setEnabled(id, v)} />
               </div>
             </Setting>
             {#if plugins.errors[id]}
-              <p class="-mt-2 pb-2 text-xs text-red-400">Konnte nicht geladen werden: {plugins.errors[id]}</p>
+              <p class="-mt-2 pb-2 text-xs text-red-400">Could not be loaded: {plugins.errors[id]}</p>
             {/if}
             {#if on && commandsOf(id).length}
               <div class="-mt-2 flex flex-wrap gap-x-4 gap-y-1 pb-3 text-[11px] text-zinc-500">
@@ -181,7 +181,7 @@
 
       <footer class="flex items-center gap-2 border-t border-zinc-800 px-6 py-2 text-[11px] text-zinc-500">
         <Puzzle size={12} />
-        Gespeichert in <code class="truncate text-zinc-400" title="{vault.info?.path}/.dvoix">{vault.info?.name}/.dvoix/</code>
+        Saved in <code class="truncate text-zinc-400" title="{vault.info?.path}/.dvoix">{vault.info?.name}/.dvoix/</code>
       </footer>
     </section>
   </div>

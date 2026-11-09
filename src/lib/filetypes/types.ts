@@ -20,7 +20,7 @@ export interface FileViewProps {
 export interface FileType {
   /** Stable id, e.g. "markdown" or "canvas". */
   id: string;
-  /** Name shown in the UI, e.g. "Notiz". */
+  /** Name shown in the UI, e.g. "Note". */
   label: string;
   /** Lower-case extensions without dot, e.g. ["md"]. */
   extensions: string[];

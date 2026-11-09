@@ -1,5 +1,5 @@
 # CLAUDE.md
 
-Alle Regeln für dieses Repo stehen in [AGENTS.md](AGENTS.md), die Details zu einzelnen Themen in [`.agents/`](.agents/). Lies AGENTS.md vor jeder Änderung und halte dich daran.
+All rules for this repo are in [AGENTS.md](AGENTS.md), the details on individual topics in [`.agents/`](.agents/). Read AGENTS.md before every change and follow it.
 
 @AGENTS.md

@@ -58,7 +58,7 @@ export interface TaskItem {
 
 export type ProjectStatus = "active" | "waiting" | "idea" | "done" | "cancelled";
 
-/** A note with `type: projekt` in its frontmatter (see `crates/dvoix-core/src/project.rs`). */
+/** A note with `type: project` in its frontmatter (see `crates/dvoix-core/src/project.rs`). */
 export interface ProjectSummary {
   path: string;
   title: string;

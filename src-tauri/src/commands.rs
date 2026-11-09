@@ -34,7 +34,7 @@ fn err(e: impl ToString) -> String {
 /// Runs `f` with the open workspace, or fails if no vault is open.
 fn with_ws<T>(state: &State<AppState>, f: impl FnOnce(&Workspace) -> CmdResult<T>) -> CmdResult<T> {
     let guard = state.workspace.lock().map_err(err)?;
-    let ws = guard.as_ref().ok_or("Kein Vault geöffnet")?;
+    let ws = guard.as_ref().ok_or("No vault is open")?;
     f(ws)
 }
 
@@ -82,7 +82,7 @@ pub fn list_entries(state: State<AppState>) -> CmdResult<Vec<VaultEntry>> {
     with_ws(&state, |ws| ws.vault.list().map_err(err))
 }
 
-/// Dot-folders and dot-files for the "Versteckte Dateien" plugin. They are
+/// Dot-folders and dot-files for the "Hidden files" plugin. They are
 /// only listed, never indexed.
 #[tauri::command(async)]
 pub fn list_hidden_entries(
@@ -379,7 +379,7 @@ pub fn rebuild_index(state: State<AppState>) -> CmdResult<usize> {
 #[tauri::command(async)]
 pub fn store_registry() -> CmdResult<Vec<RegistryEntry>> {
     let text =
-        http::get_text(store::REGISTRY_URL)?.ok_or("Die Plugin-Liste wurde nicht gefunden")?;
+        http::get_text(store::REGISTRY_URL)?.ok_or("The plugin list was not found")?;
     store::parse_registry(&text).map_err(err)
 }
 
@@ -393,7 +393,7 @@ pub fn store_latest_manifest(repo: String) -> CmdResult<PluginManifest> {
 fn fetch_manifest(repo: &str) -> CmdResult<(PluginManifest, String)> {
     let url = store::latest_manifest_url(repo).map_err(err)?;
     let text = http::get_text(&url)?
-        .ok_or_else(|| format!("{repo} hat kein Release mit manifest.json"))?;
+        .ok_or_else(|| format!("{repo} has no release with a manifest.json"))?;
     let manifest = store::parse_manifest(&text).map_err(err)?;
     Ok((manifest, text))
 }
@@ -412,7 +412,7 @@ pub fn store_install(
         http::get_text(&store::release_url(&repo, &manifest.version, file).map_err(err)?)
     };
     let main = get(store::MAIN_FILE)?
-        .ok_or_else(|| format!("Im Release {} von {repo} fehlt main.js", manifest.version))?;
+        .ok_or_else(|| format!("Release {} of {repo} is missing main.js", manifest.version))?;
     let styles = get(store::STYLES_FILE)?;
     let files = PluginFiles {
         manifest: manifest_text,

@@ -368,7 +368,7 @@ pub fn commit(vault: &Vault, message: &str, stage_all: bool) -> Result<String> {
     let message = message.trim();
     if message.is_empty() {
         return Err(Error::Git(
-            "Die Commit-Nachricht darf nicht leer sein.".into(),
+            "The commit message must not be empty.".into(),
         ));
     }
     let repo = Repo::of(vault)?;
@@ -387,7 +387,7 @@ pub fn checkout(vault: &Vault, name: &str) -> Result<()> {
     let name = name.trim();
     if name.is_empty() {
         return Err(Error::Git(
-            "Der Name des Branches darf nicht leer sein.".into(),
+            "The branch name must not be empty.".into(),
         ));
     }
     switch(&repo, &["switch", name])
@@ -399,7 +399,7 @@ pub fn create_branch(vault: &Vault, name: &str) -> Result<()> {
     let name = name.trim();
     if name.is_empty() {
         return Err(Error::Git(
-            "Der Name des Branches darf nicht leer sein.".into(),
+            "The branch name must not be empty.".into(),
         ));
     }
     switch(&repo, &["switch", "-c", name])
@@ -414,7 +414,7 @@ pub fn push(vault: &Vault) -> Result<String> {
         (None, Some(remote)) => vec!["push", "-u", remote, &info.branch],
         (None, None) => {
             return Err(Error::Git(
-                "Es gibt kein Remote, wohin gepusht werden kann.".into(),
+                "There is no remote to push to.".into(),
             ));
         }
     };
@@ -431,7 +431,7 @@ pub fn pull(vault: &Vault) -> Result<String> {
     let info = repo_info(&repo)?;
     if info.upstream.is_none() {
         return Err(Error::Git(
-            "Der Branch hat kein Upstream. Bitte zuerst pushen.".into(),
+            "The branch has no upstream. Please push first.".into(),
         ));
     }
     let out = git_raw(&repo.root, &["pull"])?;
@@ -475,7 +475,7 @@ impl Repo {
 
     /// The repository of the vault, or an error when there is none.
     fn of(vault: &Vault) -> Result<Self> {
-        Self::find(vault)?.ok_or_else(|| Error::Git("Der Vault ist kein Git-Repository.".into()))
+        Self::find(vault)?.ok_or_else(|| Error::Git("The vault is not a Git repository.".into()))
     }
 
     /// Turns a vault-relative path into one relative to the repository root.
@@ -591,7 +591,7 @@ fn push_result(out: &Output) -> String {
     let text = String::from_utf8_lossy(&out.stdout);
     let text = text.trim();
     if text.is_empty() {
-        "Push erfolgreich.".into()
+        "Push successful.".into()
     } else {
         text.to_string()
     }
@@ -602,7 +602,7 @@ fn pull_result(out: &Output) -> String {
     let text = String::from_utf8_lossy(&out.stdout);
     let text = text.trim();
     if text.is_empty() {
-        "Ziehen erfolgreich.".into()
+        "Pull successful.".into()
     } else {
         text.to_string()
     }
@@ -616,9 +616,9 @@ fn git_raw(dir: &Path, args: &[&str]) -> Result<Output> {
         .output()
         .map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
-                Error::Git("git ist nicht installiert. Bitte git installieren.".into())
+                Error::Git("git is not installed. Please install git.".into())
             } else {
-                Error::Git(format!("git konnte nicht gestartet werden: {e}"))
+                Error::Git(format!("git could not be started: {e}"))
             }
         })
 }
@@ -642,8 +642,8 @@ fn git_optional(dir: &Path, args: &[&str]) -> Option<String> {
     Some(String::from_utf8_lossy(&out.stdout).to_string())
 }
 
-/// Turns git's own output into a message for the user. Git speaks English,
-/// the app is German, so the common cases get a German text.
+/// Turns git's own output into a message for the user. The common cases get
+/// a friendlier text; everything else is passed through as git wrote it.
 fn git_error(out: &Output) -> String {
     let stderr = String::from_utf8_lossy(&out.stderr);
     // Some errors only show up on stdout, e.g. "nothing to commit".
@@ -654,33 +654,33 @@ fn git_error(out: &Output) -> String {
     };
     let text = text.trim();
     if text.is_empty() {
-        return "git hat einen Fehler gemeldet.".into();
+        return "git reported an error.".into();
     }
     if text.contains("Please tell me who you are") {
-        return "Es sind noch keine Absenderdaten gesetzt. Bitte `git config --global user.name \"Dein Name\"` und `git config --global user.email \"mail@example.com\"` setzen.".into();
+        return "No author identity is set yet. Please run `git config --global user.name \"Your Name\"` and `git config --global user.email \"mail@example.com\"`.".into();
     }
     if text.contains("nothing to commit") {
-        return "Es gibt nichts zu committen.".into();
+        return "There is nothing to commit.".into();
     }
     if text.contains("CONFLICT") {
-        return "Beim Ziehen gibt es Konflikte. Bitte die Dateien im Vault lösen und committen."
+        return "Pulling caused conflicts. Please resolve the files in the vault and commit."
             .into();
     }
     if text.contains("would be overwritten") || text.contains("Please commit your changes") {
-        return "Lokale Änderungen würden überschrieben. Bitte erst committen oder verwerfen."
+        return "Local changes would be overwritten. Please commit or discard them first."
             .into();
     }
     if text.contains("Authentication failed") || text.contains("could not read Username") {
-        return "git konnte sich nicht anmelden. Bitte die Anmeldedaten prüfen.".into();
+        return "git could not sign in. Please check your credentials.".into();
     }
     if text.contains("does not have any commits yet") {
-        return "Es gibt noch keine Commits.".into();
+        return "There are no commits yet.".into();
     }
     if text.contains("already exists") {
-        return "Der Branch existiert schon.".into();
+        return "The branch already exists.".into();
     }
     if text.contains("not a valid ref") || text.contains("is not a valid branch name") {
-        return "Der Name ist kein gültiger Branch-Name.".into();
+        return "The name is not a valid branch name.".into();
     }
     text.to_string()
 }
@@ -767,7 +767,7 @@ mod tests {
         }
         let (_dir, vault) = vault_with_repo();
         let err = commit(&vault, "  ", false).expect_err("no message");
-        assert!(err.to_string().contains("Commit-Nachricht"));
+        assert!(err.to_string().contains("commit message"));
     }
 
     #[test]

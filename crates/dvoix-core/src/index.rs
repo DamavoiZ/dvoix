@@ -101,7 +101,7 @@ pub struct TagCount {
 /// can add their own extraction here later.
 pub fn is_indexable(path: &str) -> bool {
     // Hidden folders stay out even when a note in them is opened and saved
-    // (the "Versteckte Dateien" plugin can show them).
+    // (the "Hidden files" plugin can show them).
     !Vault::is_ignored(path) && path.to_lowercase().ends_with(".md")
 }
 
@@ -329,7 +329,7 @@ impl Index {
         Ok(items)
     }
 
-    /// All notes with `type: projekt` in their frontmatter, with task progress.
+    /// All notes with `type: project` in their frontmatter, with task progress.
     pub fn projects(&self) -> Result<Vec<ProjectSummary>> {
         let mut stmt = self.conn.prepare(
             "SELECT n.path, n.title, n.frontmatter,
@@ -508,14 +508,14 @@ mod tests {
         let vault = Vault::open(dir.path()).unwrap();
         vault
             .write(
-                "projekte/alpha.md",
-                "---\nstatus: active\ntags: [projekt]\n---\n# Alpha\nVerweist auf [[Beta]].",
+                "projects/alpha.md",
+                "---\nstatus: active\ntags: [project]\n---\n# Alpha\nLinks to [[Beta]].",
             )
             .unwrap();
         vault
-            .write("beta.md", "# Beta\nEin #projekt mit Zeitplanung.")
+            .write("beta.md", "# Beta\nA #project with a schedule.")
             .unwrap();
-        vault.write("bild.canvas", "{}").unwrap();
+        vault.write("picture.canvas", "{}").unwrap();
         (dir, vault)
     }
 
@@ -528,18 +528,18 @@ mod tests {
         assert_eq!(
             index.tags().unwrap(),
             vec![TagCount {
-                tag: "projekt".into(),
+                tag: "project".into(),
                 count: 2
             }]
         );
         let backlinks = index.backlinks("beta.md").unwrap();
         assert_eq!(backlinks.len(), 1);
-        assert_eq!(backlinks[0].path, "projekte/alpha.md");
+        assert_eq!(backlinks[0].path, "projects/alpha.md");
 
         let active = index.notes_where("status", "active").unwrap();
         assert_eq!(active[0].title, "Alpha");
 
-        let hits = index.search("zeitpl", 10).unwrap();
+        let hits = index.search("schedule", 10).unwrap();
         assert_eq!(hits[0].path, "beta.md");
         assert!(index.search("\"(", 10).unwrap().is_empty());
     }
@@ -550,9 +550,9 @@ mod tests {
         let mut index = Index::for_vault(&vault).unwrap();
         index.rebuild(&vault).unwrap();
         vault
-            .write(".obsidian/geheim.md", "# Geheim\nwortxyz")
+            .write(".obsidian/secret.md", "# Secret\nwortxyz")
             .unwrap();
-        index.update(&vault, ".obsidian/geheim.md").unwrap();
+        index.update(&vault, ".obsidian/secret.md").unwrap();
         assert!(index.search("wortxyz", 10).unwrap().is_empty());
     }
 
@@ -561,18 +561,18 @@ mod tests {
         let (_dir, vault) = sample_vault();
         vault
             .write(
-                "projekte/umzug.md",
-                "---\ntype: projekt\nstatus: aktiv\ndue: 2026-12-01\n---\n# Umzug\n- [ ] Kartons 📅 2026-11-20\n- [x] Kündigen\n- [ ] Ummelden due:2026-11-15 !hoch\n",
+                "projects/umzug.md",
+                "---\ntype: project\nstatus: active\ndue: 2026-12-01\n---\n# Move\n- [ ] Boxes 📅 2026-11-20\n- [x] Cancel contract\n- [ ] Re-register due:2026-11-15 !high\n",
             )
             .unwrap();
-        vault.write("inbox.md", "- [ ] Lose Aufgabe").unwrap();
+        vault.write("inbox.md", "- [ ] Loose task").unwrap();
         let mut index = Index::for_vault(&vault).unwrap();
         index.rebuild(&vault).unwrap();
 
         let tasks = index.tasks().unwrap();
         assert_eq!(tasks.len(), 4);
         assert_eq!(tasks[0].path, "inbox.md");
-        assert_eq!(tasks[1].note_title, "Umzug");
+        assert_eq!(tasks[1].note_title, "Move");
         assert_eq!(tasks[1].task.line, 6);
         assert_eq!(tasks[3].task.priority, Some(tasks::Priority::High));
 
@@ -583,15 +583,15 @@ mod tests {
         assert_eq!(p.next_due.as_deref(), Some("2026-11-15"));
         assert_eq!(p.meta.due.as_deref(), Some("2026-12-01"));
 
-        tasks::set_done_in_vault(&vault, "projekte/umzug.md", 6, "Kartons", true).unwrap();
-        index.update(&vault, "projekte/umzug.md").unwrap();
+        tasks::set_done_in_vault(&vault, "projects/umzug.md", 6, "Boxes", true).unwrap();
+        index.update(&vault, "projects/umzug.md").unwrap();
         assert_eq!(index.projects().unwrap()[0].done_tasks, 2);
         assert!(
-            tasks::set_done_in_vault(&vault, "projekte/umzug.md", 6, "Etwas anderes", false)
+            tasks::set_done_in_vault(&vault, "projects/umzug.md", 6, "Something else", false)
                 .is_err()
         );
 
-        index.remove("projekte").unwrap();
+        index.remove("projects").unwrap();
         assert_eq!(index.tasks().unwrap().len(), 1);
         assert!(index.projects().unwrap().is_empty());
     }
@@ -602,7 +602,7 @@ mod tests {
         vault
             .write(
                 "beta.md",
-                "# Beta\nEin #projekt, siehe [[Alpha]] und [Bild](bild.png).",
+                "# Beta\nA #project, see [[Alpha]] and [Picture](picture.png).",
             )
             .unwrap();
         let mut index = Index::for_vault(&vault).unwrap();
@@ -610,8 +610,8 @@ mod tests {
 
         let graph = index.graph().unwrap();
         let paths: Vec<_> = graph.notes.iter().map(|n| n.path.as_str()).collect();
-        assert_eq!(paths, vec!["beta.md", "projekte/alpha.md"]);
-        assert_eq!(graph.notes[1].tags, vec!["projekt"]);
+        assert_eq!(paths, vec!["beta.md", "projects/alpha.md"]);
+        assert_eq!(graph.notes[1].tags, vec!["project"]);
         assert_eq!(
             graph.links,
             vec![
@@ -621,10 +621,10 @@ mod tests {
                 },
                 GraphLink {
                     source: "beta.md".into(),
-                    target: "bild.png".into()
+                    target: "picture.png".into()
                 },
                 GraphLink {
-                    source: "projekte/alpha.md".into(),
+                    source: "projects/alpha.md".into(),
                     target: "beta".into()
                 },
             ]
@@ -641,7 +641,7 @@ mod tests {
         index.update(&vault, "beta.md").unwrap();
         assert_eq!(index.notes_with_tag("fertig").unwrap().len(), 1);
 
-        index.remove("projekte").unwrap();
+        index.remove("projects").unwrap();
         assert!(index.backlinks("beta.md").unwrap().is_empty());
     }
 }

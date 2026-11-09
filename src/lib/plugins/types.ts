@@ -12,7 +12,7 @@ import type { FileType } from "../filetypes/types";
 export interface PluginManifest {
   /** Stable id, also the folder name of its data: `.dvoix/plugins/<id>/`. Lower-case, `a-z0-9-`. */
   id: string;
-  /** Name shown in the settings, e.g. "Aufgaben". */
+  /** Name shown in the settings, e.g. "Tasks". */
   name: string;
   /** One sentence on what it does. */
   description: string;
@@ -68,7 +68,7 @@ export interface Hotkey {
 export interface CommandSpec {
   /** Unique within the plugin; the full id is `<plugin-id>:<id>`. */
   id: string;
-  /** Name shown to users, e.g. "Neuer Tab". */
+  /** Name shown to users, e.g. "New tab". */
   name: string;
   hotkeys?: Hotkey[];
   /** Also run while a dialog (quick switcher, settings) is open. */

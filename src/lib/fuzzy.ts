@@ -1,4 +1,4 @@
-// Small fuzzy matcher for the quick switcher: "mtg plan" finds "Projekte/Meeting-Planung.md".
+// Small fuzzy matcher for the quick switcher: "mtg plan" finds "Projects/Meeting-Planning.md".
 // Every word of the query must appear in order (letters may be spread out) in the path.
 // Matches in the file name, at word starts and in a row score higher.
 

@@ -2,7 +2,7 @@
 import { pluginSettings } from "../../pluginSettings.svelte";
 
 export const hiddenSettings = pluginSettings({
-  /** Shown right now; flipped by the command "Versteckte Dateien ein-/ausblenden". */
+  /** Shown right now; flipped by the command "Show/hide hidden files". */
   visible: true,
   /** Also dot-files like `.gitignore`, not only dot-folders. */
   includeFiles: true,

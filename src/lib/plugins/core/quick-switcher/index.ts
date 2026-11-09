@@ -8,8 +8,8 @@ export const QUICK_SWITCHER = "quick-switcher";
 export const quickSwitcherPlugin: Plugin = {
   manifest: {
     id: QUICK_SWITCHER,
-    name: "Schnellöffner",
-    description: "Strg+O: Dateien per unscharfer Suche öffnen oder neue Notizen anlegen.",
+    name: "Quick switcher",
+    description: "Ctrl+O: open files with fuzzy search or create new notes.",
     version: "1.0.0",
   },
   icon: FileSearch,
@@ -17,7 +17,7 @@ export const quickSwitcherPlugin: Plugin = {
     ctx.addOverlay({ id: QUICK_SWITCHER, component: QuickSwitcher });
     ctx.addCommand({
       id: "open",
-      name: "Schnellöffner",
+      name: "Quick switcher",
       hotkeys: [{ mod: true, key: "o" }],
       inModal: true,
       run: () => ui.toggleModal(QUICK_SWITCHER),

@@ -1,111 +1,112 @@
 # AGENTS.md
 
-Feste Regeln für alle KI-Agents (Claude, Codex, Copilot, …), die in diesem Repo arbeiten. Diese Datei ist die Hauptquelle; `CLAUDE.md` verweist nur hierher. Ausführliche Regeln zu einzelnen Themen stehen in [`.agents/`](.agents/). Lies vor einer Änderung die Datei zum betroffenen Thema.
+Fixed rules for all AI agents (Claude, Codex, Copilot, …) working in this repo. This file is the main source; `CLAUDE.md` only points here. Detailed rules on individual topics are in [`.agents/`](.agents/). Before a change, read the file for the affected topic.
 
-## Was dvoix ist
+## What dvoix is
 
-Eine Desktop-App für Notizen, Projekte, Aufgaben und Tracking, ähnlich wie Obsidian. Alle Daten liegen als normale Dateien in einem Ordner auf der Platte (dem **Vault**). Jede Funktion ist ein **Core-Plugin**. Die Einstellungen eines Vaults liegen im Vault unter `.dvoix/`.
+A desktop app for notes, projects, tasks and tracking, similar to Obsidian. All data lives as ordinary files in a folder on disk (the **vault**). Every feature is a **core plugin**. A vault's settings live inside the vault under `.dvoix/`.
 
-## Die Repos von dvoix
+## The dvoix repos
 
-dvoix verteilt sich auf mehrere Repositories. Dieser Abschnitt steht gleich in der `AGENTS.md` jedes Repos. Wer ihn ändert, ändert ihn in allen.
+dvoix is spread across several repositories. This section is also in the `AGENTS.md` of every repo. Whoever changes it, changes it in all of them.
 
-| Repo | Wofür | Was dort hingehört |
+| Repo | Purpose | What belongs there |
 | --- | --- | --- |
-| [`DamavoiZ/dvoix`](https://github.com/DamavoiZ/dvoix) | die App | Rust-Kern, Tauri-Hülle, Svelte-Frontend, Core-Plugins, Plugin-API, Plugin-Store in der App, Entwickler-Anleitung für Store-Plugins (`docs/plugins/`), README für Entwickler |
-| [`DamavoiZ/dvoix-website`](https://github.com/DamavoiZ/dvoix-website) | Produktseite und Doku | Produktseite unter `/`, Doku für Nutzer und Plugin-Entwickler unter `/docs`, Screenshots für die Seite, Docker-Image für den Server |
-| [`DamavoiZ/dvoix-plugins`](https://github.com/DamavoiZ/dvoix-plugins) | Liste des Plugin-Stores | nur `registry.json` und ihre Prüfung (`scripts/validate.mjs`). Kein Plugin-Code |
-| `DamavoiZ/dvoix-<name>` | je ein offizielles Store-Plugin | Code, `manifest.json`, Releases mit `manifest.json`, `main.js`, `styles.css` |
+| [`DamavoiZ/dvoix`](https://github.com/DamavoiZ/dvoix) | the app | Rust core, Tauri shell, Svelte frontend, core plugins, plugin API, plugin store in the app, developer guide for store plugins (`docs/plugins/`), developer README |
+| [`DamavoiZ/dvoix-website`](https://github.com/DamavoiZ/dvoix-website) | product page and docs | product page at `/`, user and plugin developer docs at `/docs`, screenshots for the page, Docker image for the server |
+| [`DamavoiZ/dvoix-plugins`](https://github.com/DamavoiZ/dvoix-plugins) | list of the plugin store | only `registry.json` and its check (`scripts/validate.mjs`). No plugin code |
+| `DamavoiZ/dvoix-<name>` | one official store plugin each | code, `manifest.json`, releases with `manifest.json`, `main.js`, `styles.css` |
 
-### Wo gehört was hin?
+### Where does what go?
 
-| Aufgabe | Repo |
+| Task | Repo |
 | --- | --- |
-| Grundfunktion, die fast jeder braucht (Explorer, Suche, Aufgaben, …) | `dvoix`, als Core-Plugin unter `src/lib/plugins/core/` |
-| Zusatzfunktion, die nicht jeder will (Kanban, Tracking, …) | eigenes Repo `DamavoiZ/dvoix-<name>` als Store-Plugin, dazu ein Eintrag in `dvoix-plugins` |
-| Plugin-API erweitern (`PluginContext`, Berechtigungen) | `dvoix`, dazu `docs/plugins/README.md` dort und die Seite `plugin-api.md` der Website |
-| Erklären, wie man dvoix bedient | `dvoix-website`, Seite in `src/content/docs/` |
-| Plugin im Store anbieten oder entfernen | `dvoix-plugins`, `registry.json` |
-| Fehler in einem Store-Plugin | im Repo des Plugins, nicht in der App |
+| Basic function almost everyone needs (explorer, search, tasks, …) | `dvoix`, as a core plugin under `src/lib/plugins/core/` |
+| Extra function not everyone wants (kanban, tracking, …) | its own repo `DamavoiZ/dvoix-<name>` as a store plugin, plus an entry in `dvoix-plugins` |
+| Extend the plugin API (`PluginContext`, permissions) | `dvoix`, plus `docs/plugins/README.md` there and the `plugin-api.md` page on the website |
+| Explain how to use dvoix | `dvoix-website`, page in `src/content/docs/` |
+| Offer or remove a plugin in the store | `dvoix-plugins`, `registry.json` |
+| Bug in a store plugin | in the plugin's repo, not in the app |
 
-### Was über Repo-Grenzen zusammenhängt
+### What is connected across repo boundaries
 
-- **Format der Plugin-Liste:** festgelegt in `crates/dvoix-core/src/store.rs` (`parse_registry`) der App, Beispiel in `docs/plugins/registry.example.json`, geprüft von `scripts/validate.mjs` in `dvoix-plugins`. Ändert sich das Format, ändern sich alle drei Stellen.
-- **Adresse der Plugin-Liste:** Die App liest `https://raw.githubusercontent.com/DamavoiZ/dvoix-plugins/main/registry.json`. Repo-Name, Branch `main` und Dateiname nie ändern, sonst findet keine installierte App mehr Plugins.
-- **Offiziell:** `"channel": "official"` gilt nur für Repos von `DamavoiZ`. Die App und die Prüfung in `dvoix-plugins` setzen das beide durch.
-- **Plugin-API:** `src/lib/plugins/store/api.ts` in der App, `docs/plugins/README.md` in der App und `src/content/docs/plugin-api.md` auf der Website beschreiben dieselbe API und müssen zusammenpassen.
-- **Funktionen der App:** Was die Website-Doku über die App sagt, muss zum Code in `dvoix` passen. Ändert sich die App für Nutzer sichtbar, wird die Doku nachgezogen.
+- **Format of the plugin list:** defined in `crates/dvoix-core/src/store.rs` (`parse_registry`) of the app, example in `docs/plugins/registry.example.json`, checked by `scripts/validate.mjs` in `dvoix-plugins`. If the format changes, all three places change.
+- **Address of the plugin list:** the app reads `https://raw.githubusercontent.com/DamavoiZ/dvoix-plugins/main/registry.json`. Never change the repo name, the branch `main` or the file name, or no installed app finds plugins anymore.
+- **Official:** `"channel": "official"` only applies to repos of `DamavoiZ`. The app and the check in `dvoix-plugins` both enforce this.
+- **Plugin API:** `src/lib/plugins/store/api.ts` in the app, `docs/plugins/README.md` in the app and `src/content/docs/plugin-api.md` on the website describe the same API and must match.
+- **Features of the app:** what the website docs say about the app must match the code in `dvoix`. If the app changes in a way users see, the docs are updated.
 
-### Änderungen über mehrere Repos
+### Changes across several repos
 
-- Ein PR pro Repo. Die PRs verlinken sich gegenseitig in der Beschreibung.
-- Reihenfolge beim Mergen: zuerst die App (`dvoix`), dann `dvoix-plugins` und `dvoix-website`. Eine Doku oder Plugin-Liste darf nichts versprechen, was die App auf `main` noch nicht kann.
-- Für alle Repos gilt gleich: Code, Kommentare und Commit-Messages auf Englisch, alles für Nutzer auf Deutsch; immer die neuesten stabilen Versionen von Node.js, Abhängigkeiten und GitHub Actions; nie direkt auf `main` pushen.
+- One PR per repo. The PRs link to each other in their descriptions.
+- Merge order: first the app (`dvoix`), then `dvoix-plugins` and `dvoix-website`. A doc or plugin list must not promise anything the app does not yet support on `main`.
+- For all repos the same applies: code, comments and commit messages in English, everything users see in English too; always the newest stable versions of Node.js, dependencies and GitHub Actions; never push directly to `main`.
 
-## Die sechs Grundregeln
+## The seven basic rules
 
-1. **Die Dateien sind die einzige Quelle der Wahrheit.** Alles andere (`.dvoix/index.sqlite`, Zustand im Speicher) ist Cache und muss sich jederzeit aus den Dateien neu aufbauen lassen. Nie Daten nur im Index, im `localStorage` oder in der App halten.
-2. **Jedes Feature ist ein Plugin.** Neue Funktionen kommen als Ordner unter `src/lib/plugins/core/<id>/` und hängen sich nur über den `PluginContext` ein. Keine Sonderfälle für ein Feature in `App.svelte` oder den Komponenten unter `src/lib/components/`.
-3. **Vault-Einstellungen gehören nach `<vault>/.dvoix/`.** Nur „welcher Vault war zuletzt offen“ liegt im Konfigurationsordner des Betriebssystems (`src-tauri/src/settings.rs`).
-4. **Schreiben ist atomar und minimal.** Dateien werden über `Vault::write` geschrieben (Temp-Datei, dann umbenennen). Ändert eine Funktion eine Notiz (z. B. Aufgabe abhaken), ändert sie nur die betroffene Zeile und formatiert nie die ganze Datei neu.
-5. **Pfade sind vault-relativ und laufen durch `Vault::resolve`.** Kein Zugriff außerhalb des Vaults, keine absoluten Pfade vom Frontend.
-6. **Immer die neuesten Versionen.** Node.js (aktuelle Version, nicht eine ältere LTS), Rust stable, alle npm- und Cargo-Abhängigkeiten und alle GitHub Actions laufen auf der jeweils neuesten Version. Neue Abhängigkeiten in der neuesten Version einbauen, beim Anfassen alter Stände mit anheben und die CI, das README und `package.json` (`engines`) passend halten. Ältere Versionen nur mit Begründung im PR, z. B. wenn die neueste nachweislich kaputt ist.
+1. **The files are the only source of truth.** Everything else (`.dvoix/index.sqlite`, in-memory state) is cache and must be rebuildable from the files at any time. Never keep data only in the index, in `localStorage` or in the app.
+2. **Every feature is a plugin.** New functions come as a folder under `src/lib/plugins/core/<id>/` and only hook in through the `PluginContext`. No special cases for a feature in `App.svelte` or in the components under `src/lib/components/`.
+3. **Vault settings belong in `<vault>/.dvoix/`.** Only "which vault was opened last" lives in the operating system's configuration folder (`src-tauri/src/settings.rs`).
+4. **Writing is atomic and minimal.** Files are written through `Vault::write` (temp file, then rename). If a function changes a note (e.g. ticks off a task), it changes only the affected line and never reformats the whole file.
+5. **Paths are vault-relative and go through `Vault::resolve`.** No access outside the vault, no absolute paths from the frontend.
+6. **Always the newest versions.** Node.js (current version, not an older LTS), Rust stable, all npm and Cargo dependencies and all GitHub Actions run on their newest version. Add new dependencies in their newest version, bump older ones when you touch them, and keep the CI, the README and `package.json` (`engines`) in line. Older versions only with a justification in the PR, e.g. when the newest is demonstrably broken.
+7. **Everything is in English.** Code, identifiers, comments, commit messages, UI texts, error messages, plugin names and descriptions, tests, documentation and these rules. Do not add German text anywhere. The only exception is German alias values that the parsers must keep accepting (e.g. `!hoch`, `type: projekt`), and those are marked as aliases.
 
 ## Stack
 
-| Schicht | Technik |
+| Layer | Technology |
 | --- | --- |
-| App-Hülle | Tauri 2 (`src-tauri/`), `ureq` für die Downloads des Plugin-Stores, `webkit2gtk` (nur Linux) für Einstellungen der Webview, die Tauri nicht anbietet |
-| Kern | Rust-Crate `crates/dvoix-core/` ohne Tauri: `notify`, `pulldown-cmark`, `serde_yaml_ng`, `rusqlite` mit FTS5, `walkdir` |
-| Frontend | Svelte 5 (Runes), TypeScript, Vite, Tailwind CSS 4, Icons aus `@lucide/svelte`, `force-graph` für die Graph-Ansicht |
+| App shell | Tauri 2 (`src-tauri/`), `ureq` for the plugin store downloads, `webkit2gtk` (Linux only) for webview settings Tauri does not offer |
+| Core | Rust crate `crates/dvoix-core/` without Tauri: `notify`, `pulldown-cmark`, `serde_yaml_ng`, `rusqlite` with FTS5, `walkdir` |
+| Frontend | Svelte 5 (runes), TypeScript, Vite, Tailwind CSS 4, icons from `@lucide/svelte`, `force-graph` for the graph view |
 | Editor | CodeMirror 6 |
 
-## Aufbau
+## Layout
 
 ```
-crates/dvoix-core/src/   Logik ohne UI: vault.rs, markdown.rs, tasks.rs, project.rs, git.rs, store.rs, index.rs, watcher.rs
-src-tauri/src/           Tauri-Hülle: lib.rs (Setup, Handler-Liste), commands.rs (alle Befehle), http.rs (Downloads für den Store), settings.rs
-src/lib/api.ts           typisierte Wrapper für jeden Rust-Befehl
-src/lib/config.ts        JSON in <vault>/.dvoix/ lesen/schreiben (verzögert, gebündelt)
-src/lib/*.svelte.ts      App-Zustand (vault, ui, settings, window) mit Runes
-src/lib/filetypes/       Dateityp-Registry, Markdown-Editor, Fallback-Ansicht
-src/lib/plugins/         Plugin-API (types.ts), Verwaltung (manager.svelte.ts), Einstellungen (pluginSettings.svelte.ts)
-src/lib/plugins/core/    ein Ordner pro Core-Plugin, Liste in core/index.ts
-src/lib/plugins/store/   Plugin-Store: Store-Plugins laden/installieren, ihre API (api.ts)
-docs/plugins/            Anleitung und Beispiel für Store-Plugins, Beispiel der Plugin-Liste
-src/lib/components/      App-Rahmen: Ribbon, SidePanel, FilePane, Einstellungen, Kontextmenü
+crates/dvoix-core/src/   logic without UI: vault.rs, markdown.rs, tasks.rs, project.rs, git.rs, store.rs, index.rs, watcher.rs
+src-tauri/src/           Tauri shell: lib.rs (setup, handler list), commands.rs (all commands), http.rs (downloads for the store), settings.rs
+src/lib/api.ts           typed wrappers for every Rust command
+src/lib/config.ts        read/write JSON in <vault>/.dvoix/ (deferred, batched)
+src/lib/*.svelte.ts      app state (vault, ui, settings, window) with runes
+src/lib/filetypes/       file type registry, Markdown editor, fallback view
+src/lib/plugins/         plugin API (types.ts), management (manager.svelte.ts), settings (pluginSettings.svelte.ts)
+src/lib/plugins/core/    one folder per core plugin, list in core/index.ts
+src/lib/plugins/store/   plugin store: load/install store plugins, their API (api.ts)
+docs/plugins/            guide and example for store plugins, example plugin list
+src/lib/components/      app frame: ribbon, side panel, file pane, settings, context menu
 ```
 
-## Befehle
+## Commands
 
 ```sh
-npm install              # einmalig
+npm install              # once
 npm run check            # svelte-check: Svelte + TypeScript
-npm run build            # Frontend bauen (Vite)
-cargo test --workspace   # Rust-Tests (Kern + Tauri-Crate)
-npm run tauri dev        # App starten (braucht Tauri-Systemabhängigkeiten)
+npm run build            # build the frontend (Vite)
+cargo test --workspace   # Rust tests (core + Tauri crate)
+npm run tauri dev        # start the app (needs Tauri system dependencies)
 ```
 
-Vor jedem Commit müssen `npm run check`, `npm run build` und `cargo test --workspace` grün sein. Genau diese drei laufen in der CI (`.github/workflows/ci.yml`). Unter Linux braucht der Rust-Build `libwebkit2gtk-4.1-dev libsoup-3.0-dev librsvg2-dev libxdo-dev libssl-dev`. Wenn ein Check lokal nicht laufen kann, sag das ausdrücklich, statt Erfolg zu behaupten.
+Before every commit, `npm run check`, `npm run build` and `cargo test --workspace` must pass. These exact three run in the CI (`.github/workflows/ci.yml`). On Linux the Rust build needs `libwebkit2gtk-4.1-dev libsoup-3.0-dev librsvg2-dev libxdo-dev libssl-dev`. If a check cannot run locally, say so explicitly instead of claiming success.
 
-## Konventionen
+## Conventions
 
-- **Sprache:** Code, Bezeichner, Kommentare und Commit-Messages auf Englisch. Alles, was Nutzer sehen (UI-Texte, Plugin-Namen und -Beschreibungen, Fehlermeldungen aus Befehlen, README), auf Deutsch.
-- **Kommentare** erklären das Warum, nicht das Was. Jede Datei beginnt mit einem kurzen Kommentar, wofür sie da ist (siehe bestehende Dateien).
-- **Svelte 5 mit Runes** (`$state`, `$derived`, `$effect`, `$props`). Kein `export let`, keine Svelte-4-Stores.
-- **Styling** mit Tailwind-Klassen und den CSS-Variablen aus `src/app.css`. Keine neuen Farben hart kodieren.
-- **Keine neuen Abhängigkeiten** ohne guten Grund. Wenn doch, im PR begründen.
-- **Kleine, fokussierte Änderungen.** Ein PR, ein Thema. Kein Umformatieren unbeteiligter Dateien.
-- **Rust:** Fehler über `dvoix_core::Error` und `Result`, kein `unwrap()` außerhalb von Tests. Neue Logik im Kern bekommt Tests im selben Modul (`#[cfg(test)] mod tests`, Vault mit `tempfile::tempdir()`).
-- **README aktuell halten:** Neue Funktion, neuer Dateityp, neue Datei in `.dvoix/` oder neue Plugin-API → Abschnitt im README ergänzen.
+- **Language:** code, identifiers, comments and commit messages in English. Everything users see (UI texts, plugin names and descriptions, error messages from commands, README) in English as well.
+- **Comments** explain the why, not the what. Every file starts with a short comment on what it is for (see the existing files).
+- **Svelte 5 with runes** (`$state`, `$derived`, `$effect`, `$props`). No `export let`, no Svelte 4 stores.
+- **Styling** with Tailwind classes and the CSS variables from `src/app.css`. Do not hard-code new colors.
+- **No new dependencies** without a good reason. If there is one, justify it in the PR.
+- **Small, focused changes.** One PR, one topic. No reformatting of unrelated files.
+- **Rust:** errors via `dvoix_core::Error` and `Result`, no `unwrap()` outside tests. New logic in the core gets tests in the same module (`#[cfg(test)] mod tests`, vault via `tempfile::tempdir()`).
+- **Keep the README current:** new feature, new file type, new file in `.dvoix/` or new plugin API → add a section to the README.
 
-## Themen-Regeln in `.agents/`
+## Topic rules in `.agents/`
 
-| Datei | Wann lesen |
+| File | When to read |
 | --- | --- |
-| [`.agents/plugins.md`](.agents/plugins.md) | neues Plugin, Plugin ändern, Plugin-Einstellungen |
-| [`.agents/filetypes.md`](.agents/filetypes.md) | neuer Dateityp (z. B. `.board`, `.track`) |
-| [`.agents/rust-core.md`](.agents/rust-core.md) | Änderungen im Rust-Kern, neue Tauri-Befehle, Index |
-| [`.agents/frontend.md`](.agents/frontend.md) | Svelte-Komponenten, App-Zustand, Editor |
-| [`.agents/vault-data.md`](.agents/vault-data.md) | Dateiformate, Frontmatter, `.dvoix/`, Aufgaben-Syntax |
-| [`.agents/workflow.md`](.agents/workflow.md) | Branches, Commits, PRs, was vor dem Abschluss geprüft wird |
+| [`.agents/plugins.md`](.agents/plugins.md) | new plugin, changing a plugin, plugin settings |
+| [`.agents/filetypes.md`](.agents/filetypes.md) | new file type (e.g. `.board`, `.track`) |
+| [`.agents/rust-core.md`](.agents/rust-core.md) | changes in the Rust core, new Tauri commands, index |
+| [`.agents/frontend.md`](.agents/frontend.md) | Svelte components, app state, editor |
+| [`.agents/vault-data.md`](.agents/vault-data.md) | file formats, frontmatter, `.dvoix/`, task syntax |
+| [`.agents/workflow.md`](.agents/workflow.md) | branches, commits, PRs, what is checked before finishing |

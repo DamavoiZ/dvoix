@@ -30,27 +30,27 @@ export function dueBucket(due: string | null, now = today()): DueBucket {
 }
 
 export const bucketLabels: Record<DueBucket, string> = {
-  overdue: "Überfällig",
-  today: "Heute",
-  week: "Nächste 7 Tage",
-  later: "Später",
-  none: "Ohne Datum",
+  overdue: "Overdue",
+  today: "Today",
+  week: "Next 7 days",
+  later: "Later",
+  none: "No date",
 };
 
-/** Short German date: "heute", "morgen", "gestern" or "3. Dez." (with year if not this year). */
+/** Short date: "today", "tomorrow", "yesterday" or "3 Dec" (with year if not this year). */
 export function formatDue(due: string, now = today()): string {
-  if (due === now) return "heute";
-  if (due === addDays(now, 1)) return "morgen";
-  if (due === addDays(now, -1)) return "gestern";
+  if (due === now) return "today";
+  if (due === addDays(now, 1)) return "tomorrow";
+  if (due === addDays(now, -1)) return "yesterday";
   const [y, m, d] = due.split("-").map(Number);
   const date = new Date(y, m - 1, d);
   const sameYear = due.slice(0, 4) === now.slice(0, 4);
-  return date.toLocaleDateString("de-DE", { day: "numeric", month: "short", year: sameYear ? undefined : "numeric" });
+  return date.toLocaleDateString("en-US", { day: "numeric", month: "short", year: sameYear ? undefined : "numeric" });
 }
 
 export const priorityRank: Record<Priority, number> = { high: 0, medium: 1, low: 2 };
 
-export const priorityLabels: Record<Priority, string> = { high: "Hoch", medium: "Mittel", low: "Niedrig" };
+export const priorityLabels: Record<Priority, string> = { high: "High", medium: "Medium", low: "Low" };
 
 export const priorityClass: Record<Priority, string> = {
   high: "text-red-400",
@@ -59,11 +59,11 @@ export const priorityClass: Record<Priority, string> = {
 };
 
 export const statusLabels: Record<ProjectStatus, string> = {
-  active: "Aktiv",
-  waiting: "Wartend",
-  idea: "Idee",
-  done: "Erledigt",
-  cancelled: "Abgebrochen",
+  active: "Active",
+  waiting: "Waiting",
+  idea: "Idea",
+  done: "Done",
+  cancelled: "Cancelled",
 };
 
 export const statusClass: Record<ProjectStatus, string> = {

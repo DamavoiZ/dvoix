@@ -1,17 +1,17 @@
 //! Tasks are ordinary markdown checkboxes, anywhere in any note:
 //!
 //! ```markdown
-//! - [ ] Angebot schreiben 📅 2026-12-01 ⏫ #kunde
-//! - [x] Erledigt
-//! * [ ] Auch mit `due:2026-12-01` und `!hoch`
+//! - [ ] Write the offer 📅 2026-12-01 ⏫ #client
+//! - [x] Done
+//! * [ ] Also with `due:2026-12-01` and `!high`
 //! ```
 //!
 //! Optional metadata is written inline so the file stays readable everywhere:
 //!
-//! | Bedeutung  | Schreibweise                                   |
-//! | ---------- | ---------------------------------------------- |
-//! | Fälligkeit | `📅 2026-12-01` oder `due:2026-12-01`          |
-//! | Priorität  | `⏫` / `🔼` / `🔽` oder `!hoch` / `!mittel` / `!niedrig` |
+//! | Meaning  | Syntax                                                     |
+//! | -------- | ---------------------------------------------------------- |
+//! | Due date | `📅 2026-12-01` or `due:2026-12-01`                        |
+//! | Priority | `⏫` / `🔼` / `🔽` or `!high` / `!medium` / `!low` (German `!hoch` / `!mittel` / `!niedrig` also work) |
 //!
 //! The emoji forms match the Obsidian Tasks plugin, so existing vaults keep working.
 //! The file is the source of truth: toggling a task rewrites exactly that one line.
@@ -39,7 +39,7 @@ impl Priority {
         }
     }
 
-    /// Accepts German and English words (`hoch`, `high`, ...) and `1`-`3`.
+    /// Accepts English and German words (`high`, `hoch`, ...) and `1`-`3`.
     pub fn parse(s: &str) -> Option<Self> {
         match s.trim().to_lowercase().as_str() {
             "hoch" | "high" | "1" | "dringend" | "urgent" => Some(Priority::High),
@@ -261,7 +261,7 @@ pub fn set_done_in_vault(
 mod tests {
     use super::*;
 
-    const NOTE: &str = "---\ntitle: X\nlist:\n- [ ] kein task im frontmatter\n---\n# Liste\n\n- [ ] Angebot schreiben 📅 2026-12-01 ⏫ #Kunde\n  - [x] Unteraufgabe\n* [X] Groß erledigt\n1. [ ] Nummeriert due:2026-11-20 !niedrig\n- [] kein task\n-[ ] kein task\n- [ ]ohne Leerzeichen\n\n```\n- [ ] im Code\n```\n- [ ] Schluss !mittel\n";
+    const NOTE: &str = "---\ntitle: X\nlist:\n- [ ] no task in frontmatter\n---\n# List\n\n- [ ] Write the offer 📅 2026-12-01 ⏫ #Client\n  - [x] Subtask\n* [X] Uppercase done\n1. [ ] Numbered due:2026-11-20 !low\n- [] no task\n-[ ] no task\n- [ ]without space\n\n```\n- [ ] in code\n```\n- [ ] End !medium\n";
 
     #[test]
     fn extracts_tasks_with_metadata() {
@@ -270,11 +270,11 @@ mod tests {
         assert_eq!(
             texts,
             [
-                "Angebot schreiben #Kunde",
-                "Unteraufgabe",
-                "Groß erledigt",
-                "Nummeriert",
-                "Schluss"
+                "Write the offer #Client",
+                "Subtask",
+                "Uppercase done",
+                "Numbered",
+                "End"
             ]
         );
 
@@ -283,7 +283,7 @@ mod tests {
         assert!(!first.done);
         assert_eq!(first.due.as_deref(), Some("2026-12-01"));
         assert_eq!(first.priority, Some(Priority::High));
-        assert_eq!(first.tags, ["kunde"]);
+        assert_eq!(first.tags, ["client"]);
 
         assert!(tasks[1].done);
         assert_eq!(tasks[1].indent, 2);
@@ -295,19 +295,19 @@ mod tests {
 
     #[test]
     fn toggles_exactly_one_line() {
-        let content = "# A\r\n- [ ] eins\r\n- [ ] zwei\r\n";
-        let done = set_done(content, 2, "zwei", true).unwrap();
-        assert_eq!(done, "# A\r\n- [ ] eins\r\n- [x] zwei\r\n");
-        let undone = set_done(&done, 2, "zwei", false).unwrap();
+        let content = "# A\r\n- [ ] one\r\n- [ ] two\r\n";
+        let done = set_done(content, 2, "two", true).unwrap();
+        assert_eq!(done, "# A\r\n- [ ] one\r\n- [x] two\r\n");
+        let undone = set_done(&done, 2, "two", false).unwrap();
         assert_eq!(undone, content);
     }
 
     #[test]
     fn refuses_stale_toggle() {
-        let content = "- [ ] eins\n- [ ] zwei\n";
-        assert!(set_done(content, 1, "eins", true).is_none());
-        assert!(set_done(content, 5, "eins", true).is_none());
-        assert!(set_done("# kein task", 0, "", true).is_none());
+        let content = "- [ ] one\n- [ ] two\n";
+        assert!(set_done(content, 1, "one", true).is_none());
+        assert!(set_done(content, 5, "one", true).is_none());
+        assert!(set_done("# no task", 0, "", true).is_none());
     }
 
     #[test]
@@ -317,6 +317,6 @@ mod tests {
             normalize_date("2026-12-01T10:00:00Z"),
             Some("2026-12-01".into())
         );
-        assert_eq!(normalize_date("morgen"), None);
+        assert_eq!(normalize_date("tomorrow"), None);
     }
 }

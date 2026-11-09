@@ -17,7 +17,7 @@ export const canvasPlugin: Plugin = {
   manifest: {
     id: "canvas",
     name: "Canvas",
-    description: "Dateityp .canvas im offenen JSON-Canvas-Format: Karten frei auf einer Fläche anordnen.",
+    description: "The .canvas file type in the open JSON Canvas format: arrange cards freely on a surface.",
     version: "1.0.0",
   },
   icon: LayoutDashboard,
