@@ -33,6 +33,38 @@ export interface TagCount {
   count: number;
 }
 
+export type Priority = "high" | "medium" | "low";
+
+/** A markdown checkbox somewhere in the vault (see `crates/dvoix-core/src/tasks.rs`). */
+export interface TaskItem {
+  path: string;
+  noteTitle: string;
+  /** 0-based line in the file. */
+  line: number;
+  done: boolean;
+  text: string;
+  due: string | null;
+  priority: Priority | null;
+  tags: string[];
+  indent: number;
+}
+
+export type ProjectStatus = "active" | "waiting" | "idea" | "done" | "cancelled";
+
+/** A note with `type: projekt` in its frontmatter (see `crates/dvoix-core/src/project.rs`). */
+export interface ProjectSummary {
+  path: string;
+  title: string;
+  status: ProjectStatus;
+  due: string | null;
+  start: string | null;
+  priority: Priority | null;
+  area: string | null;
+  openTasks: number;
+  doneTasks: number;
+  nextDue: string | null;
+}
+
 export interface VaultChange {
   kind: "created" | "modified" | "removed";
   path: string;
@@ -54,6 +86,10 @@ export const api = {
   notesWithTag: (tag: string) => invoke<NoteSummary[]>("notes_with_tag", { tag }),
   notesWhere: (key: string, value: string) => invoke<NoteSummary[]>("notes_where", { key, value }),
   backlinks: (path: string) => invoke<NoteSummary[]>("backlinks", { path }),
+  tasks: () => invoke<TaskItem[]>("tasks"),
+  projects: () => invoke<ProjectSummary[]>("projects"),
+  setTaskDone: (path: string, line: number, text: string, done: boolean) =>
+    invoke<VaultEntry>("set_task_done", { path, line, text, done }),
   rebuildIndex: () => invoke<number>("rebuild_index"),
 };
 

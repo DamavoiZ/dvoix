@@ -2,9 +2,10 @@
   import { onMount } from "svelte";
   import type { EditorView } from "@codemirror/view";
   import type { FileViewProps } from "../types";
-  import { createMarkdownEditor, setDoc } from "./editor";
+  import { createMarkdownEditor, revealLine, setDoc } from "./editor";
+  import { reveal } from "../../reveal.svelte";
 
-  let { content, onchange, onopen }: FileViewProps = $props();
+  let { path, content, onchange, onopen }: FileViewProps = $props();
 
   let host: HTMLDivElement;
   let view: EditorView | undefined;
@@ -17,6 +18,7 @@
       onlink: (target) => onopen(target),
     });
     view.focus();
+    showRequestedLine();
     return () => view?.destroy();
   });
 
@@ -24,6 +26,18 @@
   $effect(() => {
     if (view) setDoc(view, content);
   });
+
+  // Another panel (e.g. tasks) asked to show a line of this file.
+  $effect(() => {
+    void reveal.target;
+    showRequestedLine();
+  });
+
+  function showRequestedLine() {
+    if (!view) return;
+    const line = reveal.take(path);
+    if (line !== null) revealLine(view, line);
+  }
 </script>
 
 <div class="h-full overflow-hidden" bind:this={host}></div>

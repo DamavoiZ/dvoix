@@ -14,6 +14,8 @@ pub enum Error {
     OutsideVault(String),
     #[error("path already exists: {0}")]
     AlreadyExists(String),
+    #[error("Die Aufgabe hat sich in der Datei geändert, bitte neu laden: {0}")]
+    StaleTask(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

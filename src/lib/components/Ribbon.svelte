@@ -1,6 +1,6 @@
 <script lang="ts">
   // The thin icon bar on the far left, like Obsidian's ribbon.
-  import { ArrowLeftRight, FolderTree, Hash, Search } from "@lucide/svelte";
+  import { ArrowLeftRight, FolderKanban, FolderTree, Hash, ListChecks, Search } from "@lucide/svelte";
   import type { Component } from "svelte";
   import { ui, type PanelId } from "../ui.svelte";
   import { vault } from "../vault.svelte";
@@ -9,6 +9,8 @@
     { id: "files", label: "Dateien", icon: FolderTree },
     { id: "search", label: "Suche", icon: Search },
     { id: "tags", label: "Tags", icon: Hash },
+    { id: "tasks", label: "Aufgaben", icon: ListChecks },
+    { id: "projects", label: "Projekte", icon: FolderKanban },
   ];
 </script>
 

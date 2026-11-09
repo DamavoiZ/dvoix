@@ -175,7 +175,7 @@ fn local_link(dest: &str) -> Option<String> {
 }
 
 /// Finds `[[target|alias]]` wikilinks and `#tags` in a run of plain text.
-fn scan_inline(text: &str, tags: &mut Vec<String>, links: &mut Vec<String>) {
+pub(crate) fn scan_inline(text: &str, tags: &mut Vec<String>, links: &mut Vec<String>) {
     let mut rest = text;
     while let Some(start) = rest.find("[[") {
         let after = &rest[start + 2..];
