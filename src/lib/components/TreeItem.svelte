@@ -24,9 +24,9 @@
   let draft = $state("");
   let dropTarget = $state(false);
 
-  function click() {
+  function click(e: MouseEvent) {
     if (entry.isDir) ui.toggleFolder(entry.path);
-    else void vault.openFile(entry.path);
+    else void vault.openFile(entry.path, { newTab: e.ctrlKey || e.metaKey });
   }
 
   function startEdit(el: HTMLInputElement) {
@@ -97,7 +97,9 @@
       }}
     />
   {:else}
-    <button class="flex h-full min-w-0 flex-1 items-center gap-2 text-left" onclick={click}>
+    <button class="flex h-full min-w-0 flex-1 items-center gap-2 text-left" onclick={click} onauxclick={(e) => {
+      if (e.button === 1 && !entry.isDir) void vault.openFile(entry.path, { newTab: true });
+    }}>
       <span class="truncate" class:font-medium={entry.isDir}>{label}</span>
       {#if badge}
         <span class="shrink-0 rounded bg-zinc-800 px-1 py-px text-[9px] font-semibold tracking-wider text-zinc-400">{badge}</span>

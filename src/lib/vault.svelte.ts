@@ -5,11 +5,31 @@ import { creatableFileTypes, type FileType } from "./filetypes";
 import { ui } from "./ui.svelte";
 
 const SAVE_DELAY_MS = 400;
+const RECENT_MAX = 50;
+
+/** An editor tab. `path` is null for an empty tab ("Neuer Tab"). */
+export interface Tab {
+  id: number;
+  path: string | null;
+}
+
+export interface OpenOptions {
+  /** Open in a new tab instead of replacing the active tab's file. */
+  newTab?: boolean;
+}
+
+let nextTabId = 1;
+const newTabObj = (path: string | null): Tab => ({ id: nextTabId++, path });
 
 class VaultStore {
   info = $state<VaultInfo | null>(null);
   entries = $state<VaultEntry[]>([]);
+  /** Path of the file shown in the active tab (null for an empty tab). */
   openPath = $state<string | null>(null);
+  tabs = $state<Tab[]>([]);
+  activeTabId = $state(0);
+  /** Recently opened files, newest first. */
+  recent = $state<string[]>([]);
   content = $state("");
   dirty = $state(false);
   error = $state<string | null>(null);
@@ -24,9 +44,8 @@ class VaultStore {
     this.unlisten?.();
     this.unlisten = await onVaultChanged((change) => {
       this.scheduleRefresh();
-      if (change.path !== this.openPath) return;
-      if (change.kind === "removed") void this.reloadOrClose();
-      else if (!this.dirty) void this.reloadOpenFile();
+      if (change.kind === "removed") void this.closeIfGone(change.path);
+      else if (change.path === this.openPath && !this.dirty) void this.reloadOpenFile();
     });
     const last = await api.lastVault();
     if (last) await this.open(last).catch(() => undefined);
@@ -44,8 +63,10 @@ class VaultStore {
       ui.useVault(this.info.path);
       this.openPath = null;
       this.content = "";
+      this.dirty = false;
       this.error = null;
       await this.refresh();
+      await this.restoreTabs();
     } catch (e) {
       this.error = String(e);
       throw e;
@@ -58,6 +79,8 @@ class VaultStore {
     this.info = null;
     this.entries = [];
     this.openPath = null;
+    this.tabs = [];
+    this.recent = [];
   }
 
   async refresh() {
@@ -70,27 +93,180 @@ class VaultStore {
     this.refreshTimer = setTimeout(() => void this.refresh(), 150);
   }
 
-  async openFile(path: string) {
-    if (path === this.openPath) return;
+  // ---------------------------------------------------------------- tabs
+
+  get activeTab(): Tab | undefined {
+    return this.tabs.find((t) => t.id === this.activeTabId);
+  }
+
+  /**
+   * Opens a file. If it is already open in a tab, that tab is activated.
+   * Otherwise it replaces the active tab's file, or gets a new tab with `newTab`.
+   */
+  async openFile(path: string, opts: OpenOptions = {}) {
+    const existing = this.tabs.find((t) => t.path === path);
+    if (existing) return this.activateTab(existing.id);
+    const content = await this.read(path);
+    if (content === null) return;
+    const active = this.activeTab;
+    if (active && !opts.newTab) {
+      active.path = path;
+    } else {
+      const tab = newTabObj(path);
+      this.tabs.splice(active ? this.tabs.indexOf(active) + 1 : this.tabs.length, 0, tab);
+      this.activeTabId = tab.id;
+    }
+    this.show(path, content);
+  }
+
+  async activateTab(id: number) {
+    const tab = this.tabs.find((t) => t.id === id);
+    if (!tab || (id === this.activeTabId && tab.path === this.openPath)) return;
+    const content = tab.path ? await this.read(tab.path) : "";
+    if (content === null) tab.path = null; // file vanished: keep the tab, but empty
+    this.activeTabId = id;
+    this.show(tab.path, content ?? "");
+  }
+
+  /** Opens an empty tab next to the active one. */
+  async newTab() {
+    await this.flush();
+    const active = this.activeTab;
+    const tab = newTabObj(null);
+    this.tabs.splice(active ? this.tabs.indexOf(active) + 1 : this.tabs.length, 0, tab);
+    this.activeTabId = tab.id;
+    this.show(null, "");
+  }
+
+  async closeTab(id: number) {
+    const i = this.tabs.findIndex((t) => t.id === id);
+    if (i < 0) return;
+    if (id !== this.activeTabId) {
+      this.tabs.splice(i, 1);
+      this.saveTabs();
+      return;
+    }
+    await this.flush();
+    const next = this.tabs[i + 1] ?? this.tabs[i - 1];
+    this.tabs.splice(i, 1);
+    if (next) await this.activateTab(next.id);
+    else await this.newTab();
+  }
+
+  async closeOtherTabs(id: number) {
+    await this.activateTab(id);
+    this.tabs = this.tabs.filter((t) => t.id === id);
+    this.saveTabs();
+  }
+
+  /** Activates the tab `delta` steps to the right (negative: left), wrapping around. */
+  async cycleTab(delta: number) {
+    const n = this.tabs.length;
+    if (n < 2) return;
+    const i = this.tabs.findIndex((t) => t.id === this.activeTabId);
+    await this.activateTab(this.tabs[(((i + delta) % n) + n) % n].id);
+  }
+
+  /** Drag & drop in the tab bar: moves a tab to position `to`. */
+  moveTab(id: number, to: number) {
+    const from = this.tabs.findIndex((t) => t.id === id);
+    if (from < 0) return;
+    const [tab] = this.tabs.splice(from, 1);
+    this.tabs.splice(Math.max(0, Math.min(to, this.tabs.length)), 0, tab);
+    this.saveTabs();
+  }
+
+  /** Flushes the current file and reads `path`; null (and an error message) if that fails. */
+  private async read(path: string): Promise<string | null> {
     await this.flush();
     try {
-      this.content = await api.readFile(path);
-      this.openPath = path;
-      this.dirty = false;
-      this.error = null;
-      ui.reveal(path);
+      return await api.readFile(path);
     } catch (e) {
       this.error = String(e);
+      return null;
     }
   }
 
+  /** Makes `path` the file of the active tab. */
+  private show(path: string | null, content: string) {
+    clearTimeout(this.saveTimer);
+    this.openPath = path;
+    this.content = content;
+    this.dirty = false;
+    if (path) {
+      this.error = null;
+      this.recent = [path, ...this.recent.filter((p) => p !== path)].slice(0, RECENT_MAX);
+      ui.reveal(path);
+    }
+    this.saveTabs();
+  }
+
+  private saveTabs() {
+    ui.saveTabs({
+      paths: this.tabs.map((t) => t.path ?? ""),
+      active: Math.max(0, this.tabs.findIndex((t) => t.id === this.activeTabId)),
+      recent: this.recent,
+    });
+  }
+
+  /** Reopens the tabs the vault had when the app was last closed. */
+  private async restoreTabs() {
+    const saved = ui.savedTabs();
+    const files = new Set(this.entries.filter((e) => !e.isDir).map((e) => e.path));
+    const keep = (p: string) => !p || files.has(p);
+    const paths = saved?.paths ?? [];
+    this.recent = (saved?.recent ?? []).filter((p) => files.has(p));
+    this.tabs = paths.filter(keep).map((p) => newTabObj(p || null));
+    if (!this.tabs.length) this.tabs = [newTabObj(null)];
+    // The previously active tab, or the closest one left of it if its file is gone.
+    const before = paths.slice(0, (saved?.active ?? 0) + 1).filter(keep).length;
+    const tab = this.tabs[Math.max(0, before - 1)];
+    this.activeTabId = 0;
+    await this.activateTab(tab.id);
+  }
+
+  /** Closes the tabs whose file matches `gone` (deleted, or inside a deleted folder). */
+  private async closeTabs(gone: (path: string) => boolean) {
+    const active = this.activeTab;
+    const activeGone = !!active?.path && gone(active.path);
+    if (activeGone) {
+      clearTimeout(this.saveTimer);
+      this.dirty = false;
+      this.openPath = null;
+    }
+    const i = active ? this.tabs.indexOf(active) : -1;
+    const left = this.tabs.slice(0, i).reverse();
+    const right = this.tabs.slice(i + 1);
+    const next = [...right, ...left].find((t) => !t.path || !gone(t.path));
+    this.tabs = this.tabs.filter((t) => !t.path || !gone(t.path));
+    this.recent = this.recent.filter((p) => !gone(p));
+    if (!activeGone) return this.saveTabs();
+    if (next) await this.activateTab(next.id);
+    else {
+      this.tabs = [];
+      await this.newTab();
+    }
+  }
+
+  /** A file was removed on disk: close its tabs if it is really gone (not just rewritten). */
+  private async closeIfGone(path: string) {
+    if (!this.tabs.some((t) => t.path === path)) return;
+    const exists = await api.readFile(path).then(
+      () => true,
+      () => false,
+    );
+    if (!exists) await this.closeTabs((p) => p === path);
+  }
+
+  // ---------------------------------------------------------------- files
+
   /** Opens a link target: a vault path (`folder/note.md`) or a wikilink name (`note`). */
-  async openLink(target: string) {
+  async openLink(target: string, opts: OpenOptions = {}) {
     const path = this.resolveLink(target);
-    if (path) return this.openFile(path);
+    if (path) return this.openFile(path, opts);
     // Like Obsidian: following a link to a missing note creates it.
     const name = target.endsWith(".md") ? target : `${target}.md`;
-    await this.createFileAt(name, `# ${target.split("/").pop()}\n\n`);
+    await this.createFileAt(name, `# ${target.split("/").pop()}\n\n`, opts);
   }
 
   resolveLink(target: string): string | undefined {
@@ -133,16 +309,6 @@ class VaultStore {
     if (fresh !== null && fresh !== this.content && !this.dirty) this.content = fresh;
   }
 
-  private async reloadOrClose() {
-    if (!this.openPath) return;
-    const fresh = await api.readFile(this.openPath).catch(() => null);
-    if (fresh === null) {
-      this.openPath = null;
-      this.content = "";
-      this.dirty = false;
-    }
-  }
-
   creatable(): FileType[] {
     return creatableFileTypes();
   }
@@ -153,15 +319,16 @@ class VaultStore {
     const taken = new Set(this.entries.map((e) => e.path.toLowerCase()));
     let name = "Unbenannt";
     for (let n = 2; taken.has(`${prefix}${name}.${ext}`.toLowerCase()); n++) name = `Unbenannt ${n}`;
-    await this.createFileAt(`${prefix}${name}.${ext}`, type.template?.(name) ?? "");
+    // New files get their own tab, unless the active tab is empty anyway.
+    await this.createFileAt(`${prefix}${name}.${ext}`, type.template?.(name) ?? "", { newTab: !!this.openPath });
   }
 
-  private async createFileAt(path: string, content: string) {
+  private async createFileAt(path: string, content: string, opts: OpenOptions = {}) {
     try {
       await this.flush();
       await api.createFile(path, content);
       await this.refresh();
-      await this.openFile(path);
+      await this.openFile(path, opts);
     } catch (e) {
       this.error = String(e);
     }
@@ -201,8 +368,11 @@ class VaultStore {
       await this.flush();
       await api.renameEntry(from, to);
       ui.moved(from, to);
-      if (this.openPath === from) this.openPath = to;
-      else if (this.openPath?.startsWith(`${from}/`)) this.openPath = to + this.openPath.slice(from.length);
+      const remap = (p: string) => (p === from ? to : p.startsWith(`${from}/`) ? to + p.slice(from.length) : p);
+      if (this.openPath) this.openPath = remap(this.openPath);
+      for (const t of this.tabs) if (t.path) t.path = remap(t.path);
+      this.recent = this.recent.map(remap);
+      this.saveTabs();
       if (to.includes("/")) ui.reveal(to);
       await this.refresh();
     } catch (e) {
@@ -212,12 +382,14 @@ class VaultStore {
 
   async trash(path: string) {
     try {
-      if (this.openPath === path || this.openPath?.startsWith(`${path}/`)) {
+      const p = this.openPath;
+      if (p === path || p?.startsWith(`${path}/`)) {
+        // Don't let a pending save recreate the file after it was trashed.
         clearTimeout(this.saveTimer);
-        this.openPath = null;
         this.dirty = false;
       }
       await api.trashEntry(path);
+      await this.closeTabs((p) => p === path || p.startsWith(`${path}/`));
       await this.refresh();
     } catch (e) {
       this.error = String(e);
