@@ -10,7 +10,7 @@
   import Setting from "./Setting.svelte";
   import Toggle from "./Toggle.svelte";
   import { hotkeyLabel, plugins } from "../../plugins";
-  import { APPEARANCE_DEFAULTS, settings } from "../../settings.svelte";
+  import { APPEARANCE_DEFAULTS, settings, type ViewMode } from "../../settings.svelte";
   import { ui } from "../../ui.svelte";
   import { vault } from "../../vault.svelte";
 
@@ -61,6 +61,8 @@
     `block w-full truncate rounded-md px-3 py-1.5 text-left text-sm ${active ? "bg-zinc-800 text-zinc-100" : "text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200"}`;
   const input =
     "w-20 rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-right text-sm text-zinc-200 outline-none focus:border-violet-500";
+  const select =
+    "rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-sm text-zinc-200 outline-none focus:border-violet-500";
 </script>
 
 <svelte:window onkeydown={ui.modal === SETTINGS ? keydown : undefined} />
@@ -113,6 +115,17 @@
           </Setting>
           <Setting name="Rechtschreibprüfung" description="Markiert Tippfehler mit der Rechtschreibprüfung des Systems.">
             <Toggle label="Rechtschreibprüfung" checked={settings.app.spellcheck} onchange={(v) => setApp("spellcheck", v)} />
+          </Setting>
+          <Setting name="Standardansicht" description="Wie eine Notiz geöffnet wird: gelesen, in der Live-Vorschau bearbeitet oder als Quelltext.">
+            <select
+              class={select}
+              value={settings.app.viewMode}
+              onchange={(e) => setApp("viewMode", e.currentTarget.value as ViewMode)}
+            >
+              <option value="read">Lesen</option>
+              <option value="edit">Bearbeiten (Live-Vorschau)</option>
+              <option value="source">Quelltext</option>
+            </select>
           </Setting>
         {:else if page === "appearance"}
           <Setting name="Schriftgröße im Editor" description="In Pixeln, Standard {APPEARANCE_DEFAULTS.fontSize}.">
