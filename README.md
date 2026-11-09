@@ -15,18 +15,16 @@ Eine Desktop-App für Notizen, Projektmanagement, Tracking und alles, was späte
 - Schnellöffner (Strg/Cmd + O) mit unscharfer Suche über alle Dateien: `mtg plan` findet `Projekte/Meeting-Planung`. Enter öffnet, Strg + Enter in neuem Tab, gibt es die Notiz nicht, wird sie angelegt
 - Tastenkürzel: Strg + T neuer Tab, Strg + W Tab schließen, Strg + Tab / Strg + Umschalt + Tab (oder Strg + Bild ab/auf) Tab wechseln, Strg + Enter Änderungen committen, Strg + Umschalt + H Verlauf öffnen
 - Markdown-Editor (CodeMirror 6) mit YAML-Frontmatter, `[[Wikilinks]]` (Strg/Cmd + Klick öffnet oder legt die Notiz an) und `#tags`
-- Drei Ansichten wie in Obsidian: **Lesen** (die Notiz als gerenderte Seite mit den Eigenschaften aus dem Frontmatter), **Bearbeiten** (Live-Vorschau: die Markdown-Syntax ist nur auf der Zeile mit dem Cursor sichtbar, `## ` macht sofort eine Überschrift) und **Quelltext** (das rohe Markdown). Umschalten über die Knöpfe oben rechts in der Notiz, mit Strg + E zwischen Lesen und Bearbeiten und Strg + Umschalt + E zwischen Quelltext und Bearbeiten. In welcher Ansicht eine Notiz geöffnet wird, steht in den Einstellungen.
 - Automatisches Speichern, atomar geschrieben (erst Temp-Datei, dann umbenennen)
 - Änderungen von außen (VS Code, Sync-Tools, git) erscheinen sofort in der App
 - Volltextsuche, Tag-Übersicht und Backlinks („Verlinkt von“)
 - Aufgaben: ganz normale Markdown-Checkboxen in jeder Notiz, optional mit Fälligkeit und Priorität. Im Editor sind sie anklickbar, die Aufgabenübersicht in der Seitenleiste sammelt alle Aufgaben des Vaults (nach Fälligkeit oder nach Notiz gruppiert)
 - Projekte: Notizen mit `type: projekt` im Frontmatter, mit Status, Fälligkeit und Fortschritt aus ihren Checkboxen in einer eigenen Projektliste
 - Graph-Ansicht (Strg/Cmd + G oder das Netz-Symbol in der Icon-Leiste) in einem eigenen Tab: Notizen als Punkte, verbunden über Links, über ihre Ordner (Ordner als eigene Knoten) und/oder über gemeinsame Tags (Tags als Knoten oder direkte Linien). Einstellbar sind Filter (`projekte #idee -archiv`), einzelne Notizen, Anhänge und noch fehlende Notizen ein/aus, Farben nach Ordner oder Tag, Größe nach Anzahl der Verbindungen, Pfeile, Linienstärke, ab welcher Zoomstufe Titel erscheinen und die Kräfte des Layouts. Klick öffnet die Notiz in einem neuen Tab, Hover hebt die Nachbarn hervor
-- Alles ist ein Plugin, wie bei Obsidian: Datei-Explorer, Suche, Tags, Backlinks, Aufgaben, Projekte, Canvas, Graph, Schnellöffner, Tabs und Ansichten lassen sich in den Einstellungen (Zahnrad unten in der Icon-Leiste oder Strg/Cmd + ,) einzeln ausschalten
-- Git: der Vault wird über das `git`-Programm des Systems versioniert. Ein Panel in der Seitenleiste zeigt, was sich geändert hat (gestaged, geändert, unversioniert), man kann einzelne Dateien stagen, Änderungen verwerfen, committen (Strg/Cmd + Enter), Branches wechseln und anlegen, pushen und ziehen. Ein eigener Tab zeigt den Verlauf mit den Dateien je Commit und dem Diff dazu
-- Alles ist ein Plugin, wie bei Obsidian: Datei-Explorer, Suche, Tags, Backlinks, Aufgaben, Projekte, Canvas, Graph, Git, Schnellöffner, Tabs und Ansichten lassen sich in den Einstellungen (Zahnrad unten in der Icon-Leiste oder Strg/Cmd + ,) einzeln ausschalten
+- Alles ist ein Plugin, wie bei Obsidian: Datei-Explorer, Suche, Tags, Backlinks, Aufgaben, Projekte, Canvas, Graph, Schnellöffner und Tabs lassen sich in den Einstellungen (Zahnrad unten in der Icon-Leiste oder Strg/Cmd + ,) einzeln ausschalten
 - Einstellungen: Editor (Zeilenlänge, Zeilennummern, Rechtschreibprüfung), Darstellung (Schriftgrößen) und eigene Optionen je Plugin
 - Alle Einstellungen eines Vaults liegen im Vault selbst unter `.dvoix/` (siehe unten), wandern also mit, wenn du den Ordner kopierst oder synchronisierst
+- Git: der Vault wird über das `git`-Programm des Systems versioniert. Ein Panel in der Seitenleiste zeigt, was sich geändert hat (gestaged, geändert, unversioniert), man kann einzelne Dateien stagen, Änderungen verwerfen, committen (Strg/Cmd + Enter), Branches wechseln und anlegen, pushen und ziehen. Ein eigener Tab zeigt den Verlauf mit den Dateien je Commit und dem Diff dazu
 - Erster eigener Dateityp: `.canvas` im offenen [JSON-Canvas-Format](https://jsoncanvas.org) (Karten verschieben, Doppelklick legt eine Karte an)
 
 ## Tech-Stack
@@ -43,7 +41,7 @@ Eine Desktop-App für Notizen, Projektmanagement, Tracking und alles, was späte
 ```
 crates/dvoix-core/      Rust-Kern ohne Tauri, eigenständig testbar
   src/vault.rs          Lesen/Schreiben im Vault, Pfade immer relativ und abgesichert
-  src/markdown.rs       Frontmatter, Titel, Tags, Links, Überschriften, Suchtext, HTML für die Leseansicht
+  src/markdown.rs       Frontmatter, Titel, Tags, Links, Überschriften, Suchtext
   src/tasks.rs          Checkbox-Aufgaben lesen und abhaken
   src/project.rs        Frontmatter-Schema für Projekte
   src/git.rs            Git-Befehle für den Vault (über das git-Programm des Systems)
@@ -70,7 +68,7 @@ Wie `.obsidian/` bei Obsidian. Alles, was zum Vault gehört, liegt hier; nur „
 
 ```
 .dvoix/
-  app.json                  Editor-Einstellungen (Zeilenlänge, Standardansicht)
+  app.json                  Editor-Einstellungen
   appearance.json           Schriftgrößen
   core-plugins.json         welche Plugins an sind: { "tasks": true, "canvas": false, ... }
   workspace.json            offene Tabs, aktives Panel, Breite, aufgeklappte Ordner
@@ -159,7 +157,7 @@ Englische Werte (`active`, `waiting`, `done`, ...) gehen auch. Abhaken in der Au
 
 ## Git
 
-Das Git-Plugin versioniert den Vault über das `git`-Programm, das auf dem Rechner installiert sein muss (z. B. mit Git für Windows, macOS oder Linux). Im Kern steckt dabei kein zusätzlicher Rust-Baustein: `crates/dvoix-core/src/git.rs` ruft `git` auf und übersetzt die Ausgabe.
+Das Git-Plugin versioniert den Vault über das `git`-Programm, das auf dem Rechner installiert sein muss (z. B. mit Git für Windows, macOS oder Linux). Im Kern steckt dabei kein zusätzlicher Rust-Baustein: `crates/dvoix-core/src/git.rs` ruft `git` auf und übersetzt die Ausgabe. Es ist ein Core-Plugin wie die anderen und lässt sich in den Einstellungen abschalten.
 
 Im Panel in der Seitenleiste steht, was sich geändert hat:
 
@@ -197,6 +195,7 @@ cargo test --workspace # Rust-Kern
 ## Nächste Schritte (Ideen)
 
 - Geteilte Ansichten (zwei Tabs nebeneinander)
+- Live-Vorschau für Markdown (Formatierung im Editor ausblenden)
 - Kanban-Board (`.board`) und Tracking (`.track`) als eigene Dateitypen
 - `tantivy` statt FTS5, falls die Suche mehr können muss
 

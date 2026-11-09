@@ -72,19 +72,6 @@ export interface ProjectSummary {
   nextDue: string | null;
 }
 
-export interface VaultChange {
-  kind: "created" | "modified" | "removed";
-  path: string;
-}
-
-/** A note rendered for the reading view (see `dvoix_core::markdown::render`). */
-export interface RenderedNote {
-  /** The body as HTML, without the frontmatter. */
-  html: string;
-  /** Frontmatter as JSON, shown as properties. */
-  frontmatter: Record<string, unknown>;
-}
-
 /** One file with changes (see `git::ChangedFile` in `crates/dvoix-core/src/git.rs`). */
 export interface GitChangedFile {
   /** Path relative to the vault root. */
@@ -129,6 +116,11 @@ export interface GitBranch {
   current: boolean;
 }
 
+export interface VaultChange {
+  kind: "created" | "modified" | "removed";
+  path: string;
+}
+
 export const api = {
   lastVault: () => invoke<string | null>("last_vault"),
   openVault: (path: string) => invoke<VaultInfo>("open_vault", { path }),
@@ -136,7 +128,6 @@ export const api = {
   listEntries: () => invoke<VaultEntry[]>("list_entries"),
   readFile: (path: string) => invoke<string>("read_file", { path }),
   writeFile: (path: string, content: string) => invoke<VaultEntry>("write_file", { path, content }),
-  renderMarkdown: (content: string) => invoke<RenderedNote>("render_markdown", { content }),
   createFile: (path: string, content: string) => invoke<VaultEntry>("create_file", { path, content }),
   createFolder: (path: string) => invoke<VaultEntry>("create_folder", { path }),
   renameEntry: (from: string, to: string) => invoke<VaultEntry>("rename_entry", { from, to }),

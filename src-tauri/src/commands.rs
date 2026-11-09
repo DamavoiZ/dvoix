@@ -6,15 +6,14 @@
 //! window (on Windows it stays white until the work is done).
 
 use dvoix_core::{
-    GraphData, NoteSummary, ProjectSummary, RenderedNote, SearchHit, TaskItem, VaultEntry, git,
-    git::{Branch, Commit, GitStatus},
-    index::TagCount,
-    markdown, tasks,
+    GraphData, NoteSummary, ProjectSummary, SearchHit, TaskItem, VaultEntry, index::TagCount, tasks,
 };
 use serde::Serialize;
 use tauri::{AppHandle, State};
 
 use crate::{AppState, Workspace, settings};
+
+use dvoix_core::git::{self, Branch, Commit, GitStatus};
 
 type CmdResult<T> = Result<T, String>;
 
@@ -101,13 +100,6 @@ pub fn create_file(state: State<AppState>, path: String, content: String) -> Cmd
         reindex(ws, &path)?;
         Ok(entry)
     })
-}
-
-/// Renders a note as HTML for the reading view. It only depends on the text of
-/// the note, so it needs no vault.
-#[tauri::command(async)]
-pub fn render_markdown(content: String) -> RenderedNote {
-    markdown::render(&content)
 }
 
 #[tauri::command(async)]
@@ -242,17 +234,6 @@ pub fn write_config(state: State<AppState>, path: String, content: String) -> Cm
     })
 }
 
-#[tauri::command(async)]
-pub fn rebuild_index(state: State<AppState>) -> CmdResult<usize> {
-    with_ws(&state, |ws| {
-        ws.index
-            .lock()
-            .map_err(err)?
-            .rebuild(&ws.vault)
-            .map_err(err)
-    })
-}
-
 // ---------------------------------------------------------------------- git
 
 /// The state of the repository the vault is in: what is staged, what is
@@ -356,5 +337,16 @@ pub fn git_diff(
 ) -> CmdResult<String> {
     with_ws(&state, |ws| {
         git::diff(&ws.vault, &path, staged, commit.as_deref()).map_err(err)
+    })
+}
+
+#[tauri::command(async)]
+pub fn rebuild_index(state: State<AppState>) -> CmdResult<usize> {
+    with_ws(&state, |ws| {
+        ws.index
+            .lock()
+            .map_err(err)?
+            .rebuild(&ws.vault)
+            .map_err(err)
     })
 }
