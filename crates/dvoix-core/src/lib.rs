@@ -9,12 +9,16 @@
 pub mod error;
 pub mod index;
 pub mod markdown;
+pub mod project;
+pub mod tasks;
 pub mod vault;
 pub mod watcher;
 
 pub use error::{Error, Result};
-pub use index::{Index, NoteSummary, SearchHit, TagCount};
+pub use index::{Index, NoteSummary, ProjectSummary, SearchHit, TagCount, TaskItem};
 pub use markdown::ParsedNote;
+pub use project::{ProjectMeta, ProjectStatus};
+pub use tasks::{Priority, Task};
 pub use vault::{Vault, VaultEntry};
 pub use watcher::{ChangeKind, VaultChange, VaultWatcher};
 

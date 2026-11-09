@@ -2,7 +2,7 @@
 // Kept in localStorage: it is about this computer's window, not about the vault's content.
 import { SvelteSet } from "svelte/reactivity";
 
-export type PanelId = "files" | "search" | "tags";
+export type PanelId = "files" | "search" | "tags" | "tasks" | "projects";
 
 const KEY = "dvoix.layout";
 
