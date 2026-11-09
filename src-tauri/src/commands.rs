@@ -12,7 +12,9 @@ use dvoix_core::{
 use serde::Serialize;
 use tauri::{AppHandle, State};
 
-use crate::{AppState, Workspace, settings};
+use crate::{AppState, Workspace, http, settings};
+
+use dvoix_core::store::{self, InstalledPlugin, PluginFiles, PluginManifest, RegistryEntry};
 
 use dvoix_core::git::{self, Branch, Commit, GitStatus};
 
@@ -367,4 +369,69 @@ pub fn rebuild_index(state: State<AppState>) -> CmdResult<usize> {
             .rebuild(&ws.vault)
             .map_err(err)
     })
+}
+
+// -------------------------------------------------------------- plugin store
+// Downloads run before `with_ws`, so the vault is not locked while waiting
+// for the network.
+
+/// The plugin list from the registry repository.
+#[tauri::command(async)]
+pub fn store_registry() -> CmdResult<Vec<RegistryEntry>> {
+    let text =
+        http::get_text(store::REGISTRY_URL)?.ok_or("Die Plugin-Liste wurde nicht gefunden")?;
+    store::parse_registry(&text).map_err(err)
+}
+
+/// The manifest of the newest release of a plugin, to show its version,
+/// permissions and whether an update is there.
+#[tauri::command(async)]
+pub fn store_latest_manifest(repo: String) -> CmdResult<PluginManifest> {
+    fetch_manifest(&repo).map(|(m, _)| m)
+}
+
+fn fetch_manifest(repo: &str) -> CmdResult<(PluginManifest, String)> {
+    let url = store::latest_manifest_url(repo).map_err(err)?;
+    let text = http::get_text(&url)?
+        .ok_or_else(|| format!("{repo} hat kein Release mit manifest.json"))?;
+    let manifest = store::parse_manifest(&text).map_err(err)?;
+    Ok((manifest, text))
+}
+
+/// Installs or updates a plugin from the newest release of `repo`. The files
+/// come from the release tagged with the manifest's version, so all three
+/// belong to the same release.
+#[tauri::command(async)]
+pub fn store_install(
+    state: State<AppState>,
+    repo: String,
+    id: String,
+) -> CmdResult<PluginManifest> {
+    let (manifest, manifest_text) = fetch_manifest(&repo)?;
+    let get = |file: &str| -> CmdResult<Option<String>> {
+        http::get_text(&store::release_url(&repo, &manifest.version, file).map_err(err)?)
+    };
+    let main = get(store::MAIN_FILE)?
+        .ok_or_else(|| format!("Im Release {} von {repo} fehlt main.js", manifest.version))?;
+    let styles = get(store::STYLES_FILE)?;
+    let files = PluginFiles {
+        manifest: manifest_text,
+        main,
+        styles,
+    };
+    with_ws(&state, |ws| {
+        store::install(&ws.vault, &id, &files).map_err(err)
+    })
+}
+
+/// Removes a plugin's code; its settings (`data.json`) stay.
+#[tauri::command(async)]
+pub fn store_uninstall(state: State<AppState>, id: String) -> CmdResult<()> {
+    with_ws(&state, |ws| store::uninstall(&ws.vault, &id).map_err(err))
+}
+
+/// Store plugins in `.dvoix/plugins/`.
+#[tauri::command(async)]
+pub fn store_installed(state: State<AppState>) -> CmdResult<Vec<InstalledPlugin>> {
+    with_ws(&state, |ws| store::installed(&ws.vault).map_err(err))
 }

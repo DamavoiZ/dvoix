@@ -2,6 +2,7 @@
 //! to the index and the UI, and exposes everything as commands to the frontend.
 
 mod commands;
+mod http;
 mod settings;
 
 use std::sync::{Arc, Mutex};
@@ -105,6 +106,11 @@ pub fn run() {
             commands::git_pull,
             commands::git_init,
             commands::git_diff,
+            commands::store_registry,
+            commands::store_latest_manifest,
+            commands::store_install,
+            commands::store_uninstall,
+            commands::store_installed,
         ])
         .run(tauri::generate_context!())
         .expect("error while running dvoix");

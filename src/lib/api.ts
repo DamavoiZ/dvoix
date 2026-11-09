@@ -144,6 +144,37 @@ export interface RenderedNote {
   frontmatter: Record<string, unknown>;
 }
 
+/** What a store plugin may use of the API (see `dvoix_core::store::PERMISSIONS`). */
+export type PluginPermission = "vault:read" | "vault:write" | "editor";
+
+/** The `manifest.json` of a store plugin (see `dvoix_core::store::PluginManifest`). */
+export interface StoreManifest {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  author?: string;
+  minAppVersion?: string;
+  permissions: PluginPermission[];
+}
+
+/** One plugin in the plugin list (see `dvoix_core::store::RegistryEntry`). */
+export interface RegistryEntry {
+  id: string;
+  name: string;
+  author: string;
+  description: string;
+  /** GitHub repository `owner/name`. */
+  repo: string;
+  channel: "official" | "community";
+}
+
+/** A plugin in `.dvoix/plugins/<id>/` (see `dvoix_core::store::InstalledPlugin`). */
+export interface InstalledPlugin {
+  manifest: StoreManifest;
+  hasStyles: boolean;
+}
+
 export const api = {
   lastVault: () => invoke<string | null>("last_vault"),
   openVault: (path: string) => invoke<VaultInfo>("open_vault", { path }),
@@ -187,6 +218,12 @@ export const api = {
   gitInit: () => invoke<void>("git_init"),
   gitDiff: (path: string, staged: boolean, commit: string | null) =>
     invoke<GitFileDiff>("git_diff", { path, staged, commit }),
+
+  storeRegistry: () => invoke<RegistryEntry[]>("store_registry"),
+  storeLatestManifest: (repo: string) => invoke<StoreManifest>("store_latest_manifest", { repo }),
+  storeInstall: (repo: string, id: string) => invoke<StoreManifest>("store_install", { repo, id }),
+  storeUninstall: (id: string) => invoke<void>("store_uninstall", { id }),
+  storeInstalled: () => invoke<InstalledPlugin[]>("store_installed"),
 };
 
 export function onVaultChanged(handler: (change: VaultChange) => void): Promise<UnlistenFn> {

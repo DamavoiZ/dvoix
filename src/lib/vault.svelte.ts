@@ -4,6 +4,7 @@ import { api, onVaultChanged, type VaultEntry, type VaultInfo } from "./api";
 import { creatableFileTypes, type FileType } from "./filetypes";
 import { flushConfig } from "./config";
 import { plugins } from "./plugins/manager.svelte";
+import { pluginStore } from "./plugins/store/store.svelte";
 import { settings } from "./settings.svelte";
 import { ui } from "./ui.svelte";
 
@@ -92,6 +93,7 @@ class VaultStore {
       this.dirty = false;
       this.error = null;
       await plugins.loadVault();
+      await pluginStore.loadVault();
       this.info = info;
       await this.refresh();
       await this.restoreTabs();
@@ -115,6 +117,7 @@ class VaultStore {
     this.tearingDown = true;
     try {
       await plugins.unloadVault();
+      pluginStore.reset();
     } finally {
       this.tearingDown = false;
     }

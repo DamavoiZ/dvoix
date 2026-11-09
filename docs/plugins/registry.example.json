@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "plugins": [
+    {
+      "id": "hello",
+      "name": "Hallo Welt",
+      "author": "damavoi",
+      "description": "Beispiel-Plugin: zeigt ein Panel und einen Befehl und zählt die Notizen im Vault.",
+      "repo": "DamavoiZ/dvoix-plugin-hello",
+      "channel": "official"
+    },
+    {
+      "id": "word-count",
+      "name": "Wortzähler",
+      "author": "jemand",
+      "description": "Zeigt unter jeder Notiz, wie viele Wörter sie hat.",
+      "repo": "jemand/dvoix-word-count",
+      "channel": "community"
+    }
+  ]
+}

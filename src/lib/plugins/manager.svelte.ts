@@ -37,8 +37,14 @@ type WithOrder = { order?: number };
 const byOrder = <T extends WithOrder>(list: T[]) => [...list].sort((a, b) => (a.order ?? 100) - (b.order ?? 100));
 
 class PluginManager {
-  /** All known plugins, in load order. */
+  /** All core plugins, in load order. */
   readonly all: Plugin[] = [];
+  /**
+   * Plugins installed from the store that are loaded (or failed to load) in
+   * this vault. Their on/off state lives in the store (`store/store.svelte.ts`),
+   * not in `core-plugins.json`.
+   */
+  extra = $state.raw<Plugin[]>([]);
   /** Turned on in this vault (saved in `.dvoix/core-plugins.json`). */
   enabled = $state<Record<string, boolean>>({});
   // Registries are `$state.raw`: entries hold components and are compared by identity on removal.
@@ -83,11 +89,12 @@ class PluginManager {
   }
 
   get(id: string): Plugin | undefined {
-    return this.all.find((p) => p.manifest.id === id);
+    return this.all.find((p) => p.manifest.id === id) ?? this.extra.find((p) => p.manifest.id === id);
   }
 
+  /** Whether a core plugin is on (store plugins: see `pluginStore.isEnabled`). */
   isEnabled(id: string): boolean {
-    const p = this.get(id);
+    const p = this.all.find((p) => p.manifest.id === id);
     if (!p) return false;
     return this.enabled[id] ?? p.manifest.enabledByDefault ?? true;
   }
@@ -128,13 +135,36 @@ class PluginManager {
   async unloadVault() {
     await this.serial(async () => {
       for (const id of [...this.loaded].reverse()) await this.unload(id);
+      this.extra = [];
+      this.errors = {};
+    });
+  }
+
+  /** Loads a plugin from the store. Its id must not be taken by another plugin. */
+  async loadExtra(plugin: Plugin) {
+    await this.serial(async () => {
+      const id = plugin.manifest.id;
+      if (this.get(id)) throw new Error(`Ein Plugin mit der ID „${id}“ gibt es schon`);
+      this.extra = [...this.extra, plugin];
+      await this.load(plugin);
+    });
+  }
+
+  /** Unloads a store plugin and forgets it (turned off or uninstalled). */
+  async unloadExtra(id: string) {
+    await this.serial(async () => {
+      if (!this.extra.some((p) => p.manifest.id === id)) return;
+      if (this.isLoaded(id)) await this.unload(id);
+      this.extra = this.extra.filter((p) => p.manifest.id !== id);
+      const { [id]: _, ...rest } = this.errors;
+      this.errors = rest;
     });
   }
 
   /** Settings toggle: turns a plugin on or off and remembers it for this vault. */
   async setEnabled(id: string, on: boolean) {
     await this.serial(async () => {
-      const p = this.get(id);
+      const p = this.all.find((p) => p.manifest.id === id);
       if (!p) return;
       this.enabled = { ...this.enabled, [id]: on };
       this.saveEnabled();

@@ -23,6 +23,7 @@ Eine Desktop-App für Notizen, Projektmanagement, Tracking und alles, was späte
 - Projekte: Notizen mit `type: projekt` im Frontmatter, mit Status, Fälligkeit und Fortschritt aus ihren Checkboxen in einer eigenen Projektliste
 - Graph-Ansicht (Strg/Cmd + G oder das Netz-Symbol in der Icon-Leiste) in einem eigenen Tab: Notizen als Punkte, verbunden über Links, über ihre Ordner (Ordner als eigene Knoten) und/oder über gemeinsame Tags (Tags als Knoten oder direkte Linien). Einstellbar sind Filter (`projekte #idee -archiv`), einzelne Notizen, Anhänge und noch fehlende Notizen ein/aus, Farben nach Ordner oder Tag, Größe nach Anzahl der Verbindungen, Pfeile, Linienstärke, ab welcher Zoomstufe Titel erscheinen und die Kräfte des Layouts. Klick öffnet die Notiz in einem neuen Tab, Hover hebt die Nachbarn hervor
 - Alles ist ein Plugin, wie bei Obsidian: Datei-Explorer, Suche, Tags, Backlinks, Aufgaben, Projekte, Canvas, Graph, Schnellöffner, Tabs, Ansichten und versteckte Dateien (Ordner wie `.obsidian`, anfangs aus) lassen sich in den Einstellungen (Zahnrad unten in der Icon-Leiste oder Strg/Cmd + ,) einzeln ausschalten
+- Plugin-Store in den Einstellungen: zusätzliche Plugins suchen, installieren, aktualisieren und wieder entfernen. Offizielle Plugins gehen sofort, Community-Plugins erst nach einem eigenen Schalter mit Warnung (siehe „Plugin-Store“ unten)
 - Einstellungen: Editor (Zeilenlänge, Zeilennummern, Rechtschreibprüfung), Darstellung (Schriftgrößen) und eigene Optionen je Plugin
 - Alle Einstellungen eines Vaults liegen im Vault selbst unter `.dvoix/` (siehe unten), wandern also mit, wenn du den Ordner kopierst oder synchronisierst
 - Git: der Vault wird über das `git`-Programm des Systems versioniert. Ein Panel in der Seitenleiste zeigt, was sich geändert hat (gestaged, geändert, unversioniert), man kann einzelne Dateien stagen, Änderungen verwerfen, committen (Strg/Cmd + Enter), Branches wechseln und anlegen, pushen und ziehen. Ein eigener Tab zeigt den Verlauf mit den Dateien je Commit und dem Diff dazu
@@ -32,7 +33,7 @@ Eine Desktop-App für Notizen, Projektmanagement, Tracking und alles, was späte
 
 | Schicht | Technik |
 | --- | --- |
-| App-Hülle | [Tauri 2](https://v2.tauri.app) |
+| App-Hülle | [Tauri 2](https://v2.tauri.app), `ureq` (Downloads für den Plugin-Store) |
 | Kern (Rust) | `notify` (Dateiwächter), `pulldown-cmark` + `serde_yaml_ng` (Markdown & Frontmatter), `rusqlite` mit FTS5 (Index & Suche), `git` (das Programm des Systems, für das Git-Plugin) |
 | Frontend | Svelte 5, TypeScript, Vite, Tailwind CSS 4, [force-graph](https://github.com/vasturiano/force-graph) (Graph-Ansicht auf Canvas) |
 | Editor | CodeMirror 6 |
@@ -46,10 +47,12 @@ crates/dvoix-core/      Rust-Kern ohne Tauri, eigenständig testbar
   src/tasks.rs          Checkbox-Aufgaben lesen und abhaken
   src/project.rs        Frontmatter-Schema für Projekte
   src/git.rs            Git-Befehle für den Vault (über das git-Programm des Systems)
+  src/store.rs          Plugin-Store: Plugin-Liste, manifest.json, Installieren in .dvoix/plugins/
   src/index.rs          SQLite-Index in <vault>/.dvoix/index.sqlite (nur Cache)
   src/watcher.rs        meldet Änderungen auf der Platte
 src-tauri/              Tauri-App: hält den offenen Vault, verbindet Watcher, Index und UI
   src/commands.rs       alle Befehle, die das Frontend aufrufen kann
+  src/http.rs           Downloads für den Plugin-Store (nur https, nur GitHub)
 src/                    Svelte-Frontend
   lib/api.ts            typisierte Aufrufe der Rust-Befehle
   lib/vault.svelte.ts   App-Zustand: offener Vault, offene Datei, Speichern
@@ -60,6 +63,8 @@ src/                    Svelte-Frontend
   lib/filetypes/        Dateityp-Registry und der eingebaute Markdown-Editor
   lib/plugins/          Plugin-API (types.ts) und Plugin-Verwaltung (manager.svelte.ts)
   lib/plugins/core/     die Core-Plugins, je eins pro Ordner
+  lib/plugins/store/    Plugin-Store: Plugins laden, installieren, ihre API (api.ts)
+docs/plugins/           Anleitung für Store-Plugins, Beispiel-Plugin, Beispiel der Plugin-Liste
   lib/components/       App-Rahmen: Ribbon, Seitenpanel, Dateiansicht, Einstellungen
 ```
 
@@ -74,6 +79,8 @@ Wie `.obsidian/` bei Obsidian. Alles, was zum Vault gehört, liegt hier; nur „
   core-plugins.json         welche Plugins an sind: { "tasks": true, "canvas": false, ... }
   workspace.json            offene Tabs, aktives Panel, Breite, aufgeklappte Ordner
   plugins/<id>/data.json    Einstellungen eines Plugins (z. B. plugins/tasks/data.json)
+  plugins/<id>/manifest.json, main.js, styles.css   ein Plugin aus dem Store
+  store.json                Store-Plugins: an/aus, woher sie kommen, Community-Plugins erlaubt ja/nein
   index.sqlite              Suchindex, nur Cache
 ```
 
@@ -103,7 +110,18 @@ Das Plugin „Versteckte Dateien“ ist anfangs aus. Eingeschaltet zeigt es Ordn
 
 Einstellungen (in `.dvoix/plugins/hidden-files/data.json`): anzeigen ja/nein (auch über den Befehl „Versteckte Dateien ein-/ausblenden“), ob auch einzelne Punkt-Dateien erscheinen, ob der eigene Ordner `.dvoix` erscheint (aus) und welche Namen trotzdem verborgen bleiben (Standard: `.git`). Pro Vault werden höchstens 10.000 versteckte Einträge aufgelistet. Änderungen in `.git` und `.dvoix` meldet der Dateiwächter nicht, damit ein Commit die App nicht mit Ereignissen flutet; ihr Inhalt im Explorer wird beim nächsten Umschalten oder beim nächsten Anlegen bzw. Löschen einer Datei neu geladen.
 
-Die API ist so gebaut, dass später auch Community-Plugins (z. B. aus `.dvoix/plugins/<id>/main.js`) darauf aufsetzen können; im Moment gibt es nur die Core-Plugins.
+### Plugin-Store
+
+Neben den eingebauten Core-Plugins gibt es Plugins, die man nur bei Bedarf installiert: **Einstellungen → Plugin-Store**. Unter „Entdecken“ steht die Plugin-Liste mit Suche, ein Klick zeigt Details, Version und Berechtigungen und installiert das Plugin. Unter „Installiert“ lassen sie sich ein- und ausschalten, aktualisieren („Nach Updates suchen“) und deinstallieren. Beim Deinstallieren bleiben die Einstellungen des Plugins (`data.json`) liegen.
+
+- **Offizielle Plugins** pflegt dvoix selbst. Sie lassen sich immer installieren.
+- **Community-Plugins** schreiben andere. Sie gehen erst, wenn „Community-Plugins erlauben“ an ist, und dafür kommt vorher eine Warnung. Schaltet man den Schalter wieder aus, werden sie sofort entladen.
+
+Die Plugin-Liste steht als `registry.json` im Repository [`DamavoiZ/dvoix-plugins`](https://github.com/DamavoiZ/dvoix-plugins), die Plugins selbst kommen aus den GitHub-Releases ihrer eigenen Repositories. Heruntergeladen wird nur über https von GitHub. „Offiziell“ zeigt die App nur für Repositories von `DamavoiZ` an, egal was in der Liste steht.
+
+Jedes Plugin gibt in seinem Manifest an, was es braucht (`vault:read`, `vault:write`, `editor`). Das steht im Store vor dem Installieren, und die API verweigert alles, was nicht angegeben ist. Eine Sandbox ist das nicht: Wie bei Obsidian laufen Plugins in der App und könnten die API umgehen. Deshalb die Trennung in offiziell und Community.
+
+Wie man ein Plugin für den Store schreibt, steht in [`docs/plugins/README.md`](docs/plugins/README.md), mit Beispiel-Plugin in `docs/plugins/hello/`.
 
 ## Ein neues Feature hinzufügen
 
@@ -207,7 +225,7 @@ cargo test --workspace # Rust-Kern
 ## Nächste Schritte (Ideen)
 
 - Geteilte Ansichten (zwei Tabs nebeneinander)
-- Kanban-Board (`.board`) und Tracking (`.track`) als eigene Dateitypen
+- Kanban-Board (`.board`) und Tracking (`.track`) als offizielle Plugins im Store
 - `tantivy` statt FTS5, falls die Suche mehr können muss
 
 ## Lizenz
