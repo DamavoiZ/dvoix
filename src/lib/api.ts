@@ -116,6 +116,12 @@ export interface GitBranch {
   current: boolean;
 }
 
+/** The two versions of a file that a diff compares (see `git::FileDiff`). */
+export interface GitFileDiff {
+  old: string;
+  new: string;
+}
+
 export interface VaultChange {
   kind: "created" | "modified" | "removed";
   path: string;
@@ -170,7 +176,7 @@ export const api = {
   gitPull: () => invoke<string>("git_pull"),
   gitInit: () => invoke<void>("git_init"),
   gitDiff: (path: string, staged: boolean, commit: string | null) =>
-    invoke<string>("git_diff", { path, staged, commit }),
+    invoke<GitFileDiff>("git_diff", { path, staged, commit }),
 };
 
 export function onVaultChanged(handler: (change: VaultChange) => void): Promise<UnlistenFn> {

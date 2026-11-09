@@ -108,3 +108,15 @@ body {
   --graph-group-9: var(--color-fuchsia-400);
   --graph-group-10: var(--color-cyan-300);
 }
+
+/* Colors of the git diff (CodeMirror merge view): whole changed lines get
+   the soft tone, the changed characters inside them the strong one. */
+:root {
+  --diff-insert-line: color-mix(in oklab, var(--color-green-500) 12%, transparent);
+  --diff-insert-text: color-mix(in oklab, var(--color-green-400) 30%, transparent);
+  --diff-insert-gutter: var(--color-green-500);
+  --diff-delete-line: color-mix(in oklab, var(--color-red-500) 12%, transparent);
+  --diff-delete-text: color-mix(in oklab, var(--color-red-400) 30%, transparent);
+  --diff-delete-gutter: var(--color-red-500);
+  --diff-collapsed: var(--color-zinc-500);
+}

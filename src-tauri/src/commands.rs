@@ -335,14 +335,14 @@ pub fn git_init(state: State<AppState>) -> CmdResult<()> {
     with_ws(&state, |ws| git::init(&ws.vault).map_err(err))
 }
 
-/// The changes of one file as a diff.
+/// The two versions of one file that its diff compares.
 #[tauri::command(async)]
 pub fn git_diff(
     state: State<AppState>,
     path: String,
     staged: bool,
     commit: Option<String>,
-) -> CmdResult<String> {
+) -> CmdResult<git::FileDiff> {
     with_ws(&state, |ws| {
         git::diff(&ws.vault, &path, staged, commit.as_deref()).map_err(err)
     })
