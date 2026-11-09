@@ -39,14 +39,34 @@ export const appWindow = new AppWindow();
  * title bar area don't need to know about it.
  */
 export function dragRegion(node: HTMLElement) {
+  // The drag starts on the first move, not on mousedown: on Linux (GTK) a
+  // window drag grabs the pointer, so the second click of a double click
+  // would never reach the page and maximizing would not work.
+  let pending = false;
+  const move = (e: MouseEvent) => {
+    if (!pending) return;
+    pending = false;
+    if (e.buttons === 1) void getCurrentWindow().startDragging();
+  };
+  const up = () => (pending = false);
   const down = (e: MouseEvent) => {
     if (e.button !== 0 || !appWindow.custom) return;
     const target = e.target as HTMLElement | null;
     if (target?.closest(INTERACTIVE)) return;
     e.preventDefault();
-    if (e.detail === 2) appWindow.toggleMaximize();
-    else void getCurrentWindow().startDragging();
+    if (e.detail === 2) {
+      pending = false;
+      appWindow.toggleMaximize();
+    } else pending = true;
   };
   node.addEventListener("mousedown", down);
-  return { destroy: () => node.removeEventListener("mousedown", down) };
+  node.addEventListener("mousemove", move);
+  window.addEventListener("mouseup", up);
+  return {
+    destroy: () => {
+      node.removeEventListener("mousedown", down);
+      node.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+    },
+  };
 }

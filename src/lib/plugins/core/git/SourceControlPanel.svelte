@@ -3,6 +3,7 @@
   // to stage, commit, push and pull. Like the view of the same name in the
   // Obsidian plugin "Git".
   import { Download, FileDiff, GitBranchPlus, Plus, RefreshCw, Trash, Undo2, Upload, X } from "@lucide/svelte";
+  import Select from "../../../components/Select.svelte";
   import { vault } from "../../../vault.svelte";
   import { gitSettings } from "./settings";
   import { gitState } from "./state.svelte";
@@ -13,11 +14,11 @@
 
   let newBranchOpen = $state(false);
   let newBranch = $state("");
-  /** The branch in the select; it follows the branch that is checked out. */
-  let selected = $state("");
-
-  $effect(() => {
-    selected = repo?.branch ?? "";
+  /** All local branches, plus the checked out one if git doesn't list it (e.g. no commit yet). */
+  const branchOptions = $derived.by(() => {
+    const names = gitState.branches.map((b) => b.name);
+    if (repo && !names.includes(repo.branch)) names.unshift(repo.branch);
+    return names.map((name) => ({ value: name, label: name }));
   });
 
   // A change on disk changes the state of the repository.
@@ -69,19 +70,15 @@
   {:else}
     <!-- branch and remote -->
     <div class="flex items-center gap-1 border-b border-zinc-800 px-2 py-2">
-      <select
-        class="min-w-0 flex-1 truncate rounded-md border border-zinc-700 bg-zinc-950 px-1.5 py-1 text-xs outline-none focus:border-violet-500"
+      <Select
+        class="flex-1"
+        small
+        label="Branch wechseln"
         title="Branch wechseln"
-        bind:value={selected}
-        onchange={(e) => void gitState.checkout(e.currentTarget.value)}
-      >
-        {#if !gitState.branches.some((b) => b.name === repo.branch)}
-          <option value={repo.branch}>{repo.branch}</option>
-        {/if}
-        {#each gitState.branches as branch (branch.name)}
-          <option value={branch.name}>{branch.name}</option>
-        {/each}
-      </select>
+        value={repo.branch}
+        options={branchOptions}
+        onchange={(v) => void gitState.checkout(v)}
+      />
       <button class={iconBtn} title="Neuer Branch" aria-label="Neuer Branch" onclick={() => (newBranchOpen = !newBranchOpen)}>
         <GitBranchPlus size={14} strokeWidth={1.75} />
       </button>
