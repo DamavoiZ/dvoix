@@ -95,7 +95,7 @@ Vor jedem Commit müssen `npm run check`, `npm run build` und `cargo test --work
 - **Svelte 5 mit Runes** (`$state`, `$derived`, `$effect`, `$props`). Kein `export let`, keine Svelte-4-Stores.
 - **Styling** mit Tailwind-Klassen und den CSS-Variablen aus `src/app.css`. Keine neuen Farben hart kodieren.
 - **Keine neuen Abhängigkeiten** ohne guten Grund. Wenn doch, im PR begründen.
-- **Kein Umformatieren** unbeteiligter Dateien.
+- **Kleine, fokussierte Änderungen.** Ein PR, ein Thema. Kein Umformatieren unbeteiligter Dateien.
 - **Rust:** Fehler über `dvoix_core::Error` und `Result`, kein `unwrap()` außerhalb von Tests. Neue Logik im Kern bekommt Tests im selben Modul (`#[cfg(test)] mod tests`, Vault mit `tempfile::tempdir()`).
 - **README aktuell halten:** Neue Funktion, neuer Dateityp, neue Datei in `.dvoix/` oder neue Plugin-API → Abschnitt im README ergänzen.
 
