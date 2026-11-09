@@ -65,10 +65,21 @@ body {
   font-family: var(--font-mono);
   font-size: 0.92em;
 }
+/* Block widgets get the inset of CodeMirror's lines, so they line up with the text. */
+.cm-lp-table-wrap,
+.cm-lp-properties {
+  padding: 0 2px 0 6px;
+}
 .cm-lp-table-wrap {
   overflow-x: auto;
   margin: 0.4em 0;
-  cursor: text;
+}
+/* The table with a "+" for a new column on its right and a new row below. */
+.cm-lp-table-grid {
+  display: inline-grid;
+  grid-template-columns: auto 1.1rem;
+  grid-template-rows: auto 1.1rem;
+  gap: 3px;
 }
 .cm-lp-table {
   border-collapse: collapse;
@@ -77,13 +88,149 @@ body {
 .cm-lp-table th,
 .cm-lp-table td {
   border: 1px solid var(--color-zinc-800);
-  padding: 0.3em 0.75em;
+  padding: 0;
   text-align: left;
   vertical-align: top;
 }
 .cm-lp-table th {
   font-weight: 600;
   background-color: rgba(255, 255, 255, 0.03);
+}
+/* The padding sits on the editable part, so a click anywhere in a cell lands in it. */
+.cm-lp-cell {
+  min-width: 3em;
+  min-height: 1.5em;
+  padding: 0.3em 0.75em;
+  outline: none;
+  cursor: text;
+}
+.cm-lp-cell:focus {
+  background-color: color-mix(in srgb, var(--color-violet-500) 8%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-violet-500) 60%, transparent);
+}
+/* The grips sit in an extra column and row of the table; the table is moved
+   left by their width so its border still lines up with the text. */
+.cm-lp-table-wrap {
+  position: relative;
+  margin-left: -14px;
+}
+.cm-lp-table .cm-lp-grips th,
+.cm-lp-table .cm-lp-row-grip {
+  border: none;
+  background: transparent;
+  padding: 0;
+}
+.cm-lp-row-grip,
+.cm-lp-col-grip {
+  position: relative;
+  color: var(--color-zinc-600);
+  cursor: grab;
+}
+.cm-lp-row-grip {
+  width: 14px;
+}
+.cm-lp-col-grip {
+  height: 12px;
+}
+/* Six dots, standing for "drag me". */
+.cm-lp-row-grip::before,
+.cm-lp-col-grip::before {
+  content: "";
+  position: absolute;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+  background-image: radial-gradient(circle, currentColor 1px, transparent 1.3px);
+  background-size: 4px 4px;
+  opacity: 0;
+}
+.cm-lp-row-grip::before {
+  width: 8px;
+  height: 12px;
+}
+.cm-lp-col-grip::before {
+  width: 12px;
+  height: 8px;
+}
+.cm-lp-table-wrap:hover .cm-lp-row-grip::before,
+.cm-lp-table-wrap:hover .cm-lp-col-grip::before {
+  opacity: 0.6;
+}
+.cm-lp-row-grip:hover,
+.cm-lp-col-grip:hover {
+  color: var(--color-zinc-300);
+}
+.cm-lp-row-grip:hover::before,
+.cm-lp-col-grip:hover::before,
+.cm-lp-grip-on::before {
+  opacity: 1 !important;
+}
+.cm-lp-grip-on {
+  color: var(--color-violet-400);
+}
+.cm-lp-table .cm-lp-selected {
+  background-color: color-mix(in srgb, var(--color-violet-500) 18%, transparent);
+}
+/* Where a dragged block, row or column will land. */
+.cm-lp-table .cm-lp-drop-target {
+  box-shadow: inset 0 0 0 2px var(--color-violet-500);
+}
+.cm-lp-table .cm-lp-drop-above > * {
+  box-shadow: inset 0 2px 0 var(--color-violet-500);
+}
+.cm-lp-table .cm-lp-drop-below > * {
+  box-shadow: inset 0 -2px 0 var(--color-violet-500);
+}
+.cm-lp-table .cm-lp-drop-left {
+  box-shadow: inset 2px 0 0 var(--color-violet-500);
+}
+.cm-lp-table .cm-lp-drop-right {
+  box-shadow: inset -2px 0 0 var(--color-violet-500);
+}
+.cm-lp-dragging,
+.cm-lp-dragging * {
+  user-select: none;
+  cursor: grabbing !important;
+}
+/* Holds the keyboard while several cells are selected; never seen. */
+.cm-lp-table-clip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  resize: none;
+  overflow: hidden;
+  pointer-events: none;
+}
+.cm-lp-table-add {
+  border-radius: 4px;
+  color: var(--color-zinc-500);
+  background-color: rgba(255, 255, 255, 0.03);
+  font-size: 0.8rem;
+  line-height: 1;
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 0.1s;
+}
+.cm-lp-table-add-col {
+  grid-column: 2;
+  grid-row: 1;
+}
+.cm-lp-table-add-row {
+  grid-column: 1;
+  grid-row: 2;
+}
+.cm-lp-table-wrap:hover .cm-lp-table-add,
+.cm-lp-table-wrap:focus-within .cm-lp-table-add,
+.cm-lp-table-add:focus-visible {
+  opacity: 1;
+}
+.cm-lp-table-add:hover {
+  color: var(--color-zinc-200);
+  background-color: var(--color-zinc-800);
 }
 .cm-lp-table code {
   font-family: var(--font-mono);

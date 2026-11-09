@@ -4,6 +4,8 @@
   // indexes and searches.
   import { api, type RenderedNote } from "../../api";
   import type { FileViewProps } from "../types";
+  import Properties from "./Properties.svelte";
+  import { applyChange } from "./frontmatter";
 
   let { path, content, onchange, onopen }: FileViewProps = $props();
 
@@ -26,20 +28,6 @@
       stale = true;
     };
   });
-
-  /** The frontmatter as rows for the properties table. */
-  const properties = $derived(
-    Object.entries(rendered?.frontmatter ?? {}).map(([key, value]) => ({
-      key,
-      value: formatValue(value),
-    })),
-  );
-
-  function formatValue(value: unknown): string {
-    if (Array.isArray(value)) return value.map((v) => String(v)).join(", ");
-    if (value && typeof value === "object") return JSON.stringify(value);
-    return String(value);
-  }
 
   /** Wikilinks and links to other notes open in the app, everything else stays. */
   function handleClick(event: MouseEvent) {
@@ -66,18 +54,8 @@
     <p class="py-8 text-sm text-red-400">Die Notiz konnte nicht dargestellt werden.</p>
   {:else if rendered}
     <div class="reading-inner">
-      {#if properties.length}
-        <table class="properties">
-          <tbody>
-            {#each properties as row (row.key)}
-              <tr>
-                <th>{row.key}</th>
-                <td>{row.value}</td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      {/if}
+      <!-- Edits change only the lines of the property, the note is saved like any other edit. -->
+      <Properties source={content} apply={(change) => onchange(applyChange(content, change))} {onopen} />
       <div class="prose">
         <!-- The HTML is built in the Rust core; raw HTML from a note is escaped there. -->
         {@html rendered.html}
@@ -203,32 +181,5 @@
   .reading :global(.prose img) {
     max-width: 100%;
     border-radius: 0.5rem;
-  }
-
-  .properties {
-    width: 100%;
-    margin: 0 0 1.5rem;
-    font-size: 0.85rem;
-    border-collapse: collapse;
-    border: 1px solid var(--color-zinc-800);
-    border-radius: 0.5rem;
-    overflow: hidden;
-  }
-  .properties tr + tr {
-    border-top: 1px solid var(--color-zinc-800);
-  }
-  .properties th {
-    width: 1%;
-    padding: 0.35em 0.9em 0.35em 0.7em;
-    text-align: left;
-    font-family: var(--font-mono);
-    font-weight: 400;
-    color: var(--color-violet-300);
-    white-space: nowrap;
-    vertical-align: top;
-  }
-  .properties td {
-    padding: 0.35em 0.7em;
-    color: var(--color-zinc-400);
   }
 </style>

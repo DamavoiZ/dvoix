@@ -17,6 +17,8 @@ import { languages } from "@codemirror/language-data";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { tags as t } from "@lezer/highlight";
 import { livePreview } from "./livePreview";
+import { parseFrontmatter } from "./frontmatter";
+import { openLink } from "./propertiesWidget.svelte";
 
 const WIKILINK = /\[\[([^\]\n]+)\]\]/g;
 
@@ -142,10 +144,17 @@ export function setLivePreview(view: EditorView, on: boolean): void {
 }
 
 export function createMarkdownEditor({ parent, doc, onchange, onlink, extensions = [] }: EditorOptions): EditorView {
+  // The cursor starts below the properties: at the very start it would be
+  // inside them, and the live preview would show the YAML instead.
+  // Positions on the text as CodeMirror keeps it: with "\n" only.
+  const text = doc.replace(/\r\n?/g, "\n");
+  const fm = parseFrontmatter(text);
+  const start = fm ? text.indexOf("\n", fm.to) + 1 || text.length : 0;
   return new EditorView({
     parent,
     state: EditorState.create({
       doc,
+      selection: { anchor: start },
       extensions: [
         history(),
         drawSelection(),
@@ -156,6 +165,7 @@ export function createMarkdownEditor({ parent, doc, onchange, onlink, extensions
         syntaxHighlighting(highlight),
         theme,
         wikilinks,
+        openLink.of(onlink),
         extra.of(extensions),
         preview.of([]),
         EditorView.updateListener.of((u) => {
