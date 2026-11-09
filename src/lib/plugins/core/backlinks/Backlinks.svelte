@@ -1,5 +1,5 @@
 <script lang="ts">
-  // "Verlinkt von": notes that link to the open note.
+  // "Linked from": notes that link to the open note.
   import { api, type NoteSummary } from "../../../api";
   import { fileTypeFor } from "../../../filetypes";
   import { vault } from "../../../vault.svelte";
@@ -17,7 +17,7 @@
 
 {#if backlinks.length}
   <footer class="border-t border-zinc-800 px-4 py-2 text-xs text-zinc-500">
-    Verlinkt von:
+    Linked from:
     {#each backlinks as b (b.path)}
       <button class="ml-2 text-violet-300 hover:underline" onclick={() => vault.openFile(b.path)}>{b.title}</button>
     {/each}

@@ -14,11 +14,11 @@
   }
 </script>
 
-<Setting name="Automatisch aktualisieren" description="Lädt den Zustand des Repositories regelmäßig neu, damit auch Änderungen von anderen Programmen auffallen.">
-  <Toggle label="Automatisch aktualisieren" checked={s.autoRefresh} onchange={(v) => set("autoRefresh", v)} />
+<Setting name="Refresh automatically" description="Reloads the repository state regularly so that changes made by other programs show up too.">
+  <Toggle label="Refresh automatically" checked={s.autoRefresh} onchange={(v) => set("autoRefresh", v)} />
 </Setting>
 
-<Setting name="Intervall" description="Wie oft der Zustand neu geladen wird, in Sekunden.">
+<Setting name="Interval" description="How often the state is reloaded, in seconds.">
   <input
     type="number"
     min="5"
@@ -29,14 +29,14 @@
   />
 </Setting>
 
-<Setting name="Beim Commit alles stagen" description="Legt alle Änderungen in den Commit, wenn nichts gestaged ist. Sonst gehen nur die gestageden Änderungen hinein.">
-  <Toggle label="Beim Commit alles stagen" checked={s.stageAllWhenNothingStaged} onchange={(v) => set("stageAllWhenNothingStaged", v)} />
+<Setting name="Stage everything on commit" description="Puts all changes into the commit when nothing is staged. Otherwise only the staged changes go in.">
+  <Toggle label="Stage everything on commit" checked={s.stageAllWhenNothingStaged} onchange={(v) => set("stageAllWhenNothingStaged", v)} />
 </Setting>
 
-<Setting name="Unversionierte Dateien zeigen" description="Zeigt Dateien, die git noch nicht kennt, in der Liste der Änderungen.">
-  <Toggle label="Unversionierte Dateien zeigen" checked={s.showUntracked} onchange={(v) => set("showUntracked", v)} />
+<Setting name="Show untracked files" description="Shows files that git does not know yet in the list of changes.">
+  <Toggle label="Show untracked files" checked={s.showUntracked} onchange={(v) => set("showUntracked", v)} />
 </Setting>
 
-<Setting name="Nach dem Commit pushen" description="Schickt den Branch nach jedem Commit auf das Remote.">
-  <Toggle label="Nach dem Commit pushen" checked={s.pushAfterCommit} onchange={(v) => set("pushAfterCommit", v)} />
+<Setting name="Push after commit" description="Pushes the branch to the remote after every commit.">
+  <Toggle label="Push after commit" checked={s.pushAfterCommit} onchange={(v) => set("pushAfterCommit", v)} />
 </Setting>

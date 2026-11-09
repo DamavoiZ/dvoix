@@ -15,45 +15,45 @@ export const gitPlugin: Plugin = {
   manifest: {
     id: "git",
     name: "Git",
-    description: "Vault mit Git versionieren: Änderungen stagen, committen, Branches wechseln und den Verlauf ansehen.",
+    description: "Version the vault with Git: stage changes, commit, switch branches and view the history.",
     version: "1.0.0",
   },
   icon: GitBranch,
   async onload(ctx) {
     await gitSettings.load(ctx);
     ctx.addPanel({ id: "git", label: "Git", icon: GitBranch, component: SourceControlPanel, order: 55 });
-    ctx.registerView({ id: HISTORY_VIEW, label: "Verlauf", icon: GitCommitHorizontal, component: HistoryView });
+    ctx.registerView({ id: HISTORY_VIEW, label: "History", icon: GitCommitHorizontal, component: HistoryView });
     ctx.addOverlay({ id: "git-diff", component: GitDiff });
     ctx.addSettingTab({ component: GitSettings });
 
     ctx.addCommand({
       id: "commit",
-      name: "Änderungen committen",
+      name: "Commit changes",
       hotkeys: [{ mod: true, key: "Enter" }],
       when: () => !!vault.info,
       run: () => void gitState.commit(),
     });
     ctx.addCommand({
       id: "refresh",
-      name: "Git-Status aktualisieren",
+      name: "Refresh Git status",
       when: () => !!vault.info,
       run: () => void gitState.refresh(),
     });
     ctx.addCommand({
       id: "push",
-      name: "Pushen",
+      name: "Push",
       when: () => !!vault.info,
       run: () => void gitState.push(),
     });
     ctx.addCommand({
       id: "pull",
-      name: "Ziehen",
+      name: "Pull",
       when: () => !!vault.info,
       run: () => void gitState.pull(),
     });
     ctx.addCommand({
       id: "history",
-      name: "Verlauf öffnen",
+      name: "Open history",
       hotkeys: [{ mod: true, shift: true, key: "h" }],
       when: () => !!vault.info,
       run: () => void vault.openViewTab(HISTORY_VIEW, { newTab: !!vault.openPath }),

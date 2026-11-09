@@ -93,7 +93,7 @@ class GitState {
   async commit() {
     const message = this.message.trim();
     if (!message) {
-      this.error = "Die Commit-Nachricht darf nicht leer sein.";
+      this.error = "The commit message must not be empty.";
       return;
     }
     const stageAll = gitSettings.value.stageAllWhenNothingStaged && !this.hasStaged;

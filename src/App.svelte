@@ -36,7 +36,7 @@
     root.setProperty("--editor-max-width", settings.app.readableLineLength ? "48rem" : "none");
   });
 
-  /** App-wide shortcuts: plugin commands plus Strg+, for the settings. Captured before the editor sees them. */
+  /** App-wide shortcuts: plugin commands plus Ctrl+, for the settings. Captured before the editor sees them. */
   function shortcuts(e: KeyboardEvent) {
     if (!vault.info) return;
     const mod = e.ctrlKey || e.metaKey;

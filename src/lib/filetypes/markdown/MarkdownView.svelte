@@ -106,7 +106,7 @@
     >
       <button
         class="{modeButton} {mode === 'read' ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500'}"
-        title="Lesen (Strg+E)"
+        title="Read (Ctrl+E)"
         aria-label="Lesen"
         aria-pressed={mode === "read"}
         onclick={() => setMode("read")}
@@ -115,8 +115,8 @@
       </button>
       <button
         class="{modeButton} {mode === 'edit' ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500'}"
-        title="Bearbeiten (Strg+E)"
-        aria-label="Bearbeiten"
+        title="Edit (Ctrl+E)"
+        aria-label="Edit"
         aria-pressed={mode === "edit"}
         onclick={() => setMode("edit")}
       >
@@ -124,8 +124,8 @@
       </button>
       <button
         class="{modeButton} {mode === 'source' ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500'}"
-        title="Quelltext (Strg+Umschalt+E)"
-        aria-label="Quelltext"
+        title="Source (Ctrl+Shift+E)"
+        aria-label="Source"
         aria-pressed={mode === "source"}
         onclick={() => setMode("source")}
       >

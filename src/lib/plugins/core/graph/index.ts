@@ -11,7 +11,7 @@ export const graphPlugin: Plugin = {
   manifest: {
     id: "graph",
     name: "Graph",
-    description: "Zeigt die Notizen als Netz, verbunden über Links, Ordner oder Tags.",
+    description: "Shows the notes as a network, connected by links, folders or tags.",
     version: "1.0.0",
   },
   icon: Waypoints,
@@ -20,7 +20,7 @@ export const graphPlugin: Plugin = {
     ctx.registerView({ id: VIEW, label: "Graph", icon: Waypoints, component: GraphView });
     ctx.addSettingTab({ component: GraphOptions });
     const open = () => vault.openViewTab(VIEW, { newTab: !!vault.openPath });
-    ctx.addRibbonAction({ id: "open", label: "Graph öffnen", icon: Waypoints, action: () => void open(), order: 60 });
-    ctx.addCommand({ id: "open", name: "Graph öffnen", hotkeys: [{ mod: true, key: "g" }], when: () => !!vault.info, run: open });
+    ctx.addRibbonAction({ id: "open", label: "Open graph", icon: Waypoints, action: () => void open(), order: 60 });
+    ctx.addCommand({ id: "open", name: "Open graph", hotkeys: [{ mod: true, key: "g" }], when: () => !!vault.info, run: open });
   },
 };

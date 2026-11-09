@@ -58,14 +58,14 @@
 <div class="flex h-full flex-col">
   {#if !repo}
     <div class="space-y-3 px-3 py-4 text-sm text-zinc-500">
-      <p>Der Vault ist kein Git-Repository.</p>
+      <p>The vault is not a Git repository.</p>
       <button
         class="rounded-md bg-violet-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-violet-500"
         onclick={() => void gitState.init()}
       >
-        Repository anlegen
+        Create repository
       </button>
-      <p class="text-xs">Alle Dateien des Vaults liegen dann in einem Repository und lassen sich versionieren.</p>
+      <p class="text-xs">All files of the vault will then live in a repository and can be versioned.</p>
     </div>
   {:else}
     <!-- branch and remote -->
@@ -79,16 +79,16 @@
         options={branchOptions}
         onchange={(v) => void gitState.checkout(v)}
       />
-      <button class={iconBtn} title="Neuer Branch" aria-label="Neuer Branch" onclick={() => (newBranchOpen = !newBranchOpen)}>
+      <button class={iconBtn} title="New branch" aria-label="New branch" onclick={() => (newBranchOpen = !newBranchOpen)}>
         <GitBranchPlus size={14} strokeWidth={1.75} />
       </button>
-      <button class={iconBtn} title="Pushen" aria-label="Pushen" onclick={() => void gitState.push()}>
+      <button class={iconBtn} title="Push" aria-label="Push" onclick={() => void gitState.push()}>
         <Upload size={14} strokeWidth={1.75} />
       </button>
-      <button class={iconBtn} title="Ziehen" aria-label="Ziehen" onclick={() => void gitState.pull()}>
+      <button class={iconBtn} title="Pull" aria-label="Pull" onclick={() => void gitState.pull()}>
         <Download size={14} strokeWidth={1.75} />
       </button>
-      <button class={iconBtn} title="Aktualisieren" aria-label="Aktualisieren" onclick={() => void gitState.refresh()}>
+      <button class={iconBtn} title="Refresh" aria-label="Refresh" onclick={() => void gitState.refresh()}>
         <RefreshCw size={14} strokeWidth={1.75} class={gitState.busy ? "animate-spin" : ""} />
       </button>
     </div>
@@ -97,7 +97,7 @@
       <div class="flex gap-1 border-b border-zinc-800 px-2 py-2">
         <input
           class="min-w-0 flex-1 rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs outline-none placeholder:text-zinc-600 focus:border-violet-500"
-          placeholder="Name des Branches"
+          placeholder="Branch name"
           bind:value={newBranch}
           onkeydown={(e) => {
             if (e.key === "Enter") void createBranch();
@@ -116,7 +116,7 @@
     {#if gitState.error}
       <div class="mx-2 mt-2 flex items-start gap-2 rounded-md border border-red-900/60 bg-red-950/40 px-2 py-1.5 text-xs text-red-300">
         <span class="min-w-0 flex-1 break-words">{gitState.error}</span>
-        <button class="shrink-0 text-red-400 hover:text-red-200" aria-label="Fehler schließen" onclick={() => (gitState.error = null)}>
+        <button class="shrink-0 text-red-400 hover:text-red-200" aria-label="Dismiss error" onclick={() => (gitState.error = null)}>
           <X size={12} strokeWidth={2} />
         </button>
       </div>
@@ -127,7 +127,7 @@
       <textarea
         class="w-full resize-none rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm outline-none placeholder:text-zinc-600 focus:border-violet-500"
         rows="2"
-        placeholder="Nachricht für den Commit …"
+        placeholder="Commit message …"
         value={gitState.message}
         oninput={(e) => (gitState.message = e.currentTarget.value)}
       ></textarea>
@@ -144,7 +144,7 @@
             class="rounded-md px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
             onclick={() => void gitState.stageAll()}
           >
-            Alle stagen
+            Stage all
           </button>
         {/if}
         {#if repo.ahead > 0 || repo.behind > 0}
@@ -157,7 +157,7 @@
     <div class="min-h-0 flex-1 overflow-y-auto pb-4">
       {#if (changes?.staged.length ?? 0) > 0}
         <h3 class="px-3 pt-2 pb-1 text-xs font-medium text-zinc-400">
-          Gestaged <span class="text-zinc-600">{changes!.staged.length}</span>
+          Staged <span class="text-zinc-600">{changes!.staged.length}</span>
         </h3>
         <ul>
           {#each changes!.staged as file (file.path)}
@@ -172,8 +172,8 @@
               </button>
               <button
                 class={iconBtn}
-                title="Aus dem Index nehmen"
-                aria-label="Aus dem Index nehmen"
+                title="Unstage"
+                aria-label="Unstage"
                 onclick={() => void gitState.unstage([file.path])}
               >
                 <Undo2 size={13} strokeWidth={1.75} />
@@ -185,7 +185,7 @@
 
       {#if (changes?.unstaged.length ?? 0) > 0}
         <h3 class="px-3 pt-2 pb-1 text-xs font-medium text-zinc-400">
-          Geändert <span class="text-zinc-600">{changes!.unstaged.length}</span>
+          Changed <span class="text-zinc-600">{changes!.unstaged.length}</span>
         </h3>
         <ul>
           {#each changes!.unstaged as file (file.path)}
@@ -200,24 +200,24 @@
               </button>
               <button
                 class={iconBtn}
-                title="Änderungen ansehen"
-                aria-label="Änderungen ansehen"
+                title="View changes"
+                aria-label="View changes"
                 onclick={() => void gitState.showDiff(file.path, false)}
               >
                 <FileDiff size={13} strokeWidth={1.75} />
               </button>
               <button
                 class={iconBtn}
-                title="Stagen"
-                aria-label="Stagen"
+                title="Stage"
+                aria-label="Stage"
                 onclick={() => void gitState.stage([file.path])}
               >
                 <Plus size={13} strokeWidth={1.75} />
               </button>
               <button
                 class={iconBtn}
-                title="Änderungen verwerfen"
-                aria-label="Änderungen verwerfen"
+                title="Discard changes"
+                aria-label="Discard changes"
                 onclick={() => void gitState.discard(file.path, false)}
               >
                 <Trash size={13} strokeWidth={1.75} />
@@ -229,7 +229,7 @@
 
       {#if untracked.length > 0}
         <h3 class="px-3 pt-2 pb-1 text-xs font-medium text-zinc-400">
-          Unversioniert <span class="text-zinc-600">{untracked.length}</span>
+          Untracked <span class="text-zinc-600">{untracked.length}</span>
         </h3>
         <ul>
           {#each untracked as file (file.path)}
@@ -244,16 +244,16 @@
               </button>
               <button
                 class={iconBtn}
-                title="Stagen"
-                aria-label="Stagen"
+                title="Stage"
+                aria-label="Stage"
                 onclick={() => void gitState.stage([file.path])}
               >
                 <Plus size={13} strokeWidth={1.75} />
               </button>
               <button
                 class={iconBtn}
-                title="Datei löschen"
-                aria-label="Datei löschen"
+                title="Delete file"
+                aria-label="Delete file"
                 onclick={() => void gitState.discard(file.path, true)}
               >
                 <Trash size={13} strokeWidth={1.75} />
@@ -264,7 +264,7 @@
       {/if}
 
       {#if !gitState.hasChanges}
-        <p class="px-3 pt-3 text-xs text-zinc-500">Keine Änderungen. Der Vault ist auf dem Stand des letzten Commits.</p>
+        <p class="px-3 pt-3 text-xs text-zinc-500">No changes. The vault matches the last commit.</p>
       {/if}
     </div>
   {/if}

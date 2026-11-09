@@ -51,7 +51,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
 <div class="reading h-full overflow-y-auto px-8 pt-8 pb-32" onclick={handleClick}>
   {#if failed}
-    <p class="py-8 text-sm text-red-400">Die Notiz konnte nicht dargestellt werden.</p>
+    <p class="py-8 text-sm text-red-400">The note could not be displayed.</p>
   {:else if rendered}
     <div class="reading-inner">
       <!-- Edits change only the lines of the property, the note is saved like any other edit. -->
@@ -62,7 +62,7 @@
       </div>
     </div>
   {:else}
-    <p class="py-8 text-sm text-zinc-600">Wird geladen …</p>
+    <p class="py-8 text-sm text-zinc-600">Loading …</p>
   {/if}
 </div>
 

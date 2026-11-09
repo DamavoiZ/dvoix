@@ -4,13 +4,13 @@
   import { explorerSettings } from "./settings";
 </script>
 
-<Setting name="Neue Dateien anlegen in" description="Gilt für die Knöpfe oben im Explorer. Per Rechtsklick auf einen Ordner landet die Datei immer dort.">
+<Setting name="Create new files in" description="Applies to the buttons at the top of the explorer. Right-clicking a folder always creates the file there.">
   <Select
-    label="Neue Dateien anlegen in"
+    label="Create new files in"
     value={explorerSettings.value.newFileLocation}
     options={[
-      { value: "current", label: "Ordner der offenen Datei" },
-      { value: "root", label: "Vault-Wurzel" },
+      { value: "current", label: "Folder of the open file" },
+      { value: "root", label: "Vault root" },
     ]}
     onchange={(v: "current" | "root") => {
       explorerSettings.value.newFileLocation = v;

@@ -53,17 +53,17 @@
   function formatDate(iso: string): string {
     const date = new Date(iso);
     if (Number.isNaN(date.getTime())) return iso;
-    return date.toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" });
+    return date.toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" });
   }
 </script>
 
 <div class="flex h-full flex-col">
   <header class="flex shrink-0 items-center gap-2 border-b border-zinc-800 px-4 py-2">
-    <span class="text-xs font-medium tracking-wide text-zinc-500 uppercase">Verlauf</span>
+    <span class="text-xs font-medium tracking-wide text-zinc-500 uppercase">History</span>
     <button
       class="ml-auto flex h-6 w-6 items-center justify-center rounded text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
-      title="Aktualisieren"
-      aria-label="Aktualisieren"
+      title="Refresh"
+      aria-label="Refresh"
       onclick={() => void load()}
     >
       <RefreshCw size={13} strokeWidth={1.75} class={loading ? "animate-spin" : ""} />
@@ -74,7 +74,7 @@
     {#if error}
       <p class="px-2 py-2 text-sm text-red-300">{error}</p>
     {:else if !commits.length && !loading}
-      <p class="px-2 py-2 text-sm text-zinc-500">Noch keine Commits. Der Vault ist noch nicht versioniert.</p>
+      <p class="px-2 py-2 text-sm text-zinc-500">No commits yet. The vault is not under version control yet.</p>
     {:else}
       <ul>
         {#each commits as commit (commit.id)}
@@ -109,7 +109,7 @@
                     </button>
                   </li>
                 {:else}
-                  <li class="px-2 py-0.5 text-xs text-zinc-600">Keine Dateien im Vault geändert.</li>
+                  <li class="px-2 py-0.5 text-xs text-zinc-600">No files in the vault changed.</li>
                 {/each}
               </ul>
             {/if}

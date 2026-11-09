@@ -38,15 +38,15 @@
   <div
     class="fixed top-[6vh] left-1/2 z-50 flex h-[88vh] w-[min(1400px,96vw)] -translate-x-1/2 flex-col overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl"
     role="dialog"
-    aria-label="Änderungen"
+    aria-label="Changes"
   >
     <header class="flex shrink-0 items-center gap-2 border-b border-zinc-800 px-4 py-2">
       <span class="truncate text-sm text-zinc-200">{gitState.diff.title}</span>
-      <div class="ml-auto flex items-center gap-0.5 rounded-md bg-zinc-950 p-0.5" role="group" aria-label="Darstellung">
+      <div class="ml-auto flex items-center gap-0.5 rounded-md bg-zinc-950 p-0.5" role="group" aria-label="View">
         <button
           class="{toggle} {layout === 'split' ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500 hover:text-zinc-200'}"
           aria-pressed={layout === "split"}
-          title="Vorher und nachher nebeneinander"
+          title="Before and after side by side"
           onclick={() => setLayout("split")}
         >
           <Columns2 size={13} strokeWidth={1.75} />
@@ -55,7 +55,7 @@
         <button
           class="{toggle} {layout === 'inline' ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500 hover:text-zinc-200'}"
           aria-pressed={layout === "inline"}
-          title="Alles in einer Spalte, entfernte Zeilen über den neuen"
+          title="Everything in one column, removed lines above the new ones"
           onclick={() => setLayout("inline")}
         >
           <Rows2 size={13} strokeWidth={1.75} />
@@ -64,19 +64,19 @@
       </div>
       <button
         class="flex h-6 w-6 items-center justify-center rounded text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
-        aria-label="Schließen"
+        aria-label="Close"
         onclick={() => gitState.closeDiff()}
       >
         <X size={14} strokeWidth={1.75} />
       </button>
     </header>
     {#if unchanged}
-      <p class="p-4 text-sm text-zinc-500">Keine Änderungen an dieser Datei.</p>
+      <p class="p-4 text-sm text-zinc-500">No changes to this file.</p>
     {:else}
       {#if layout === "split"}
         <div class="grid shrink-0 grid-cols-2 border-b border-zinc-800 text-xs text-zinc-500">
-          <span class="px-4 py-1">Vorher</span>
-          <span class="border-l border-zinc-800 px-4 py-1">Nachher</span>
+          <span class="px-4 py-1">Before</span>
+          <span class="border-l border-zinc-800 px-4 py-1">After</span>
         </div>
       {/if}
       <div class="min-h-0 flex-1" bind:this={host}></div>

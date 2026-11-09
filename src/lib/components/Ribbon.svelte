@@ -36,13 +36,13 @@
 
   <div class="flex-1"></div>
 
-  <button class="{btn} {idle}" title="Anderen Vault öffnen" aria-label="Anderen Vault öffnen" onclick={() => vault.close()}>
+  <button class="{btn} {idle}" title="Open another vault" aria-label="Open another vault" onclick={() => vault.close()}>
     <ArrowLeftRight size={18} strokeWidth={1.75} />
   </button>
   <button
     class="{btn} {ui.modal === SETTINGS ? 'bg-zinc-800 text-zinc-100' : idle}"
-    title="Einstellungen (Strg+,)"
-    aria-label="Einstellungen"
+    title="Settings (Ctrl+,)"
+    aria-label="Settings"
     onclick={() => ui.toggleModal(SETTINGS)}
   >
     <Settings size={18} strokeWidth={1.75} />

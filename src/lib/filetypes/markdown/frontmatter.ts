@@ -235,7 +235,7 @@ function readProperty(head: Line, rest: Line[]): Property {
 
 /**
  * Writes a text so YAML reads it back as the same text. Quotes only when
- * needed, so `status: aktiv` stays as Obsidian and people write it.
+ * needed, so a value such as `status: aktiv` stays as people write it in Obsidian.
  */
 export function formatScalar(value: string, inList = false): string {
   if (value === "") return '""';

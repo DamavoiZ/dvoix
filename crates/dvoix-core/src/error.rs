@@ -14,11 +14,11 @@ pub enum Error {
     OutsideVault(String),
     #[error("path already exists: {0}")]
     AlreadyExists(String),
-    #[error("Die Aufgabe hat sich in der Datei geändert, bitte neu laden: {0}")]
+    #[error("The task changed in the file, please reload: {0}")]
     StaleTask(String),
-    #[error("Git-Fehler: {0}")]
+    #[error("Git error: {0}")]
     Git(String),
-    #[error("Plugin-Fehler: {0}")]
+    #[error("Plugin error: {0}")]
     Plugin(String),
 }
 

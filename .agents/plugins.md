@@ -1,35 +1,35 @@
 # Plugins
 
-Jede Funktion von dvoix ist ein Plugin. Die API steht in `src/lib/plugins/types.ts`, die Verwaltung in `src/lib/plugins/manager.svelte.ts`. Store-Plugins (offiziell und Community) setzen auf dieselbe API auf, also gelten für Core-Plugins dieselben Grenzen.
+Every feature of dvoix is a plugin. The API is in `src/lib/plugins/types.ts`, the management in `src/lib/plugins/manager.svelte.ts`. Store plugins (official and community) build on the same API, so the same limits apply to core plugins.
 
-## Core-Plugin oder Store-Plugin?
+## Core plugin or store plugin?
 
-- **Core-Plugin** (`src/lib/plugins/core/`): Grundfunktionen, die fast jeder braucht und die eng mit der App verzahnt sind (Explorer, Suche, Aufgaben, Projekte, Tabs, Git, …). Wird mit der App ausgeliefert, lässt sich ausschalten.
-- **Store-Plugin**: alles Zusätzliche, das nicht jeder will (z. B. Kanban, Tracking). Eigenes Repository mit Releases, Eintrag in `registry.json` von `DamavoiZ/dvoix-plugins`. Anleitung in `docs/plugins/README.md`.
+- **Core plugin** (`src/lib/plugins/core/`): basic functions almost everyone needs and that are closely tied to the app (explorer, search, tasks, projects, tabs, Git, …). Shipped with the app; can be turned off.
+- **Store plugin**: everything extra that not everyone wants (e.g. kanban, tracking). Its own repository with releases, an entry in `registry.json` of `DamavoiZ/dvoix-plugins`. Guide in `docs/plugins/README.md`.
 
-## Plugin-Store (`src/lib/plugins/store/`)
+## Plugin store (`src/lib/plugins/store/`)
 
-- `store.svelte.ts` lädt Store-Plugins aus `.dvoix/plugins/<id>/` (`main.js` als ES-Modul über eine Blob-URL) und verwaltet `.dvoix/store.json`. Der Manager kennt sie über `plugins.loadExtra`/`unloadExtra`, nicht über `corePlugins`.
-- `api.ts` ist die API für Store-Plugins: der `PluginContext`, aber mit `mount(el, props)` statt Svelte-Komponenten, SVG-Text als Icon, IDs mit `<plugin-id>:` davor und Berechtigungen (`vault:read`, `vault:write`, `editor`). Wird der `PluginContext` erweitert, hier und in `docs/plugins/README.md` nachziehen.
-- Neue Berechtigung: in `PERMISSIONS` in `crates/dvoix-core/src/store.rs`, im Typ `PluginPermission` in `src/lib/api.ts`, in `PERMISSION_LABELS` und in der Doku.
-- Downloads nur über `src-tauri/src/http.rs` (https, nur GitHub), URLs nur aus `store::release_url`/`latest_manifest_url`.
-- Die Berechtigungen sind keine Sandbox. Nie so tun, als wären sie eine, weder in der UI noch in der Doku.
+- `store.svelte.ts` loads store plugins from `.dvoix/plugins/<id>/` (`main.js` as an ES module via a blob URL) and manages `.dvoix/store.json`. The manager knows them through `plugins.loadExtra`/`unloadExtra`, not through `corePlugins`.
+- `api.ts` is the API for store plugins: the `PluginContext`, but with `mount(el, props)` instead of Svelte components, SVG text as icon, IDs prefixed with `<plugin-id>:`, and permissions (`vault:read`, `vault:write`, `editor`). If the `PluginContext` is extended, update it here and in `docs/plugins/README.md`.
+- New permission: add it to `PERMISSIONS` in `crates/dvoix-core/src/store.rs`, to the type `PluginPermission` in `src/lib/api.ts`, to `PERMISSION_LABELS` and to the docs.
+- Downloads only through `src-tauri/src/http.rs` (https, GitHub only), URLs only from `store::release_url`/`latest_manifest_url`.
+- Permissions are not a sandbox. Never pretend they are one, neither in the UI nor in the docs.
 
-## Regeln
+## Rules
 
-- Ein Plugin = ein Ordner `src/lib/plugins/core/<id>/` mit einer `index.ts`, die ein `Plugin` exportiert (`export const <name>Plugin: Plugin = { ... }`).
-- Eintragen in `corePlugins` in `src/lib/plugins/core/index.ts`. Die Reihenfolge dort ist die Lade- und Anzeigereihenfolge.
-- `manifest.id`: klein, `a-z0-9-`, stabil. Sie ist der Ordnername in `.dvoix/plugins/<id>/` und der Schlüssel in `core-plugins.json`. Eine bestehende id nie umbenennen, sonst verlieren Nutzer ihre Einstellungen.
-- `manifest.name` und `description` auf Deutsch, die Beschreibung ist ein Satz.
-- Ein Plugin redet mit der App **nur** über den `ctx` aus `onload`: `addPanel`, `addRibbonAction`, `addCommand`, `registerFileType`, `registerEditorExtension`, `addFileFooter`, `addPaneHeader`, `addOverlay`, `registerView`, `addExplorerEntries`, `addSettingTab`, `register`, `loadData`, `saveData`.
-- Alles, was über `ctx` registriert wird, entfernt die App beim Ausschalten automatisch. Was ein Plugin selbst startet (Listener, Timer, Abos), gibt es per `ctx.register(dispose)` ab. Nach dem Ausschalten darf nichts vom Plugin übrig bleiben.
-- Ein Plugin importiert nichts aus einem anderen Plugin-Ordner. Was mehrere brauchen, kommt nach `src/lib/` (z. B. `src/lib/tasks.ts`, `src/lib/fuzzy.ts`).
-- Braucht ein Plugin etwas, das die API nicht kann, wird die API in `types.ts` + `manager.svelte.ts` erweitert (mit automatischem Aufräumen) und im README in der Plugin-Tabelle ergänzt. Kein Umweg an der API vorbei.
-- Jedes Plugin muss sich ein- und ausschalten lassen, ohne dass die App kaputtgeht oder andere Plugins betroffen sind. Teste beides.
+- One plugin = one folder `src/lib/plugins/core/<id>/` with an `index.ts` that exports a `Plugin` (`export const <name>Plugin: Plugin = { ... }`).
+- Register it in `corePlugins` in `src/lib/plugins/core/index.ts`. The order there is the loading and display order.
+- `manifest.id`: lowercase, `a-z0-9-`, stable. It is the folder name in `.dvoix/plugins/<id>/` and the key in `core-plugins.json`. Never rename an existing id, or users lose their settings.
+- `manifest.name` and `description` in English; the description is one sentence.
+- A plugin talks to the app **only** through the `ctx` from `onload`: `addPanel`, `addRibbonAction`, `addCommand`, `registerFileType`, `registerEditorExtension`, `addFileFooter`, `addPaneHeader`, `addOverlay`, `registerView`, `addExplorerEntries`, `addSettingTab`, `register`, `loadData`, `saveData`.
+- Everything registered through `ctx` is removed automatically by the app when the plugin is turned off. What a plugin starts itself (listeners, timers, subscriptions) must be handed to `ctx.register(dispose)`. After switching off, nothing of the plugin may remain.
+- A plugin does not import anything from another plugin's folder. What several plugins need goes to `src/lib/` (e.g. `src/lib/tasks.ts`, `src/lib/fuzzy.ts`).
+- If a plugin needs something the API cannot do, extend the API in `types.ts` + `manager.svelte.ts` (with automatic cleanup) and add it to the plugin table in the README. No workarounds around the API.
+- Every plugin must be switchable on and off without breaking the app or affecting other plugins. Test both.
 
-## Einstellungen eines Plugins
+## Plugin settings
 
-Mit `pluginSettings` aus `src/lib/plugins/pluginSettings.svelte.ts`, gespeichert in `.dvoix/plugins/<id>/data.json`:
+With `pluginSettings` from `src/lib/plugins/pluginSettings.svelte.ts`, stored in `.dvoix/plugins/<id>/data.json`:
 
 ```ts
 // settings.ts
@@ -39,13 +39,13 @@ export const mySettings = pluginSettings({ showDone: false });
 await mySettings.load(ctx);
 ctx.addSettingTab({ component: MySettings });
 
-// in einer Komponente
+// in a component
 mySettings.value.showDone = true;
 mySettings.save();
 ```
 
-Jeder Schlüssel hat einen Standardwert, fehlende Schlüssel werden beim Laden ergänzt. Neue Schlüssel nur hinzufügen, bestehende nicht umbenennen oder umdeuten. Die Einstellungsseite baut auf `src/lib/components/settings/Setting.svelte` und `Toggle.svelte` auf. Vorlage: `core/tasks/` oder `core/file-explorer/`.
+Every key has a default value; missing keys are filled in on load. Only add new keys; never rename or reinterpret existing ones. The settings page is built on `src/lib/components/settings/Setting.svelte` and `Toggle.svelte`. Template: `core/tasks/` or `core/file-explorer/`.
 
-## Befehle und Tastenkürzel
+## Commands and keyboard shortcuts
 
-`ctx.addCommand({ id, name, hotkeys, run })`. Die volle id ist `<plugin-id>:<id>`. `mod: true` heißt Strg unter Windows/Linux und Cmd unter macOS. Vor einem neuen Kürzel prüfen, dass es nicht schon belegt ist (`grep -rn "hotkeys" src/lib/plugins`). Neue Kürzel kommen ins README.
+`ctx.addCommand({ id, name, hotkeys, run })`. The full id is `<plugin-id>:<id>`. `mod: true` means Ctrl on Windows/Linux and Cmd on macOS. Before adding a new shortcut, check that it is not taken yet (`grep -rn "hotkeys" src/lib/plugins`). New shortcuts go into the README.

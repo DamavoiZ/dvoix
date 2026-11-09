@@ -19,13 +19,13 @@
 </script>
 
 {#each creatableFileTypes() as type (type.id)}
-  <button class={btn} title="{type.label} erstellen" aria-label="{type.label} erstellen" onclick={() => vault.createFile(type, currentFolder())}>
+  <button class={btn} title="Create {type.label}" aria-label="Create {type.label}" onclick={() => vault.createFile(type, currentFolder())}>
     <type.icon size={16} strokeWidth={1.75} />
   </button>
 {/each}
-<button class={btn} title="Ordner erstellen" aria-label="Ordner erstellen" onclick={() => newFolder(currentFolder())}>
+<button class={btn} title="Create folder" aria-label="Create folder" onclick={() => newFolder(currentFolder())}>
   <FolderPlus size={16} strokeWidth={1.75} />
 </button>
-<button class={btn} title="Alle einklappen" aria-label="Alle einklappen" onclick={() => ui.collapseAll()}>
+<button class={btn} title="Collapse all" aria-label="Collapse all" onclick={() => ui.collapseAll()}>
   <ChevronsDownUp size={16} strokeWidth={1.75} />
 </button>

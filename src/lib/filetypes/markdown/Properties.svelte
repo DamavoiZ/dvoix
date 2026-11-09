@@ -36,7 +36,7 @@
   let error = $state("");
 
   const WIKILINK = /\[\[([^\]\n]+)\]\]/g;
-  const dateFormat = new Intl.DateTimeFormat("de-DE", { day: "numeric", month: "long", year: "numeric" });
+  const dateFormat = new Intl.DateTimeFormat("en-US", { day: "numeric", month: "long", year: "numeric" });
 
   /** Splits a text into plain parts and `[[links]]`, so links can be clicked. */
   function parts(text: string): { text: string; link?: string }[] {
@@ -110,7 +110,7 @@
     error = "";
     if (key === prop.key) return;
     if (!key || fm?.properties.some((p) => p !== prop && p.key === key)) {
-      error = key ? `„${key}“ gibt es schon.` : "";
+      error = key ? `"${key}" already exists.` : "";
       input.value = prop.key;
       return;
     }
@@ -119,7 +119,7 @@
 
   function addItem(prop: Property, input: HTMLInputElement) {
     if (!fm) return;
-    // `#idee` in the tags is stored as `idee`, the way Obsidian does it.
+    // `#idea` in the tags is stored as `idea`, the way Obsidian does it.
     const item = isTags(prop) ? input.value.trim().replace(/^#/, "") : input.value.trim();
     if (!item) return;
     input.value = "";
@@ -133,7 +133,7 @@
       return;
     }
     if (fm.properties.some((p) => p.key === key)) {
-      error = `„${key}“ gibt es schon.`;
+      error = `"${key}" already exists.`;
       return;
     }
     error = "";
@@ -151,14 +151,14 @@
 </script>
 
 {#if fm}
-  <section class="properties" aria-label="Eigenschaften">
-    <div class="mb-1 px-1.5 text-xs font-medium tracking-wide text-zinc-500 uppercase">Eigenschaften</div>
+  <section class="properties" aria-label="Properties">
+    <div class="mb-1 px-1.5 text-xs font-medium tracking-wide text-zinc-500 uppercase">Properties</div>
     {#each fm.properties as prop, i (`${i}:${prop.key}`)}
       <div class="group flex items-start gap-2 rounded py-px">
         <input
           class="{field} w-[min(10rem,35%)] shrink-0 truncate text-zinc-400"
           value={prop.key}
-          aria-label="Name der Eigenschaft"
+          aria-label="Property name"
           spellcheck="false"
           onblur={(e) => commitKey(prop, e.currentTarget)}
           onkeydown={(e) =>
@@ -192,7 +192,7 @@
                 {/if}
                 <button
                   class="rounded text-zinc-500 hover:text-zinc-200"
-                  aria-label="„{item}“ entfernen"
+                  aria-label={`Remove "${item}"`}
                   onclick={() => fm && apply(removeListItem(fm, prop, j))}
                 >
                   <X size={12} />
@@ -201,8 +201,8 @@
             {/each}
             <input
               class="{field} w-28 min-w-28 flex-1 text-sm"
-              placeholder={isTags(prop) ? "Tag hinzufügen" : "Hinzufügen"}
-              aria-label="Eintrag zu {prop.key} hinzufügen"
+              placeholder={isTags(prop) ? "Add tag" : "Add"}
+              aria-label="Add entry to {prop.key}"
               onkeydown={(e) =>
                 keys(
                   e,
@@ -217,7 +217,7 @@
           {:else if prop.kind === "raw"}
             <pre
               class="min-w-0 flex-1 overflow-x-auto px-1.5 py-0.5 font-mono text-xs text-zinc-500"
-              title="Diesen Wert in der Quelltext-Ansicht bearbeiten">{rawText(prop.value)}</pre>
+              title="Edit this value in source view">{rawText(prop.value)}</pre>
           {:else if editing === i}
             <input
               use:focus
@@ -243,7 +243,7 @@
               class="{field} w-full min-w-0 cursor-text"
               role="button"
               tabindex="0"
-              aria-label="{prop.key} bearbeiten"
+              aria-label="Edit {prop.key}"
               onclick={() => (editing = i)}
               onkeydown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
@@ -253,7 +253,7 @@
               }}
             >
               {#if prop.value === ""}
-                <span class="text-zinc-600">Leer</span>
+                <span class="text-zinc-600">Empty</span>
               {:else if prop.kind === "date"}
                 {formatDate(prop.value)}
               {:else}
@@ -266,8 +266,8 @@
 
         <button
           class="mt-1 rounded p-0.5 text-zinc-600 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 hover:text-zinc-200"
-          aria-label="Eigenschaft „{prop.key}“ entfernen"
-          title="Eigenschaft entfernen"
+          aria-label={`Remove property "${prop.key}"`}
+          title="Remove property"
           onclick={() => fm && apply(removeProperty(fm, prop))}
         >
           <X size={14} />
@@ -280,7 +280,7 @@
         use:focus
         class="{field} w-40"
         placeholder="Name"
-        aria-label="Name der neuen Eigenschaft"
+        aria-label="Name of the new property"
         spellcheck="false"
         bind:value={newKey}
         onblur={commitNewKey}
@@ -296,7 +296,7 @@
         class="mt-0.5 flex items-center gap-1 rounded px-1.5 py-0.5 text-sm text-zinc-500 hover:bg-zinc-800/60 hover:text-zinc-300"
         onclick={() => (adding = true)}
       >
-        <Plus size={14} /> Eigenschaft hinzufügen
+        <Plus size={14} /> Add property
       </button>
     {/if}
     {#if error}

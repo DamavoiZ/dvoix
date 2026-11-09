@@ -9,8 +9,8 @@ import { hidden, refresh, watch } from "./state.svelte";
 export const hiddenFilesPlugin: Plugin = {
   manifest: {
     id: "hidden-files",
-    name: "Versteckte Dateien",
-    description: "Zeigt Ordner und Dateien, deren Name mit einem Punkt beginnt (z. B. .obsidian), im Datei-Explorer an.",
+    name: "Hidden files",
+    description: "Shows folders and files whose name starts with a dot (e.g. .obsidian) in the file explorer.",
     version: "1.0.0",
     enabledByDefault: false,
   },
@@ -21,7 +21,7 @@ export const hiddenFilesPlugin: Plugin = {
     ctx.addSettingTab({ component: HiddenFilesSettings });
     ctx.addCommand({
       id: "toggle",
-      name: "Versteckte Dateien ein-/ausblenden",
+      name: "Show/hide hidden files",
       run: () => {
         hiddenSettings.value.visible = !hiddenSettings.value.visible;
         hiddenSettings.save();

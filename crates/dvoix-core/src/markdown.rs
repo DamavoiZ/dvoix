@@ -371,30 +371,30 @@ pub(crate) fn scan_inline(text: &str, tags: &mut Vec<String>, links: &mut Vec<St
 mod tests {
     use super::*;
 
-    const NOTE: &str = "---\ntitle: Projekt Alpha\nstatus: active\ntags: [Projekt, work]\ndue: 2026-12-01\n---\n# Überschrift\n\nSiehe [[Beta|die Beta]] und [Gamma](gamma.md#ziele), aber nicht [Web](https://example.com).\n\nEin #idee Tag und #2 ist keiner.\n\n```\n#kein-tag [[kein-link]]\n```\n";
+    const NOTE: &str = "---\ntitle: Project Alpha\nstatus: active\ntags: [Project, work]\ndue: 2026-12-01\n---\n# Heading\n\nSee [[Beta|the Beta]] and [Gamma](gamma.md#goals), but not [Web](https://example.com).\n\nAn #idea tag and #2 is not one.\n\n```\n#no-tag [[no-link]]\n```\n";
 
     #[test]
     fn parses_frontmatter_links_and_tags() {
         let n = parse(NOTE, "alpha");
-        assert_eq!(n.title, "Projekt Alpha");
+        assert_eq!(n.title, "Project Alpha");
         assert_eq!(n.frontmatter["status"], "active");
         assert_eq!(n.frontmatter["due"], "2026-12-01");
-        assert_eq!(n.tags, vec!["projekt", "work", "idee"]);
+        assert_eq!(n.tags, vec!["project", "work", "idea"]);
         assert_eq!(n.links, vec!["Beta", "gamma.md"]);
         assert_eq!(
             n.headings,
             vec![Heading {
                 level: 1,
-                text: "Überschrift".into()
+                text: "Heading".into()
             }]
         );
-        assert!(n.text.contains("Siehe"));
+        assert!(n.text.contains("See"));
     }
 
     #[test]
     fn title_falls_back_to_heading_then_file_name() {
-        assert_eq!(parse("# Hallo\nText", "datei").title, "Hallo");
-        assert_eq!(parse("Nur Text", "datei").title, "datei");
+        assert_eq!(parse("# Hello\nText", "file").title, "Hello");
+        assert_eq!(parse("Only text", "file").title, "file");
     }
 
     #[test]
@@ -413,16 +413,16 @@ mod tests {
 
     #[test]
     fn renders_wikilinks_as_links() {
-        let html = render_body("Siehe [[Beta]] und [[Gamma|die Gamma]].");
+        let html = render_body("See [[Beta]] and [[Gamma|the Gamma]].");
         assert!(html.contains(r##"<a class="wikilink" href="#" data-wikilink="Beta">Beta</a>"##));
-        assert!(html.contains(r#"data-wikilink="Gamma">die Gamma</a>"#));
+        assert!(html.contains(r#"data-wikilink="Gamma">the Gamma</a>"#));
     }
 
     #[test]
     fn wikilink_target_keeps_the_note_without_its_heading() {
-        let html = render_body("[[Beta#Ziele]]");
+        let html = render_body("[[Beta#goals]]");
         assert!(html.contains(r#"data-wikilink="Beta""#));
-        assert!(!html.contains("Ziele"));
+        assert!(!html.contains("goals"));
     }
 
     #[test]
@@ -448,10 +448,10 @@ mod tests {
 
     #[test]
     fn renders_frontmatter_as_properties_and_not_as_content() {
-        let note = render("---\ntitle: Projekt Alpha\nstatus: active\n---\n# Hallo");
-        assert_eq!(note.frontmatter["title"], "Projekt Alpha");
+        let note = render("---\ntitle: Project Alpha\nstatus: active\n---\n# Hello");
+        assert_eq!(note.frontmatter["title"], "Project Alpha");
         assert_eq!(note.frontmatter["status"], "active");
-        assert!(note.html.contains("<h1>Hallo</h1>"));
+        assert!(note.html.contains("<h1>Hello</h1>"));
         assert!(!note.html.contains("status"));
     }
 }

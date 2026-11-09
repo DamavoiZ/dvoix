@@ -4,7 +4,7 @@ import MarkdownView from "./MarkdownView.svelte";
 
 export const markdownType: FileType = {
   id: "markdown",
-  label: "Notiz",
+  label: "Note",
   extensions: ["md", "markdown"],
   icon: FileText,
   view: MarkdownView,

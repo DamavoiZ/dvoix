@@ -6,8 +6,8 @@ import { linkSuggestExtensions } from "./editor";
 export const linkSuggestPlugin: Plugin = {
   manifest: {
     id: "link-suggest",
-    name: "Link-Vorschläge",
-    description: "Schlägt beim Tippen von [[ passende Notizen und Dateien vor.",
+    name: "Link suggestions",
+    description: "Suggests matching notes and files when you type [[.",
     version: "1.0.0",
   },
   icon: Link,

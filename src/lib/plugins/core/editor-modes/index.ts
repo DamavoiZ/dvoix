@@ -9,13 +9,13 @@ function setMode(mode: ViewMode) {
   settings.saveApp();
 }
 
-/** Strg+E switches between reading and editing, like in Obsidian. */
+/** Ctrl+E switches between reading and editing, like in Obsidian. */
 function toggleRead() {
   const current = settings.app.viewMode;
   setMode(current === "edit" ? "read" : "edit");
 }
 
-/** Strg+Umschalt+E switches between the source and the live preview. */
+/** Ctrl+Shift+E switches between the source and the live preview. */
 function toggleSource() {
   const current = settings.app.viewMode;
   setMode(current === "source" ? "edit" : "source");
@@ -25,22 +25,22 @@ export const editorModesPlugin: Plugin = {
   manifest: {
     id: "editor-modes",
     name: "Ansichten",
-    description: "Notizen lesen, in der Live-Vorschau bearbeiten oder als Quelltext öffnen.",
+    description: "Read notes, edit them in the live preview or open them as source.",
     version: "1.0.0",
   },
   onload(ctx) {
-    ctx.addCommand({ id: "read", name: "Ansicht: Lesen", run: () => setMode("read") });
-    ctx.addCommand({ id: "edit", name: "Ansicht: Bearbeiten", run: () => setMode("edit") });
-    ctx.addCommand({ id: "source", name: "Ansicht: Quelltext", run: () => setMode("source") });
+    ctx.addCommand({ id: "read", name: "View: Read", run: () => setMode("read") });
+    ctx.addCommand({ id: "edit", name: "View: Edit", run: () => setMode("edit") });
+    ctx.addCommand({ id: "source", name: "View: Source", run: () => setMode("source") });
     ctx.addCommand({
       id: "toggle-read",
-      name: "Ansicht umschalten (Lesen/Bearbeiten)",
+      name: "Toggle view (Read/Edit)",
       hotkeys: [{ mod: true, key: "e" }],
       run: toggleRead,
     });
     ctx.addCommand({
       id: "toggle-source",
-      name: "Ansicht umschalten (Quelltext/Bearbeiten)",
+      name: "Toggle view (Source/Edit)",
       hotkeys: [{ mod: true, shift: true, key: "e" }],
       run: toggleSource,
     });

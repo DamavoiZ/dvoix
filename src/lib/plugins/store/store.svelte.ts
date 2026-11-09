@@ -70,7 +70,7 @@ function wrap(installed: InstalledPlugin): Plugin {
     icon: iconComponent(undefined),
     async onload(ctx) {
       const code = await api.readConfig(`plugins/${m.id}/main.js`);
-      if (code === null) throw new Error("main.js fehlt");
+      if (code === null) throw new Error("main.js is missing");
       if (installed.hasStyles) {
         const css = await api.readConfig(`plugins/${m.id}/styles.css`);
         if (css) {
@@ -84,7 +84,7 @@ function wrap(installed: InstalledPlugin): Plugin {
       const mod = (await importModule(m.id, code)) as { default?: PluginModule };
       const def = mod.default;
       if (!def || typeof def.onload !== "function") {
-        throw new Error("main.js muss ein Objekt mit onload() als default exportieren");
+        throw new Error("main.js must export an object with onload() as its default export");
       }
       instance = def;
       await def.onload(createApi(ctx, m));
@@ -107,7 +107,7 @@ class PluginStore {
   loadingRegistry = $state(false);
   /** Newest release manifest per plugin id, from `checkUpdates` or the details. */
   latest = $state<Record<string, StoreManifest>>({});
-  /** What is running for a plugin right now, e.g. "Installiere …". */
+  /** What is running for a plugin right now, e.g. "Installing …". */
   busy = $state<Record<string, string>>({});
   /** Last error of an install, update or uninstall, by plugin id. */
   errors = $state<Record<string, string>>({});
@@ -244,7 +244,7 @@ class PluginStore {
 
   async install(entry: RegistryEntry) {
     if (entry.channel === "community" && !this.file.allowCommunity) return;
-    await this.run(entry.id, "Wird installiert …", async () => {
+    await this.run(entry.id, "Installing …", async () => {
       await api.storeInstall(entry.repo, entry.id);
       this.file.plugins[entry.id] = { enabled: true, repo: entry.repo, channel: entry.channel };
       this.save();
@@ -258,7 +258,7 @@ class PluginStore {
   async update(id: string) {
     const entry = this.entryFor(id);
     if (!entry) return;
-    await this.run(id, "Wird aktualisiert …", async () => {
+    await this.run(id, "Updating …", async () => {
       await plugins.unloadExtra(id);
       try {
         await api.storeInstall(entry.repo, id);
@@ -275,7 +275,7 @@ class PluginStore {
   }
 
   async uninstall(id: string) {
-    await this.run(id, "Wird entfernt …", async () => {
+    await this.run(id, "Removing …", async () => {
       await plugins.unloadExtra(id);
       await api.storeUninstall(id);
       const { [id]: _, ...rest } = this.file.plugins;
@@ -310,7 +310,7 @@ class PluginStore {
     const id = p.manifest.id;
     if (plugins.isLoaded(id) || plugins.extra.some((x) => x.manifest.id === id)) return;
     if (this.clashesWithCore(id)) {
-      this.errors = { ...this.errors, [id]: `Die ID „${id}“ gehört schon zu einem Core-Plugin` };
+      this.errors = { ...this.errors, [id]: `The ID "${id}" already belongs to a core plugin` };
       return;
     }
     await plugins.loadExtra(wrap(p)).catch((e) => {

@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Quick switcher (Strg+O): fuzzy search over all files of the vault, like Obsidian's.
+  // Quick switcher (Ctrl+O): fuzzy search over all files of the vault, like Obsidian's.
   import { FilePlus } from "@lucide/svelte";
   import { fileTypeFor } from "../../../filetypes";
   import { fuzzyMatch, highlight } from "../../../fuzzy";
@@ -95,11 +95,11 @@
   <div
     class="fixed top-[12vh] left-1/2 z-50 flex max-h-[70vh] w-[min(640px,92vw)] -translate-x-1/2 flex-col overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl"
     role="dialog"
-    aria-label="Schnellöffner"
+    aria-label="Quick switcher"
   >
     <input
       class="border-b border-zinc-800 bg-transparent px-4 py-3 text-[15px] text-zinc-100 outline-none placeholder:text-zinc-600"
-      placeholder="Datei suchen …"
+      placeholder="Find a file …"
       use:focus
       bind:value={query}
       onkeydown={keydown}
@@ -146,19 +146,19 @@
           onclick={(e) => choose(items.length, e.ctrlKey || e.metaKey)}
         >
           <FilePlus size={15} strokeWidth={1.75} class="text-zinc-500" />
-          Notiz „{query.trim()}“ erstellen
+          Create note "{query.trim()}"
         </button>
       {/if}
       {#if !count}
-        <p class="px-3 py-2 text-sm text-zinc-500">Keine Dateien im Vault.</p>
+        <p class="px-3 py-2 text-sm text-zinc-500">No files in the vault.</p>
       {/if}
     </div>
     <footer class="flex gap-4 border-t border-zinc-800 px-4 py-2 text-[11px] text-zinc-500">
-      <span><kbd>↑↓</kbd> auswählen</span>
-      <span><kbd>Enter</kbd> öffnen</span>
-      {#if vault.tabsEnabled}<span><kbd>Strg+Enter</kbd> in neuem Tab</span>{/if}
-      <span><kbd>Umschalt+Enter</kbd> neu erstellen</span>
-      <span><kbd>Esc</kbd> schließen</span>
+      <span><kbd>↑↓</kbd> to select</span>
+      <span><kbd>Enter</kbd> to open</span>
+      {#if vault.tabsEnabled}<span><kbd>Ctrl+Enter</kbd> in new tab</span>{/if}
+      <span><kbd>Shift+Enter</kbd> to create new</span>
+      <span><kbd>Esc</kbd> to close</span>
     </footer>
   </div>
 {/if}

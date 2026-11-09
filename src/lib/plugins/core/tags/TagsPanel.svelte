@@ -28,7 +28,7 @@
       #{t.tag} <span class="opacity-60">{t.count}</span>
     </button>
   {:else}
-    <p class="text-sm text-zinc-500">Noch keine Tags. Nutze <code>#tag</code> im Text oder <code>tags:</code> im Frontmatter.</p>
+    <p class="text-sm text-zinc-500">No tags yet. Use <code>#tag</code> in the text or <code>tags:</code> in the frontmatter.</p>
   {/each}
 </div>
 <div class="flex-1 overflow-y-auto px-1 pb-4">

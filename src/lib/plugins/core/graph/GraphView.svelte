@@ -191,8 +191,8 @@
       const { default: ForceGraphClass } = await import("force-graph");
       return ForceGraphClass;
     } catch (e) {
-      console.error("force-graph konnte nicht geladen werden", e);
-      importError = 'force-graph fehlt. Bitte "npm install" ausführen.';
+      console.error("force-graph could not be loaded", e);
+      importError = 'force-graph is missing. Please run "npm install".';
       return null;
     }
   }
@@ -325,23 +325,23 @@
   <div bind:this={container} class="absolute inset-0"></div>
 
   {#if error}
-    <div class="absolute inset-x-0 top-1/2 text-center text-sm text-red-300">Graph konnte nicht geladen werden: {error}</div>
+    <div class="absolute inset-x-0 top-1/2 text-center text-sm text-red-300">Graph could not be loaded: {error}</div>
   {:else if !model.nodes.length}
     <div class="pointer-events-none absolute inset-x-0 top-1/2 text-center text-sm text-zinc-500">
-      {settings.filter ? "Keine Notiz passt zum Filter." : "Noch keine Notizen im Vault."}
+      {settings.filter ? "No note matches the filter." : "No notes in the vault yet."}
     </div>
   {/if}
 
   <div class="pointer-events-none absolute bottom-2 left-3 text-xs text-zinc-600">
-    {noteCount} {noteCount === 1 ? "Notiz" : "Notizen"} · {model.edges.length} {model.edges.length === 1 ? "Verbindung" : "Verbindungen"}
+    {noteCount} {noteCount === 1 ? "note" : "notes"} · {model.edges.length} {model.edges.length === 1 ? "connection" : "connections"}
   </div>
 
   <div class="absolute top-2 right-2 flex flex-col items-end gap-2">
     <div class="flex gap-1">
       <button
         class="flex h-8 w-8 items-center justify-center rounded-md border border-zinc-800 bg-zinc-900/90 text-zinc-400 hover:text-zinc-100"
-        title="Alles zeigen"
-        aria-label="Alles zeigen"
+        title="Show all"
+        aria-label="Show all"
         onclick={() => graph?.zoomToFit(400, 40)}
       >
         <Maximize size={15} />
@@ -350,8 +350,8 @@
         class="flex h-8 w-8 items-center justify-center rounded-md border border-zinc-800 bg-zinc-900/90 hover:text-zinc-100 {panelOpen
           ? 'text-violet-300'
           : 'text-zinc-400'}"
-        title="Graph-Einstellungen"
-        aria-label="Graph-Einstellungen"
+        title="Graph settings"
+        aria-label="Graph settings"
         aria-expanded={panelOpen}
         onclick={() => (panelOpen = !panelOpen)}
       >
@@ -362,13 +362,13 @@
       <div
         class="max-h-[calc(100vh-10rem)] w-72 overflow-y-auto rounded-lg border border-zinc-800 bg-zinc-900/95 p-3 shadow-xl"
         role="dialog"
-        aria-label="Graph-Einstellungen"
+        aria-label="Graph settings"
         tabindex="-1"
         onkeydown={(e) => e.key === "Escape" && (panelOpen = false)}
       >
         <div class="mb-2 flex items-center justify-between">
           <span class="text-sm font-medium text-zinc-200">Graph</span>
-          <button class="rounded p-0.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" aria-label="Schließen" onclick={() => (panelOpen = false)}>
+          <button class="rounded p-0.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" aria-label="Close" onclick={() => (panelOpen = false)}>
             <X size={14} />
           </button>
         </div>

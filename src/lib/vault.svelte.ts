@@ -12,7 +12,7 @@ const SAVE_DELAY_MS = 400;
 const RECENT_MAX = 50;
 
 /**
- * An editor tab. `path` is null for an empty tab ("Neuer Tab") and for a tab
+ * An editor tab. `path` is null for an empty tab ("New tab") and for a tab
  * that shows a view of a plugin (e.g. the graph); then `view` is its id.
  */
 export interface Tab {
@@ -78,7 +78,7 @@ class VaultStore {
   }
 
   async pick() {
-    const selected = await openDialog({ directory: true, title: "Vault-Ordner wählen" });
+    const selected = await openDialog({ directory: true, title: "Choose vault folder" });
     if (typeof selected === "string") await this.open(selected);
   }
 
@@ -394,7 +394,7 @@ class VaultStore {
       await api.writeFile(path, content);
       if (this.openPath === path && this.content === content) this.dirty = false;
     } catch (e) {
-      this.error = `Speichern fehlgeschlagen: ${e}`;
+      this.error = `Saving failed: ${e}`;
     }
   }
 
@@ -407,13 +407,13 @@ class VaultStore {
   creatable(): FileType[] {
     return creatableFileTypes();
   }
-  /** Creates "Unbenannt.ext" (or "Unbenannt 2.ext", ...) of a file type in `folder`. */
+  /** Creates "Untitled.ext" (or "Untitled 2.ext", ...) of a file type in `folder`. */
   async createFile(type: FileType, folder = "") {
     const ext = type.extensions[0];
     const prefix = folder ? `${folder}/` : "";
     const taken = new Set(this.entries.map((e) => e.path.toLowerCase()));
-    let name = "Unbenannt";
-    for (let n = 2; taken.has(`${prefix}${name}.${ext}`.toLowerCase()); n++) name = `Unbenannt ${n}`;
+    let name = "Untitled";
+    for (let n = 2; taken.has(`${prefix}${name}.${ext}`.toLowerCase()); n++) name = `Untitled ${n}`;
     // New files get their own tab, unless the active tab is empty anyway.
     await this.createFileAt(`${prefix}${name}.${ext}`, type.template?.(name) ?? "", { newTab: !!this.openPath });
   }
@@ -432,8 +432,8 @@ class VaultStore {
   async createFolder(parent = "") {
     const prefix = parent ? `${parent}/` : "";
     const taken = new Set(this.entries.map((e) => e.path.toLowerCase()));
-    let name = "Neuer Ordner";
-    for (let n = 2; taken.has(`${prefix}${name}`.toLowerCase()); n++) name = `Neuer Ordner ${n}`;
+    let name = "New folder";
+    for (let n = 2; taken.has(`${prefix}${name}`.toLowerCase()); n++) name = `New folder ${n}`;
     try {
       await api.createFolder(`${prefix}${name}`);
       if (parent) ui.reveal(`${prefix}${name}`);

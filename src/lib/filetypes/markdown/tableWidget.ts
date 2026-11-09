@@ -187,7 +187,7 @@ class TableEditor {
     this.dom.className = "cm-lp-table-wrap";
     this.clip = document.createElement("textarea");
     this.clip.className = "cm-lp-table-clip";
-    this.clip.setAttribute("aria-label", "Ausgewählte Zellen");
+    this.clip.setAttribute("aria-label", "Selected cells");
     this.clip.tabIndex = -1;
     this.dom.addEventListener("focusin", (e) => this.onFocusIn(e));
     this.dom.addEventListener("focusout", (e) => this.onFocusOut(e));
@@ -228,7 +228,7 @@ class TableEditor {
       const grip = document.createElement("th");
       grip.className = "cm-lp-col-grip";
       grip.dataset.col = String(c);
-      grip.title = "Spalte auswählen, zum Verschieben ziehen";
+      grip.title = "Select column, drag to move";
       gripRow.append(grip);
       this.colGrips.push(grip);
     }
@@ -240,7 +240,7 @@ class TableEditor {
       const grip = document.createElement("td");
       grip.className = "cm-lp-row-grip";
       grip.dataset.row = String(r);
-      grip.title = r === 0 ? "Kopfzeile auswählen" : "Zeile auswählen, zum Verschieben ziehen";
+      grip.title = r === 0 ? "Select header row" : "Select row, drag to move";
       tr.append(grip);
       this.rowGrips.push(grip);
       const row: HTMLElement[] = [];
@@ -267,14 +267,14 @@ class TableEditor {
 
     const addRow = document.createElement("button");
     addRow.className = "cm-lp-table-add cm-lp-table-add-row";
-    addRow.title = "Zeile hinzufügen";
-    addRow.setAttribute("aria-label", "Zeile hinzufügen");
+    addRow.title = "Add row";
+    addRow.setAttribute("aria-label", "Add row");
     addRow.textContent = "+";
     addRow.addEventListener("click", () => this.addRow(this.table.rows.length, 0));
     const addCol = document.createElement("button");
     addCol.className = "cm-lp-table-add cm-lp-table-add-col";
-    addCol.title = "Spalte hinzufügen";
-    addCol.setAttribute("aria-label", "Spalte hinzufügen");
+    addCol.title = "Add column";
+    addCol.setAttribute("aria-label", "Add column");
     addCol.textContent = "+";
     addCol.addEventListener("click", () => this.addColumn(this.table.columns, 0));
 
@@ -478,7 +478,7 @@ class TableEditor {
         done();
         this.select({ ar: 0, ac: 0, hr: this.lastRow, hc: this.table.columns - 1 });
       }
-      // Strg+C, X, V: the browser fires copy, cut and paste on the hidden field.
+      // Ctrl+C, X, V: the browser fires copy, cut and paste on the hidden field.
       return;
     }
     switch (key) {
@@ -595,7 +595,7 @@ class TableEditor {
   private onMouseDown(event: MouseEvent): void {
     if (event.button !== 0) return;
     const target = event.target as HTMLElement;
-    // Strg/Cmd + click on a [[link]] in a cell opens it, like in the text.
+    // Ctrl/Cmd + click on a [[link]] in a cell opens it, like in the text.
     const link = target.closest<HTMLElement>(".cm-wikilink");
     if (link?.dataset.target && (event.ctrlKey || event.metaKey)) {
       event.preventDefault();
@@ -905,7 +905,7 @@ class TableEditor {
     }
   }
 
-  /** Strg+B / Strg+I in a cell: around the selected text, or the whole cell when nothing is selected. */
+  /** Ctrl+B / Ctrl+I in a cell: around the selected text, or the whole cell when nothing is selected. */
   private formatInCell(el: HTMLElement, r: number, c: number, mark: "**" | "*"): void {
     const selection = el.ownerDocument.getSelection();
     const text = selection && !selection.isCollapsed && el.contains(selection.anchorNode) ? selection.toString() : "";
@@ -929,34 +929,34 @@ class TableEditor {
     const many = r0 !== r1 || c0 !== c1;
     const items: MenuEntry[] = [];
     // A new row above the header would turn the header into a body row.
-    if (r0 > 0) items.push({ label: "Zeile darüber einfügen", action: () => this.addRow(r0, c0) });
-    items.push({ label: "Zeile darunter einfügen", action: () => this.addRow(r1 + 1, c0) });
-    items.push({ label: "Spalte links einfügen", action: () => this.addColumn(c0, r0) });
-    items.push({ label: "Spalte rechts einfügen", action: () => this.addColumn(c1 + 1, r0) });
+    if (r0 > 0) items.push({ label: "Insert row above", action: () => this.addRow(r0, c0) });
+    items.push({ label: "Insert row below", action: () => this.addRow(r1 + 1, c0) });
+    items.push({ label: "Insert column left", action: () => this.addColumn(c0, r0) });
+    items.push({ label: "Insert column right", action: () => this.addColumn(c1 + 1, r0) });
     items.push("separator");
     const columns = Array.from({ length: c1 - c0 + 1 }, (_, i) => c0 + i);
-    const label = columns.length > 1 ? "Spalten" : "Spalte";
-    items.push({ label: `${label} links ausrichten`, action: () => this.apply(setAlign(this.table, columns, "left")) });
-    items.push({ label: `${label} zentrieren`, action: () => this.apply(setAlign(this.table, columns, "center")) });
-    items.push({ label: `${label} rechts ausrichten`, action: () => this.apply(setAlign(this.table, columns, "right")) });
+    const label = columns.length > 1 ? "Columns" : "Column";
+    items.push({ label: `Align ${label.toLowerCase()} left`, action: () => this.apply(setAlign(this.table, columns, "left")) });
+    items.push({ label: `Center ${label.toLowerCase()}`, action: () => this.apply(setAlign(this.table, columns, "center")) });
+    items.push({ label: `Align ${label.toLowerCase()} right`, action: () => this.apply(setAlign(this.table, columns, "right")) });
     if (many) {
       items.push("separator");
       items.push({
-        label: "Fett",
+        label: "Bold",
         action: () => {
           this.select({ ar: r0, ac: c0, hr: r1, hc: c1 });
           this.formatSelected("**");
         },
       });
       items.push({
-        label: "Kursiv",
+        label: "Italic",
         action: () => {
           this.select({ ar: r0, ac: c0, hr: r1, hc: c1 });
           this.formatSelected("*");
         },
       });
       items.push({
-        label: "Inhalt löschen",
+        label: "Clear contents",
         action: () => {
           this.select({ ar: r0, ac: c0, hr: r1, hc: c1 });
           this.clearSelected();
@@ -969,11 +969,11 @@ class TableEditor {
     if (deleteRows || deleteCols) items.push("separator");
     if (deleteRows) {
       const n = r1 - bodyFrom + 1;
-      items.push({ label: n > 1 ? `${n} Zeilen löschen` : "Zeile löschen", danger: true, action: () => this.removeRows(bodyFrom, r1, c0) });
+      items.push({ label: n > 1 ? `Delete ${n} rows` : "Delete row", danger: true, action: () => this.removeRows(bodyFrom, r1, c0) });
     }
     if (deleteCols) {
       const n = c1 - c0 + 1;
-      items.push({ label: n > 1 ? `${n} Spalten löschen` : "Spalte löschen", danger: true, action: () => this.removeColumns(c0, c1, r0) });
+      items.push({ label: n > 1 ? `Delete ${n} columns` : "Delete column", danger: true, action: () => this.removeColumns(c0, c1, r0) });
     }
     contextMenu.show(event, items);
   }

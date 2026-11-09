@@ -7,33 +7,33 @@ const icon =
 
 export default {
   async onload(dvoix) {
-    const settings = await dvoix.loadData({ greeting: "Hallo" });
+    const settings = await dvoix.loadData({ greeting: "Hello" });
 
     const countNotes = () => dvoix.vault.list().filter((e) => !e.isDir && e.extension === "md").length;
 
     dvoix.addPanel({
       id: "panel",
-      label: "Hallo Welt",
+      label: "Hello World",
       icon,
       mount(el) {
         const p = document.createElement("p");
         p.className = "hello-plugin";
-        p.textContent = `${settings.greeting}! Dein Vault hat ${countNotes()} Notizen.`;
+        p.textContent = `${settings.greeting}! Your vault has ${countNotes()} notes.`;
         el.append(p);
       },
     });
 
     dvoix.addCommand({
       id: "count",
-      name: "Hallo Welt: Notizen zählen",
-      run: () => alert(`${settings.greeting}! ${countNotes()} Notizen.`),
+      name: "Hello World: count notes",
+      run: () => alert(`${settings.greeting}! ${countNotes()} notes.`),
     });
 
     dvoix.addSettingTab({
       mount(el) {
         const label = document.createElement("label");
         label.className = "hello-plugin";
-        label.textContent = "Begrüßung ";
+        label.textContent = "Greeting ";
         const input = document.createElement("input");
         input.value = settings.greeting;
         input.onchange = () => {

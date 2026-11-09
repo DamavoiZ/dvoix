@@ -28,7 +28,7 @@ fn allowed(url: &str) -> bool {
 /// files like `styles.css` can be told apart from network errors.
 pub fn get_text(url: &str) -> Result<Option<String>, String> {
     if !allowed(url) {
-        return Err(format!("Download nicht erlaubt: {url}"));
+        return Err(format!("Download not allowed: {url}"));
     }
     match agent().get(url).call() {
         Ok(mut res) => res
@@ -37,9 +37,9 @@ pub fn get_text(url: &str) -> Result<Option<String>, String> {
             .limit(MAX_FILE_BYTES)
             .read_to_string()
             .map(Some)
-            .map_err(|e| format!("Download von {url} fehlgeschlagen: {e}")),
+            .map_err(|e| format!("Download from {url} failed: {e}")),
         Err(ureq::Error::StatusCode(404)) => Ok(None),
-        Err(e) => Err(format!("Download von {url} fehlgeschlagen: {e}")),
+        Err(e) => Err(format!("Download from {url} failed: {e}")),
     }
 }
 

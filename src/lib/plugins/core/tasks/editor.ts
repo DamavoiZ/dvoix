@@ -12,7 +12,7 @@ import {
 } from "@codemirror/view";
 import { syntaxTree } from "@codemirror/language";
 
-/** Due dates and priorities inside tasks (`📅 2026-12-01`, `due:2026-12-01`, `!hoch`, `⏫`). */
+/** Due dates and priorities inside tasks (`📅 2026-12-01`, `due:2026-12-01`, `!high`, `⏫`). */
 const TASK_META = /(?:📅|🗓️?)\s?\d{4}-\d{2}-\d{2}|\bdue:\d{4}-\d{2}-\d{2}|(?<=\s)!(?:hoch|mittel|niedrig|high|medium|low)\b|[⏫🔼🔽🔺⏬]/gu;
 
 const taskMeta = ViewPlugin.fromClass(
@@ -44,7 +44,7 @@ class CheckboxWidget extends WidgetType {
     box.type = "checkbox";
     box.className = "cm-task-checkbox";
     box.checked = this.checked;
-    box.setAttribute("aria-label", this.checked ? "Als offen markieren" : "Als erledigt markieren");
+    box.setAttribute("aria-label", this.checked ? "Mark as open" : "Mark as done");
     return box;
   }
   ignoreEvent() {

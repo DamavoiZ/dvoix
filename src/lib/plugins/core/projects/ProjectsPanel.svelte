@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Notes with `type: projekt` in their frontmatter, with status, due date and task progress.
+  // Notes with `type: project` in their frontmatter, with status, due date and task progress.
   import { Plus } from "@lucide/svelte";
   import { api, type ProjectStatus, type ProjectSummary } from "../../../api";
   import { vault } from "../../../vault.svelte";
@@ -36,7 +36,7 @@
         if (s) return s;
         const ad = a.due ?? "9999";
         const bd = b.due ?? "9999";
-        return ad < bd ? -1 : ad > bd ? 1 : a.title.localeCompare(b.title, "de");
+        return ad < bd ? -1 : ad > bd ? 1 : a.title.localeCompare(b.title, "en");
       }),
   );
 
@@ -48,15 +48,15 @@
     return b === "overdue" ? "text-red-400" : b === "today" ? "text-violet-300" : "text-zinc-400";
   }
 
-  /** Creates "Neues Projekt.md" (in `Projekte/` if that folder exists) with the project frontmatter. */
+  /** Creates "New project.md" (in `Projects/` if that folder exists) with the project frontmatter. */
   async function createProject() {
-    const folder = vault.entries.find((e) => e.isDir && /^projekte?$/i.test(e.path))?.path;
+    const folder = vault.entries.find((e) => e.isDir && /^(projects?|projekte?)$/i.test(e.path))?.path;
     const prefix = folder ? `${folder}/` : "";
     const taken = new Set(vault.entries.map((e) => e.path.toLowerCase()));
-    let name = "Neues Projekt";
-    for (let n = 2; taken.has(`${prefix}${name}.md`.toLowerCase()); n++) name = `Neues Projekt ${n}`;
+    let name = "New project";
+    for (let n = 2; taken.has(`${prefix}${name}.md`.toLowerCase()); n++) name = `New project ${n}`;
     const path = `${prefix}${name}.md`;
-    const content = `---\ntype: projekt\nstatus: aktiv\nstart: ${isoDate(new Date())}\ndue:\npriority:\narea:\n---\n# ${name}\n\n## Ziel\n\n\n## Aufgaben\n\n- [ ] \n`;
+    const content = `---\ntype: project\nstatus: active\nstart: ${isoDate(new Date())}\ndue:\npriority:\narea:\n---\n# ${name}\n\n## Goal\n\n\n## Tasks\n\n- [ ] \n`;
     try {
       await vault.flush();
       await api.createFile(path, content);
@@ -75,12 +75,12 @@
   <div class="flex rounded-md bg-zinc-800/60 p-0.5" role="group" aria-label="Anzeigen">
     <button class={segment(show === "running")} onclick={() => (show = "running")}>Laufend {runningCount}</button>
     <button class={segment(show === "closed")} onclick={() => (show = "closed")}>Abgeschlossen</button>
-    <button class={segment(show === "all")} onclick={() => (show = "all")}>Alle</button>
+    <button class={segment(show === "all")} onclick={() => (show = "all")}>All</button>
   </div>
   <button
     class="flex h-6 w-6 items-center justify-center rounded text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
-    title="Neues Projekt"
-    aria-label="Neues Projekt"
+    title="New project"
+    aria-label="New project"
     onclick={createProject}
   >
     <Plus size={16} />
@@ -101,9 +101,9 @@
       <div class="mt-1 flex flex-wrap gap-x-2 text-xs text-zinc-500">
         {#if p.area}<span>{p.area}</span>{/if}
         {#if p.priority}<span class={priorityClass[p.priority]}>{priorityLabels[p.priority]}</span>{/if}
-        {#if p.due}<span class={dueTone(p.due, p.status)} title="Fällig am {p.due}">fällig {formatDue(p.due, now)}</span>{/if}
+        {#if p.due}<span class={dueTone(p.due, p.status)} title="Due on {p.due}">due {formatDue(p.due, now)}</span>{/if}
         {#if p.nextDue && !closed(p.status)}
-          <span class={dueTone(p.nextDue, p.status)} title="Nächste offene Aufgabe">nächste Aufgabe {formatDue(p.nextDue, now)}</span>
+          <span class={dueTone(p.nextDue, p.status)} title="Next open task">next task {formatDue(p.nextDue, now)}</span>
         {/if}
       </div>
       {#if total}
@@ -119,16 +119,16 @@
     {#if loaded}
       <div class="space-y-2 px-1 text-sm text-zinc-500">
         {#if projects.length}
-          <p>Keine Projekte in dieser Ansicht.</p>
+          <p>No projects in this view.</p>
         {:else}
-          <p>Noch keine Projekte. Ein Projekt ist eine Notiz mit diesem Frontmatter:</p>
+          <p>No projects yet. A project is a note with this frontmatter:</p>
           <pre class="rounded bg-zinc-950 p-2 text-xs text-zinc-300">---
-type: projekt
-status: aktiv
+type: project
+status: active
 due: 2026-12-01
 ---</pre>
-          <p class="text-xs">Status: aktiv, wartend, idee, erledigt, abgebrochen. Die Checkboxen in der Notiz sind die Aufgaben des Projekts.</p>
-          <button class="text-xs text-violet-300 hover:underline" onclick={createProject}>Neues Projekt anlegen</button>
+          <p class="text-xs">Status: active, waiting, idea, done, cancelled. The checkboxes in the note are the project's tasks.</p>
+          <button class="text-xs text-violet-300 hover:underline" onclick={createProject}>Create new project</button>
         {/if}
       </div>
     {/if}

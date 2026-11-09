@@ -136,7 +136,7 @@ pub fn valid_version(v: &str) -> bool {
 /// failing the whole list, and `official` only sticks for [`OFFICIAL_OWNER`].
 pub fn parse_registry(text: &str) -> Result<Vec<RegistryEntry>> {
     let file: RegistryFile = serde_json::from_str(text)
-        .map_err(|e| invalid(format!("Plugin-Liste ist kein gültiges JSON: {e}")))?;
+        .map_err(|e| invalid(format!("Plugin list is not valid JSON: {e}")))?;
     let mut out: Vec<RegistryEntry> = Vec::new();
     for value in file.plugins {
         let Ok(mut entry) = serde_json::from_value::<RegistryEntry>(value) else {
@@ -158,24 +158,24 @@ pub fn parse_registry(text: &str) -> Result<Vec<RegistryEntry>> {
 /// Reads and checks a `manifest.json`.
 pub fn parse_manifest(text: &str) -> Result<PluginManifest> {
     let m: PluginManifest = serde_json::from_str(text)
-        .map_err(|e| invalid(format!("manifest.json ist ungültig: {e}")))?;
+        .map_err(|e| invalid(format!("manifest.json is invalid: {e}")))?;
     if !valid_id(&m.id) {
-        return Err(invalid(format!("Ungültige Plugin-ID: {}", m.id)));
+        return Err(invalid(format!("Invalid plugin ID: {}", m.id)));
     }
     if !valid_version(&m.version) {
-        return Err(invalid(format!("Ungültige Version: {}", m.version)));
+        return Err(invalid(format!("Invalid version: {}", m.version)));
     }
     if let Some(min) = &m.min_app_version
         && !valid_version(min)
     {
-        return Err(invalid(format!("Ungültige minAppVersion: {min}")));
+        return Err(invalid(format!("Invalid minAppVersion: {min}")));
     }
     if let Some(p) = m
         .permissions
         .iter()
         .find(|p| !PERMISSIONS.contains(&p.as_str()))
     {
-        return Err(invalid(format!("Unbekannte Berechtigung: {p}")));
+        return Err(invalid(format!("Unknown permission: {p}")));
     }
     Ok(m)
 }
@@ -183,10 +183,10 @@ pub fn parse_manifest(text: &str) -> Result<PluginManifest> {
 /// Download URL of a file of a release (`tag` = the version).
 pub fn release_url(repo: &str, tag: &str, file: &str) -> Result<String> {
     if !valid_repo(repo) {
-        return Err(invalid(format!("Ungültiges Repository: {repo}")));
+        return Err(invalid(format!("Invalid repository: {repo}")));
     }
     if !valid_version(tag) {
-        return Err(invalid(format!("Ungültige Version: {tag}")));
+        return Err(invalid(format!("Invalid version: {tag}")));
     }
     Ok(format!(
         "https://github.com/{repo}/releases/download/{tag}/{file}"
@@ -196,7 +196,7 @@ pub fn release_url(repo: &str, tag: &str, file: &str) -> Result<String> {
 /// URL of the `manifest.json` of the newest release.
 pub fn latest_manifest_url(repo: &str) -> Result<String> {
     if !valid_repo(repo) {
-        return Err(invalid(format!("Ungültiges Repository: {repo}")));
+        return Err(invalid(format!("Invalid repository: {repo}")));
     }
     Ok(format!(
         "https://github.com/{repo}/releases/latest/download/{MANIFEST_FILE}"
@@ -255,7 +255,7 @@ pub fn install(vault: &Vault, expected_id: &str, files: &PluginFiles) -> Result<
     let manifest = parse_manifest(&files.manifest)?;
     if manifest.id != expected_id {
         return Err(invalid(format!(
-            "Das Plugin heißt „{}“, erwartet war „{expected_id}“",
+            "The plugin is called \"{}\", but \"{expected_id}\" was expected",
             manifest.id
         )));
     }
@@ -272,7 +272,7 @@ pub fn install(vault: &Vault, expected_id: &str, files: &PluginFiles) -> Result<
 /// Removes the plugin's code. Its `data.json` stays, like a setting does.
 pub fn uninstall(vault: &Vault, id: &str) -> Result<()> {
     if !valid_id(id) {
-        return Err(invalid(format!("Ungültige Plugin-ID: {id}")));
+        return Err(invalid(format!("Invalid plugin ID: {id}")));
     }
     // Manifest first: if something below fails, the rest is no plugin anymore.
     for name in [MANIFEST_FILE, MAIN_FILE, STYLES_FILE] {

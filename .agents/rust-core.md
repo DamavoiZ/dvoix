@@ -1,38 +1,38 @@
-# Rust-Kern und Tauri-Befehle
+# Rust core and Tauri commands
 
-## Aufteilung
+## Split
 
-- `crates/dvoix-core/` enthält die Logik und kennt Tauri nicht. Alles, was sich ohne Fenster testen lässt, gehört hierhin.
-- `src-tauri/` ist nur die Hülle: hält den offenen Vault (`AppState`/`Workspace` in `lib.rs`), verbindet Watcher und Index und stellt Befehle bereit (`commands.rs`). Dort keine Fachlogik.
+- `crates/dvoix-core/` holds the logic and does not know Tauri. Everything that can be tested without a window belongs here.
+- `src-tauri/` is only the shell: it holds the open vault (`AppState`/`Workspace` in `lib.rs`), connects watcher and index, and provides commands (`commands.rs`). No domain logic there.
 
-## Regeln im Kern
+## Rules in the core
 
-- Jeder Dateizugriff geht über `Vault` (`vault.rs`). Pfade kommen vault-relativ mit `/` rein und werden mit `Vault::resolve` geprüft. Nie selbst Pfade zusammenbauen.
-- Git sitzt in `git.rs` und ruft das `git`-Programm des Systems auf (kein zusätzlicher Rust-Baustein). Das Arbeitsverzeichnis ist immer `Vault::root()`, nie ein Pfad aus dem Frontend.
-- Schreiben nur über `Vault::write` (atomar) bzw. `create`, `rename`, `trash`. Löschen heißt in `.trash/` verschieben, nie endgültig löschen.
-- `.dvoix/`-Dateien über `read_config`/`write_config`/`config_path`, nicht über `write`.
-- Ordner und Dateien, die mit `.` beginnen, werden nie indexiert und stehen nicht in `Vault::list` (`Vault::is_ignored`, `index::is_indexable`). Das bleibt so. Anzeigen darf sie nur das Plugin „Versteckte Dateien“ über `Vault::list_hidden`. Der Watcher meldet sie mit `hidden: true` und verwirft `.git`/`.dvoix` ganz.
-- Fehler über `crate::Error` und `crate::Result`. Kein `unwrap()`/`expect()` außerhalb von Tests und dem App-Start.
-- Änderungen an Dateien sind minimal: `tasks::set_done` ändert genau eine Zeile. Neue Funktionen, die Notizen ändern, arbeiten genauso.
-- Neue Logik bekommt Tests im selben Modul (`#[cfg(test)] mod tests`). Für Dateisystem-Tests `tempfile::tempdir()`.
+- Every file access goes through `Vault` (`vault.rs`). Paths come in vault-relative with `/` and are checked with `Vault::resolve`. Never build paths yourself.
+- Git lives in `git.rs` and calls the system's `git` program (no extra Rust component). The working directory is always `Vault::root()`, never a path from the frontend.
+- Write only through `Vault::write` (atomic), or `create`, `rename`, `trash`. Deleting means moving to `.trash/`, never deleting for good.
+- `.dvoix/` files through `read_config`/`write_config`/`config_path`, not through `write`.
+- Folders and files starting with `.` are never indexed and never appear in `Vault::list` (`Vault::is_ignored`, `index::is_indexable`). This stays so. Only the "Hidden files" plugin may show them, via `Vault::list_hidden`. The watcher reports them with `hidden: true` and drops `.git`/`.dvoix` entirely.
+- Errors via `crate::Error` and `crate::Result`. No `unwrap()`/`expect()` outside tests and the app start.
+- Changes to files are minimal: `tasks::set_done` changes exactly one line. New functions that change notes work the same way.
+- New logic gets tests in the same module (`#[cfg(test)] mod tests`). For filesystem tests use `tempfile::tempdir()`.
 
 ## Index (`index.rs`)
 
-- `index.sqlite` ist nur Cache. Er muss sich jederzeit mit `rebuild` vollständig aus den Dateien erzeugen lassen.
-- Ändert sich das Schema, `SCHEMA_VERSION` erhöhen. Die Migration löscht dann die Tabellen und baut neu auf. Keine Daten, die nicht aus Dateien kommen, im Index speichern.
-- Frontmatter landet als JSON im Index und ist über `notes_where(key, value)` abfragbar.
+- `index.sqlite` is only a cache. It must always be fully rebuildable from the files with `rebuild`.
+- If the schema changes, raise `SCHEMA_VERSION`. The migration then drops the tables and rebuilds. Do not store data in the index that does not come from files.
+- Frontmatter lands in the index as JSON and can be queried with `notes_where(key, value)`.
 
-## Neuer Tauri-Befehl
+## New Tauri command
 
-1. Funktion in `src-tauri/src/commands.rs` mit `#[tauri::command]`, Rückgabe `CmdResult<T>`, Zugriff auf den Vault über `with_ws`. Nach Schreibzugriffen `reindex(ws, &path)` aufrufen.
-2. In `tauri::generate_handler![...]` in `src-tauri/src/lib.rs` eintragen.
-3. Typisierten Wrapper in `src/lib/api.ts` ergänzen. Rust-Structs mit `#[serde(rename_all = "camelCase")]`, die TS-Interfaces spiegeln sie genau.
-4. Fehlermeldungen an Nutzer auf Deutsch (wie „Kein Vault geöffnet“).
-5. Braucht der Befehl neue Rechte, `src-tauri/capabilities/default.json` so eng wie möglich erweitern.
+1. Function in `src-tauri/src/commands.rs` with `#[tauri::command]`, return type `CmdResult<T>`, vault access through `with_ws`. After write access, call `reindex(ws, &path)`.
+2. Add it to `tauri::generate_handler![...]` in `src-tauri/src/lib.rs`.
+3. Add a typed wrapper in `src/lib/api.ts`. Rust structs use `#[serde(rename_all = "camelCase")]`; the TS interfaces mirror them exactly.
+4. Error messages for users in English (like "No vault is open").
+5. If the command needs new permissions, extend `src-tauri/capabilities/default.json` as narrowly as possible.
 
-## Prüfen
+## Checks
 
 ```sh
 cargo test --workspace
-cargo clippy --workspace   # sollte ohne neue Warnungen durchlaufen
+cargo clippy --workspace   # should pass without new warnings
 ```

@@ -23,7 +23,7 @@ pub struct VaultChange {
     /// Vault-relative path.
     pub path: String,
     /// Inside a hidden folder or a dot-file (see `Vault::is_ignored`). Such
-    /// changes are only reported for the "Versteckte Dateien" plugin and are
+    /// changes are only reported for the "Hidden files" plugin and are
     /// never indexed.
     pub hidden: bool,
 }
@@ -114,12 +114,12 @@ mod tests {
         .unwrap();
 
         std::fs::write(dir.path().join(".dvoix").join("cache"), "x").unwrap();
-        std::fs::write(dir.path().join("neu.md"), "# Neu").unwrap();
+        std::fs::write(dir.path().join("new.md"), "# New").unwrap();
 
         let change = rx
             .recv_timeout(Duration::from_secs(5))
             .expect("no change reported");
-        assert_eq!(change.path, "neu.md");
+        assert_eq!(change.path, "new.md");
         assert!(!change.hidden);
     }
 

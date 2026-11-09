@@ -1,6 +1,6 @@
 <script lang="ts">
   // Editor tabs above the open file: click to switch, middle click or × to close,
-  // drag to reorder, "+" (Strg+T) for an empty tab.
+  // drag to reorder, "+" (Ctrl+T) for an empty tab.
   import { File, Plus, X } from "@lucide/svelte";
   import { fileTypeFor } from "../../../filetypes";
   import { contextMenu } from "../../../components/contextMenuState.svelte";
@@ -15,15 +15,15 @@
 
   function title(tab: Tab): string {
     if (tab.view) return plugins.view(tab.view)?.label ?? tab.view;
-    if (!tab.path) return "Neuer Tab";
+    if (!tab.path) return "New tab";
     const name = tab.path.split("/").pop()!;
     return fileTypeFor(tab.path)?.id === "markdown" ? name.replace(/\.md$/i, "") : name;
   }
 
   function menu(e: MouseEvent, tab: Tab) {
     contextMenu.show(e, [
-      { label: "Schließen", icon: X, action: () => void vault.closeTab(tab.id) },
-      { label: "Andere Tabs schließen", action: () => void vault.closeOtherTabs(tab.id) },
+      { label: "Close", icon: X, action: () => void vault.closeTab(tab.id) },
+      { label: "Close other tabs", action: () => void vault.closeOtherTabs(tab.id) },
     ]);
   }
 
@@ -94,8 +94,8 @@
         class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-zinc-500 hover:bg-zinc-700 hover:text-zinc-100 {active
           ? ''
           : 'opacity-0 group-hover:opacity-100'}"
-        title="Schließen (Strg+W)"
-        aria-label="Tab schließen"
+        title="Close (Ctrl+W)"
+        aria-label="Close tab"
         onclick={(e) => {
           e.stopPropagation();
           void vault.closeTab(tab.id);
@@ -107,8 +107,8 @@
   {/each}
   <button
     class="mb-1 ml-1 flex h-6 w-6 shrink-0 items-center justify-center self-center rounded text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
-    title="Neuer Tab (Strg+T)"
-    aria-label="Neuer Tab"
+    title="New tab (Ctrl+T)"
+    aria-label="New tab"
     onclick={() => vault.newTab()}
   >
     <Plus size={15} />
