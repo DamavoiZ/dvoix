@@ -42,6 +42,8 @@ export interface PanelSpec {
   component: Component;
   /** Show the label as a header above the panel (default true). */
   header?: boolean;
+  /** Buttons shown in the header row, next to the collapse button, so a panel needs no second toolbar row. */
+  actions?: Component;
   /** Position in the ribbon, lower comes first (default 100). */
   order?: number;
 }

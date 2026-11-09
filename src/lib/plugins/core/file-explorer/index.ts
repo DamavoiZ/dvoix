@@ -1,6 +1,7 @@
 import { FolderTree } from "@lucide/svelte";
 import type { Plugin } from "../../types";
 import FileExplorer from "./FileExplorer.svelte";
+import FileExplorerActions from "./FileExplorerActions.svelte";
 import FileExplorerSettings from "./FileExplorerSettings.svelte";
 import { explorerSettings } from "./settings";
 
@@ -14,7 +15,7 @@ export const fileExplorerPlugin: Plugin = {
   icon: FolderTree,
   async onload(ctx) {
     await explorerSettings.load(ctx);
-    ctx.addPanel({ id: "file-explorer", label: "Dateien", icon: FolderTree, component: FileExplorer, header: false, order: 10 });
+    ctx.addPanel({ id: "file-explorer", label: "Dateien", icon: FolderTree, component: FileExplorer, actions: FileExplorerActions, header: false, order: 10 });
     ctx.addSettingTab({ component: FileExplorerSettings });
   },
 };
