@@ -8,7 +8,7 @@
 
 ## Während der Änderung
 
-- Ein Thema pro Branch und PR. Nichts nebenbei umbauen oder umformatieren.
+- Nichts nebenbei umbauen oder umformatieren.
 - Versionen: neueste Version von Node.js, Rust, Abhängigkeiten und Actions (siehe Grundregel 6 in `AGENTS.md`).
 - Keine Geheimnisse, Tokens oder persönlichen Pfade ins Repo.
 
