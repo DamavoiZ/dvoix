@@ -7,6 +7,7 @@
 //! This crate has no dependency on Tauri so it can be tested and reused on its own.
 
 pub mod error;
+pub mod git;
 pub mod index;
 pub mod markdown;
 pub mod project;

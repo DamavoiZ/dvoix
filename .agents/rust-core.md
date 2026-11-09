@@ -8,6 +8,7 @@
 ## Regeln im Kern
 
 - Jeder Dateizugriff geht über `Vault` (`vault.rs`). Pfade kommen vault-relativ mit `/` rein und werden mit `Vault::resolve` geprüft. Nie selbst Pfade zusammenbauen.
+- Git sitzt in `git.rs` und ruft das `git`-Programm des Systems auf (kein zusätzlicher Rust-Baustein). Das Arbeitsverzeichnis ist immer `Vault::root()`, nie ein Pfad aus dem Frontend.
 - Schreiben nur über `Vault::write` (atomar) bzw. `create`, `rename`, `trash`. Löschen heißt in `.trash/` verschieben, nie endgültig löschen.
 - `.dvoix/`-Dateien über `read_config`/`write_config`/`config_path`, nicht über `write`.
 - Ordner, die mit `.` beginnen, werden nicht angezeigt und nicht indexiert (`Vault::is_ignored`). Das bleibt so.

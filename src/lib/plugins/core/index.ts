@@ -10,6 +10,7 @@ import { tasksPlugin } from "./tasks";
 import { projectsPlugin } from "./projects";
 import { canvasPlugin } from "./canvas";
 import { graphPlugin } from "./graph";
+import { gitPlugin } from "./git";
 import { quickSwitcherPlugin } from "./quick-switcher";
 import { tabsPlugin } from "./tabs";
 import { editorModesPlugin } from "./editor-modes";
@@ -23,6 +24,7 @@ export const corePlugins: Plugin[] = [
   projectsPlugin,
   canvasPlugin,
   graphPlugin,
+  gitPlugin,
   quickSwitcherPlugin,
   tabsPlugin,
   editorModesPlugin,
