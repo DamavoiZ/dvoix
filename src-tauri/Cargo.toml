@@ -1,0 +1,20 @@
+[package]
+name = "dvoix"
+description = "dvoix: notes, projects and tracking on plain files"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "dvoix_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+dvoix-core = { path = "../crates/dvoix-core" }
+serde.workspace = true
+serde_json.workspace = true
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
