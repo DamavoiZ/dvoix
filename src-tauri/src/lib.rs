@@ -47,7 +47,11 @@ impl Workspace {
             })?
         };
 
-        Ok(Self { vault, index, _watcher: watcher })
+        Ok(Self {
+            vault,
+            index,
+            _watcher: watcher,
+        })
     }
 }
 

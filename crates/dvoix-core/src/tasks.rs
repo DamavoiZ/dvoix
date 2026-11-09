@@ -108,7 +108,12 @@ fn checkbox(line: &str) -> Option<Checkbox<'_>> {
         return None;
     }
     let marker_char = line.len() - boxed.len() + 1;
-    Some(Checkbox { marker_char, state, rest, indent })
+    Some(Checkbox {
+        marker_char,
+        state,
+        rest,
+        indent,
+    })
 }
 
 fn is_date(s: &str) -> bool {
@@ -116,7 +121,9 @@ fn is_date(s: &str) -> bool {
     b.len() == 10
         && b[4] == b'-'
         && b[7] == b'-'
-        && b.iter().enumerate().all(|(i, c)| i == 4 || i == 7 || c.is_ascii_digit())
+        && b.iter()
+            .enumerate()
+            .all(|(i, c)| i == 4 || i == 7 || c.is_ascii_digit())
 }
 
 /// Accepts `2026-12-01`, or a YAML date/datetime that starts with one.
@@ -173,7 +180,9 @@ pub fn extract(content: &str) -> Vec<Task> {
     let mut lines = content.lines().enumerate().peekable();
 
     // Skip the frontmatter block, if any.
-    if matches!(lines.peek(), Some((_, l)) if l.trim_end() == "---") && markdown::split_frontmatter(content).0.is_some() {
+    if matches!(lines.peek(), Some((_, l)) if l.trim_end() == "---")
+        && markdown::split_frontmatter(content).0.is_some()
+    {
         lines.next();
         for (_, l) in lines.by_ref() {
             if l.trim_end() == "---" {
@@ -235,9 +244,16 @@ pub fn set_done(content: &str, line: u32, expected_text: &str, done: bool) -> Op
 }
 
 /// Toggles a task directly in its file. The caller re-indexes the file afterwards.
-pub fn set_done_in_vault(vault: &Vault, rel: &str, line: u32, expected_text: &str, done: bool) -> Result<VaultEntry> {
+pub fn set_done_in_vault(
+    vault: &Vault,
+    rel: &str,
+    line: u32,
+    expected_text: &str,
+    done: bool,
+) -> Result<VaultEntry> {
     let content = vault.read(rel)?;
-    let updated = set_done(&content, line, expected_text, done).ok_or_else(|| Error::StaleTask(rel.to_string()))?;
+    let updated = set_done(&content, line, expected_text, done)
+        .ok_or_else(|| Error::StaleTask(rel.to_string()))?;
     vault.write(rel, &updated)
 }
 
@@ -251,7 +267,16 @@ mod tests {
     fn extracts_tasks_with_metadata() {
         let tasks = extract(NOTE);
         let texts: Vec<_> = tasks.iter().map(|t| t.text.as_str()).collect();
-        assert_eq!(texts, ["Angebot schreiben #Kunde", "Unteraufgabe", "Groß erledigt", "Nummeriert", "Schluss"]);
+        assert_eq!(
+            texts,
+            [
+                "Angebot schreiben #Kunde",
+                "Unteraufgabe",
+                "Groß erledigt",
+                "Nummeriert",
+                "Schluss"
+            ]
+        );
 
         let first = &tasks[0];
         assert_eq!(first.line, 7);
@@ -288,7 +313,10 @@ mod tests {
     #[test]
     fn dates() {
         assert_eq!(normalize_date("2026-12-01"), Some("2026-12-01".into()));
-        assert_eq!(normalize_date("2026-12-01T10:00:00Z"), Some("2026-12-01".into()));
+        assert_eq!(
+            normalize_date("2026-12-01T10:00:00Z"),
+            Some("2026-12-01".into())
+        );
         assert_eq!(normalize_date("morgen"), None);
     }
 }

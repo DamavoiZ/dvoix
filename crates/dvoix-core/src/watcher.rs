@@ -37,12 +37,13 @@ impl VaultWatcher {
         F: Fn(VaultChange) + Send + 'static,
     {
         let vault_for_events = vault.clone();
-        let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
-            let Ok(event) = res else { return };
-            for change in to_changes(&vault_for_events, &event) {
-                on_change(change);
-            }
-        })?;
+        let mut watcher =
+            notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
+                let Ok(event) = res else { return };
+                for change in to_changes(&vault_for_events, &event) {
+                    on_change(change);
+                }
+            })?;
         watcher.watch(vault.root(), RecursiveMode::Recursive)?;
         Ok(Self { _inner: watcher })
     }
@@ -56,9 +57,11 @@ fn to_changes(vault: &Vault, event: &notify::Event) -> Vec<VaultChange> {
         // treat them as remove + create, decided by whether the path still exists.
         EventKind::Modify(ModifyKind::Name(RenameMode::From)) => Some(ChangeKind::Removed),
         EventKind::Modify(ModifyKind::Name(RenameMode::To)) => Some(ChangeKind::Created),
-        EventKind::Modify(ModifyKind::Name(_)) => {
-            Some(if path.exists() { ChangeKind::Created } else { ChangeKind::Removed })
-        }
+        EventKind::Modify(ModifyKind::Name(_)) => Some(if path.exists() {
+            ChangeKind::Created
+        } else {
+            ChangeKind::Removed
+        }),
         EventKind::Modify(ModifyKind::Metadata(_)) => None,
         EventKind::Modify(_) => Some(ChangeKind::Modified),
         _ => None,
@@ -72,7 +75,10 @@ fn to_changes(vault: &Vault, event: &notify::Event) -> Vec<VaultChange> {
             if Vault::is_ignored(&rel) {
                 return None;
             }
-            Some(VaultChange { kind: kind_for(p)?, path: rel })
+            Some(VaultChange {
+                kind: kind_for(p)?,
+                path: rel,
+            })
         })
         .collect()
 }
@@ -96,7 +102,9 @@ mod tests {
         std::fs::write(dir.path().join(".dvoix").join("cache"), "x").unwrap();
         std::fs::write(dir.path().join("neu.md"), "# Neu").unwrap();
 
-        let change = rx.recv_timeout(Duration::from_secs(5)).expect("no change reported");
+        let change = rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("no change reported");
         assert_eq!(change.path, "neu.md");
     }
 }
