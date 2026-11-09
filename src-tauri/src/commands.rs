@@ -1,7 +1,7 @@
 //! Commands callable from the frontend via `invoke("name", { ...args })`.
 //! The TypeScript side of this lives in `src/lib/api.ts`.
 
-use dvoix_core::{index::TagCount, NoteSummary, SearchHit, VaultEntry};
+use dvoix_core::{index::TagCount, tasks, NoteSummary, ProjectSummary, SearchHit, TaskItem, VaultEntry};
 use serde::Serialize;
 use tauri::{AppHandle, State};
 
@@ -138,6 +138,27 @@ pub fn notes_where(state: State<AppState>, key: String, value: String) -> CmdRes
 #[tauri::command]
 pub fn backlinks(state: State<AppState>, path: String) -> CmdResult<Vec<NoteSummary>> {
     with_ws(&state, |ws| ws.index.lock().map_err(err)?.backlinks(&path).map_err(err))
+}
+
+#[tauri::command]
+pub fn tasks(state: State<AppState>) -> CmdResult<Vec<TaskItem>> {
+    with_ws(&state, |ws| ws.index.lock().map_err(err)?.tasks().map_err(err))
+}
+
+#[tauri::command]
+pub fn projects(state: State<AppState>) -> CmdResult<Vec<ProjectSummary>> {
+    with_ws(&state, |ws| ws.index.lock().map_err(err)?.projects().map_err(err))
+}
+
+/// Checks or unchecks a task in its file. `text` must still match, so a task
+/// is never toggled on the wrong line after the file changed.
+#[tauri::command]
+pub fn set_task_done(state: State<AppState>, path: String, line: u32, text: String, done: bool) -> CmdResult<VaultEntry> {
+    with_ws(&state, |ws| {
+        let entry = tasks::set_done_in_vault(&ws.vault, &path, line, &text, done).map_err(err)?;
+        reindex(ws, &path)?;
+        Ok(entry)
+    })
 }
 
 #[tauri::command]

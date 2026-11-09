@@ -4,10 +4,12 @@
   import FileExplorer from "./FileExplorer.svelte";
   import SearchPanel from "./SearchPanel.svelte";
   import TagsPanel from "./TagsPanel.svelte";
+  import TasksPanel from "./TasksPanel.svelte";
+  import ProjectsPanel from "./ProjectsPanel.svelte";
   import { ui } from "../ui.svelte";
   import { vault } from "../vault.svelte";
 
-  const titles = { files: "Dateien", search: "Suche", tags: "Tags" };
+  const titles = { files: "Dateien", search: "Suche", tags: "Tags", tasks: "Aufgaben", projects: "Projekte" };
 
   let resizing = $state(false);
 
@@ -39,6 +41,10 @@
       <FileExplorer />
     {:else if ui.panel === "search"}
       <SearchPanel />
+    {:else if ui.panel === "tasks"}
+      <TasksPanel />
+    {:else if ui.panel === "projects"}
+      <ProjectsPanel />
     {:else}
       <TagsPanel />
     {/if}

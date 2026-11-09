@@ -75,6 +75,9 @@ pub fn run() {
             commands::notes_with_tag,
             commands::notes_where,
             commands::backlinks,
+            commands::tasks,
+            commands::projects,
+            commands::set_task_done,
             commands::rebuild_index,
         ])
         .run(tauri::generate_context!())

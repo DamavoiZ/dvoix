@@ -7,7 +7,7 @@ Eine Desktop-App für Notizen, Projektmanagement, Tracking und alles, was späte
 ## Was schon geht
 
 - Vault-Ordner wählen, der zuletzt geöffnete wird beim Start wieder geladen
-- Seitenleiste wie in Obsidian: schmale Icon-Leiste ganz links (Dateien, Suche, Tags), daneben das Panel, in der Breite ziehbar und per Klick aufs aktive Icon einklappbar
+- Seitenleiste wie in Obsidian: schmale Icon-Leiste ganz links (Dateien, Suche, Tags, Aufgaben, Projekte), daneben das Panel, in der Breite ziehbar und per Klick aufs aktive Icon einklappbar
 - Datei-Explorer mit Ordnerbaum: Ordner auf- und zuklappen (wird gemerkt), Rechtsklick-Menü zum Anlegen, Umbenennen und Löschen (landet in `.trash/` im Vault), Dateien per Drag & Drop in Ordner verschieben
 - Tabs: Klick im Datei-Explorer öffnet im aktiven Tab, Strg/Cmd + Klick oder mittlere Maustaste in einem neuen; Tabs per Drag & Drop verschieben, mit mittlerer Maustaste oder × schließen. Offene Tabs werden pro Vault gemerkt
 - Schnellöffner (Strg/Cmd + O) mit unscharfer Suche über alle Dateien: `mtg plan` findet `Projekte/Meeting-Planung`. Enter öffnet, Strg + Enter in neuem Tab, gibt es die Notiz nicht, wird sie angelegt
@@ -16,6 +16,8 @@ Eine Desktop-App für Notizen, Projektmanagement, Tracking und alles, was späte
 - Automatisches Speichern, atomar geschrieben (erst Temp-Datei, dann umbenennen)
 - Änderungen von außen (VS Code, Sync-Tools, git) erscheinen sofort in der App
 - Volltextsuche, Tag-Übersicht und Backlinks („Verlinkt von“)
+- Aufgaben: ganz normale Markdown-Checkboxen in jeder Notiz, optional mit Fälligkeit und Priorität. Im Editor sind sie anklickbar, die Aufgabenübersicht in der Seitenleiste sammelt alle Aufgaben des Vaults (nach Fälligkeit oder nach Notiz gruppiert)
+- Projekte: Notizen mit `type: projekt` im Frontmatter, mit Status, Fälligkeit und Fortschritt aus ihren Checkboxen in einer eigenen Projektliste
 - Erster eigener Dateityp: `.canvas` im offenen [JSON-Canvas-Format](https://jsoncanvas.org) (Karten verschieben, Doppelklick legt eine Karte an)
 
 ## Tech-Stack
@@ -33,6 +35,8 @@ Eine Desktop-App für Notizen, Projektmanagement, Tracking und alles, was späte
 crates/dvoix-core/      Rust-Kern ohne Tauri, eigenständig testbar
   src/vault.rs          Lesen/Schreiben im Vault, Pfade immer relativ und abgesichert
   src/markdown.rs       Frontmatter, Titel, Tags, Links, Überschriften, Suchtext
+  src/tasks.rs          Checkbox-Aufgaben lesen und abhaken
+  src/project.rs        Frontmatter-Schema für Projekte
   src/index.rs          SQLite-Index in <vault>/.dvoix/index.sqlite (nur Cache)
   src/watcher.rs        meldet Änderungen auf der Platte
 src-tauri/              Tauri-App: hält den offenen Vault, verbindet Watcher, Index und UI
@@ -69,6 +73,36 @@ Damit erscheint „Board erstellen“ in der Werkzeugleiste und im Rechtsklick-M
 
 Für Projekte und Tracking ist Frontmatter der Baustein: `status: active`, `due: 2026-12-01` usw. landen im Index und lassen sich mit `notes_where("status", "active")` abfragen.
 
+## Aufgaben und Projekte
+
+Eine Aufgabe ist eine Checkbox in irgendeiner Notiz. Fälligkeit und Priorität stehen direkt in der Zeile, die Emoji-Schreibweise ist dieselbe wie beim Obsidian-Tasks-Plugin:
+
+```markdown
+- [ ] Angebot schreiben 📅 2026-12-01 ⏫ #kunde
+- [ ] Anrufen due:2026-11-20 !hoch
+  - [x] Unteraufgabe
+```
+
+| | Schreibweise |
+| --- | --- |
+| Fälligkeit | `📅 2026-12-01` oder `due:2026-12-01` |
+| Priorität | `!hoch` `!mittel` `!niedrig` (auch `!high` usw.) oder ⏫ 🔼 🔽 |
+
+Ein Projekt ist eine Notiz mit diesem Frontmatter, seine Aufgaben sind die Checkboxen darin:
+
+```yaml
+---
+type: projekt          # oder: project
+status: aktiv          # idee | aktiv | wartend | erledigt | abgebrochen
+due: 2026-12-01        # optional
+start: 2026-11-01      # optional
+priority: hoch         # optional: hoch | mittel | niedrig
+area: Arbeit           # optional, frei wählbar
+---
+```
+
+Englische Werte (`active`, `waiting`, `done`, ...) gehen auch. Abhaken in der Aufgabenübersicht ändert genau die eine Zeile in der Datei.
+
 ## Entwickeln
 
 Voraussetzungen: [Rust](https://rustup.rs), Node.js 22 und die [Tauri-Systemabhängigkeiten](https://v2.tauri.app/start/prerequisites/) für dein Betriebssystem.
@@ -91,5 +125,4 @@ cargo test --workspace # Rust-Kern
 - Geteilte Ansichten (zwei Tabs nebeneinander)
 - Live-Vorschau für Markdown (Formatierung im Editor ausblenden)
 - Kanban-Board (`.board`) und Tracking (`.track`) als eigene Dateitypen
-- Abfragen über Frontmatter als Ansicht (Projektlisten, Fälligkeiten)
 - `tantivy` statt FTS5, falls die Suche mehr können muss
