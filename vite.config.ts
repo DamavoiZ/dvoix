@@ -13,7 +13,9 @@ export default defineConfig({
     strictPort: true,
     host: host || false,
     hmr: host ? { protocol: "ws", host, port: 1421 } : undefined,
-    watch: { ignored: ["**/src-tauri/**", "**/crates/**"] },
+    // Rust sources and Cargo's build output are none of Vite's business. Watching
+    // `target/` also fails on Windows, where the linker keeps the .dll/.exe/.pdb locked (EBUSY).
+    watch: { ignored: ["**/src-tauri/**", "**/crates/**", "**/target/**"] },
   },
   envPrefix: ["VITE_", "TAURI_ENV_*"],
   build: {
