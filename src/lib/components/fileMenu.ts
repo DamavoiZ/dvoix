@@ -1,4 +1,4 @@
-import { FolderPlus, Pencil, Trash2 } from "@lucide/svelte";
+import { FolderPlus, PanelTop, Pencil, Trash2 } from "@lucide/svelte";
 import type { VaultEntry } from "../api";
 import { creatableFileTypes } from "../filetypes";
 import { ui } from "../ui.svelte";
@@ -24,7 +24,9 @@ export async function newFolder(parent: string) {
 
 export function entryMenu(entry: VaultEntry): MenuEntry[] {
   return [
-    ...(entry.isDir ? [...createItems(entry.path), "separator" as const] : []),
+    ...(entry.isDir
+      ? [...createItems(entry.path), "separator" as const]
+      : [{ label: "In neuem Tab öffnen", icon: PanelTop, action: () => void vault.openFile(entry.path, { newTab: true }) }, "separator" as const]),
     { label: "Umbenennen", icon: Pencil, action: () => (ui.renaming = entry.path) },
     { label: "Löschen", icon: Trash2, danger: true, action: () => void vault.trash(entry.path) },
   ];

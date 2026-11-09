@@ -9,6 +9,9 @@ Eine Desktop-App für Notizen, Projektmanagement, Tracking und alles, was späte
 - Vault-Ordner wählen, der zuletzt geöffnete wird beim Start wieder geladen
 - Seitenleiste wie in Obsidian: schmale Icon-Leiste ganz links (Dateien, Suche, Tags), daneben das Panel, in der Breite ziehbar und per Klick aufs aktive Icon einklappbar
 - Datei-Explorer mit Ordnerbaum: Ordner auf- und zuklappen (wird gemerkt), Rechtsklick-Menü zum Anlegen, Umbenennen und Löschen (landet in `.trash/` im Vault), Dateien per Drag & Drop in Ordner verschieben
+- Tabs: Klick im Datei-Explorer öffnet im aktiven Tab, Strg/Cmd + Klick oder mittlere Maustaste in einem neuen; Tabs per Drag & Drop verschieben, mit mittlerer Maustaste oder × schließen. Offene Tabs werden pro Vault gemerkt
+- Schnellöffner (Strg/Cmd + O) mit unscharfer Suche über alle Dateien: `mtg plan` findet `Projekte/Meeting-Planung`. Enter öffnet, Strg + Enter in neuem Tab, gibt es die Notiz nicht, wird sie angelegt
+- Tastenkürzel: Strg + T neuer Tab, Strg + W Tab schließen, Strg + Tab / Strg + Umschalt + Tab (oder Strg + Bild ab/auf) Tab wechseln
 - Markdown-Editor (CodeMirror 6) mit YAML-Frontmatter, `[[Wikilinks]]` (Strg/Cmd + Klick öffnet oder legt die Notiz an) und `#tags`
 - Automatisches Speichern, atomar geschrieben (erst Temp-Datei, dann umbenennen)
 - Änderungen von außen (VS Code, Sync-Tools, git) erscheinen sofort in der App
@@ -85,7 +88,7 @@ cargo test --workspace # Rust-Kern
 
 ## Nächste Schritte (Ideen)
 
-- Tabs bzw. geteilte Ansichten
+- Geteilte Ansichten (zwei Tabs nebeneinander)
 - Live-Vorschau für Markdown (Formatierung im Editor ausblenden)
 - Kanban-Board (`.board`) und Tracking (`.track`) als eigene Dateitypen
 - Abfragen über Frontmatter als Ansicht (Projektlisten, Fälligkeiten)

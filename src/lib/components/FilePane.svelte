@@ -1,7 +1,9 @@
 <script lang="ts">
   import { api, type NoteSummary } from "../api";
   import { fileTypeFor } from "../filetypes";
+  import { ui } from "../ui.svelte";
   import { vault } from "../vault.svelte";
+  import TabBar from "./TabBar.svelte";
 
   const path = $derived(vault.openPath);
   const type = $derived(path ? fileTypeFor(path) : undefined);
@@ -16,6 +18,7 @@
 </script>
 
 <main class="flex min-w-0 flex-1 flex-col">
+  <TabBar />
   {#if path && type}
     <header class="flex items-center justify-between border-b border-zinc-800 px-4 py-2 text-xs text-zinc-500">
       <span class="truncate">{path}</span>
@@ -40,8 +43,11 @@
       </footer>
     {/if}
   {:else}
-    <div class="flex h-full items-center justify-center text-sm text-zinc-500">
-      Wähle links eine Datei oder lege eine neue an.
+    <div class="flex flex-1 flex-col items-center justify-center gap-3 text-sm text-zinc-500">
+      <p>Wähle links eine Datei oder lege eine neue an.</p>
+      <button class="rounded-md px-3 py-1.5 text-violet-300 hover:bg-zinc-800" onclick={() => (ui.switcherOpen = true)}>
+        Datei suchen <kbd class="ml-1 rounded bg-zinc-800 px-1.5 py-0.5 text-xs text-zinc-400">Strg+O</kbd>
+      </button>
     </div>
   {/if}
   {#if vault.error}

@@ -11,6 +11,15 @@ interface Saved {
   panelOpen: boolean;
   panelWidth: number;
   expanded: Record<string, string[]>;
+  tabs: Record<string, SavedTabs>;
+}
+
+/** Open tabs of one vault: file paths ("" = empty tab) and the active index. */
+export interface SavedTabs {
+  paths: string[];
+  active: number;
+  /** Recently opened files, newest first (for the quick switcher). */
+  recent: string[];
 }
 
 function load(): Partial<Saved> {
@@ -28,6 +37,8 @@ class UiStore {
   panel = $state<PanelId>("files");
   panelOpen = $state(true);
   panelWidth = $state(280);
+  /** Quick switcher (Strg+O) is open. */
+  switcherOpen = $state(false);
   /** Path that is currently being renamed inline in the file tree. */
   renaming = $state<string | null>(null);
   /** Expanded folders of the current vault. */
@@ -35,6 +46,7 @@ class UiStore {
 
   private vaultPath = "";
   private expandedByVault: Record<string, string[]> = {};
+  private tabsByVault: Record<string, SavedTabs> = {};
 
   constructor() {
     const s = load();
@@ -42,6 +54,7 @@ class UiStore {
     this.panelOpen = s.panelOpen ?? true;
     this.panelWidth = s.panelWidth ?? 280;
     this.expandedByVault = s.expanded ?? {};
+    this.tabsByVault = s.tabs ?? {};
   }
 
   save() {
@@ -51,6 +64,7 @@ class UiStore {
       panelOpen: this.panelOpen,
       panelWidth: this.panelWidth,
       expanded: this.expandedByVault,
+      tabs: this.tabsByVault,
     };
     localStorage.setItem(KEY, JSON.stringify(s));
   }
@@ -60,6 +74,16 @@ class UiStore {
     this.vaultPath = path;
     this.expanded.clear();
     for (const p of this.expandedByVault[path] ?? []) this.expanded.add(p);
+  }
+
+  savedTabs(): SavedTabs | undefined {
+    return this.tabsByVault[this.vaultPath];
+  }
+
+  saveTabs(tabs: SavedTabs) {
+    if (!this.vaultPath) return;
+    this.tabsByVault[this.vaultPath] = tabs;
+    this.save();
   }
 
   /** Ribbon click: switch panel, or collapse it when the active one is clicked again. */
