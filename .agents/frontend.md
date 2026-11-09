@@ -9,6 +9,7 @@
 - Rust nur über `src/lib/api.ts` aufrufen, nie `invoke(...)` direkt in Komponenten.
 - Dateien öffnen, speichern, anlegen über `vault.svelte.ts`. Speichern ist automatisch; Ansichten melden Änderungen nur per `onchange`.
 - Persistente Einstellungen nie in `localStorage`. App-weite Vault-Einstellungen über `config.ts` (`readJson`/`writeJson`) in `.dvoix/*.json`, Plugin-Einstellungen über `pluginSettings`. Layout/Tabs in `workspace.json` über `ui.svelte.ts`.
+- Eine Ansicht ohne eigene Datei (z. B. der Graph) registriert ihr Plugin mit `ctx.registerView(...)` und öffnet sie mit `vault.openViewTab(id)`. Sie läuft in einem Tab wie eine Datei und steht in `workspace.json` als `dvoix://view/<id>`. Wird das Plugin ausgeschaltet, schließen ihre Tabs von selbst.
 - Komponenten im App-Rahmen (`src/lib/components/`) bleiben feature-neutral. Sie rendern, was Plugins registriert haben (Panels, Footer, Header, Overlays), und kennen keine einzelnen Plugins.
 - Markdown-Editor-Erweiterungen kommen über `ctx.registerEditorExtension(...)` aus dem jeweiligen Plugin, nicht direkt in `src/lib/filetypes/markdown/editor.ts`.
 - Icons aus `@lucide/svelte`. Styling mit Tailwind und den CSS-Variablen aus `src/app.css`, damit hell/dunkel einheitlich bleiben.

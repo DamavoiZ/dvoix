@@ -33,6 +33,13 @@ export interface TagCount {
   count: number;
 }
 
+/** Everything the graph view needs (see `Index::graph` in `crates/dvoix-core/src/index.rs`). */
+export interface GraphData {
+  notes: { path: string; title: string; tags: string[] }[];
+  /** `target` is the link text as written (lower-cased), not yet resolved to a file. */
+  links: { source: string; target: string }[];
+}
+
 export type Priority = "high" | "medium" | "low";
 
 /** A markdown checkbox somewhere in the vault (see `crates/dvoix-core/src/tasks.rs`). */
@@ -86,6 +93,7 @@ export const api = {
   notesWithTag: (tag: string) => invoke<NoteSummary[]>("notes_with_tag", { tag }),
   notesWhere: (key: string, value: string) => invoke<NoteSummary[]>("notes_where", { key, value }),
   backlinks: (path: string) => invoke<NoteSummary[]>("backlinks", { path }),
+  graph: () => invoke<GraphData>("graph"),
   tasks: () => invoke<TaskItem[]>("tasks"),
   projects: () => invoke<ProjectSummary[]>("projects"),
   setTaskDone: (path: string, line: number, text: string, done: boolean) =>

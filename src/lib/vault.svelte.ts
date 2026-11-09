@@ -10,10 +10,14 @@ import { ui } from "./ui.svelte";
 const SAVE_DELAY_MS = 400;
 const RECENT_MAX = 50;
 
-/** An editor tab. `path` is null for an empty tab ("Neuer Tab"). */
+/**
+ * An editor tab. `path` is null for an empty tab ("Neuer Tab") and for a tab
+ * that shows a view of a plugin (e.g. the graph); then `view` is its id.
+ */
 export interface Tab {
   id: number;
   path: string | null;
+  view?: string;
 }
 
 export interface OpenOptions {
@@ -21,14 +25,19 @@ export interface OpenOptions {
   newTab?: boolean;
 }
 
+/** How a view tab is stored in `workspace.json`; `//` never occurs in a vault path. */
+const VIEW_PREFIX = "dvoix://view/";
+
 let nextTabId = 1;
-const newTabObj = (path: string | null): Tab => ({ id: nextTabId++, path });
+const newTabObj = (path: string | null, view?: string): Tab => ({ id: nextTabId++, path, view });
 
 class VaultStore {
   info = $state<VaultInfo | null>(null);
   entries = $state<VaultEntry[]>([]);
   /** Path of the file shown in the active tab (null for an empty tab). */
   openPath = $state<string | null>(null);
+  /** Id of the view shown in the active tab instead of a file, if any. */
+  openView = $state<string | null>(null);
   tabs = $state<Tab[]>([]);
   activeTabId = $state(0);
   /** Recently opened files, newest first. */
@@ -47,9 +56,16 @@ class VaultStore {
   private saveTimer: ReturnType<typeof setTimeout> | undefined;
   private refreshTimer: ReturnType<typeof setTimeout> | undefined;
   private unlisten: (() => void) | undefined;
+  private unlistenViews: (() => void) | undefined;
+  private tearingDown = false;
 
   async init() {
     this.unlisten?.();
+    this.unlistenViews?.();
+    this.unlistenViews = plugins.onViewRemoved((id) => {
+      // When the whole vault closes, its tabs are dropped anyway (and saved before).
+      if (!this.tearingDown) void this.closeTabsWhere((t) => t.view === id);
+    });
     this.unlisten = await onVaultChanged((change) => {
       this.scheduleRefresh();
       if (change.kind === "removed") void this.closeIfGone(change.path);
@@ -95,11 +111,17 @@ class VaultStore {
     await this.flush();
     ui.unload(); // stop saving the workspace: unloading plugins (e.g. tabs) must not change it
     await flushConfig();
-    await plugins.unloadVault();
+    this.tearingDown = true;
+    try {
+      await plugins.unloadVault();
+    } finally {
+      this.tearingDown = false;
+    }
     settings.reset();
     this.info = null;
     this.entries = [];
     this.openPath = null;
+    this.openView = null;
     this.tabs = [];
     this.recent = [];
   }
@@ -142,6 +164,7 @@ class VaultStore {
     const active = this.activeTab;
     if (active && (!opts.newTab || !this.tabsEnabled)) {
       active.path = path;
+      active.view = undefined;
     } else {
       const tab = newTabObj(path);
       this.tabs.splice(active ? this.tabs.indexOf(active) + 1 : this.tabs.length, 0, tab);
@@ -150,9 +173,35 @@ class VaultStore {
     this.show(path, content);
   }
 
+  /**
+   * Opens a view of a plugin (see `PluginContext.registerView`) in a tab, like a file:
+   * activates its tab if it has one, else replaces the active tab or opens a new one.
+   */
+  async openViewTab(id: string, opts: OpenOptions = {}) {
+    if (!plugins.view(id)) return;
+    const existing = this.tabs.find((t) => t.view === id);
+    if (existing) return this.activateTab(existing.id);
+    await this.flush();
+    const active = this.activeTab;
+    if (active && (!opts.newTab || !this.tabsEnabled)) {
+      active.path = null;
+      active.view = id;
+    } else {
+      const tab = newTabObj(null, id);
+      this.tabs.splice(active ? this.tabs.indexOf(active) + 1 : this.tabs.length, 0, tab);
+      this.activeTabId = tab.id;
+    }
+    this.show(null, "", id);
+  }
+
   async activateTab(id: number) {
     const tab = this.tabs.find((t) => t.id === id);
-    if (!tab || (id === this.activeTabId && tab.path === this.openPath)) return;
+    if (!tab || (id === this.activeTabId && tab.path === this.openPath && (tab.view ?? null) === this.openView)) return;
+    if (tab.view) {
+      await this.flush();
+      this.activeTabId = id;
+      return this.show(null, "", tab.view);
+    }
     const content = tab.path ? await this.read(tab.path) : "";
     if (content === null) tab.path = null; // file vanished: keep the tab, but empty
     this.activeTabId = id;
@@ -218,10 +267,11 @@ class VaultStore {
     }
   }
 
-  /** Makes `path` the file of the active tab. */
-  private show(path: string | null, content: string) {
+  /** Makes `path` (or the view `view`) the content of the active tab. */
+  private show(path: string | null, content: string, view: string | null = null) {
     clearTimeout(this.saveTimer);
     this.openPath = path;
+    this.openView = view;
     this.content = content;
     this.dirty = false;
     if (path) {
@@ -234,7 +284,7 @@ class VaultStore {
 
   private saveTabs() {
     ui.saveTabs({
-      paths: this.tabs.map((t) => t.path ?? ""),
+      paths: this.tabs.map((t) => (t.view ? VIEW_PREFIX + t.view : (t.path ?? ""))),
       active: Math.max(0, this.tabs.findIndex((t) => t.id === this.activeTabId)),
       recent: this.recent,
     });
@@ -244,10 +294,12 @@ class VaultStore {
   private async restoreTabs() {
     const saved = ui.savedTabs();
     const files = new Set(this.entries.filter((e) => !e.isDir).map((e) => e.path));
-    const keep = (p: string) => !p || files.has(p);
+    const view = (p: string) => (p.startsWith(VIEW_PREFIX) ? p.slice(VIEW_PREFIX.length) : undefined);
+    // Views only come back if their plugin is still on.
+    const keep = (p: string) => !p || files.has(p) || !!plugins.view(view(p) ?? "");
     const paths = saved?.paths ?? [];
     this.recent = (saved?.recent ?? []).filter((p) => files.has(p));
-    this.tabs = paths.filter(keep).map((p) => newTabObj(p || null));
+    this.tabs = paths.filter(keep).map((p) => (view(p) ? newTabObj(null, view(p)) : newTabObj(p || null)));
     if (!this.tabs.length) this.tabs = [newTabObj(null)];
     // The previously active tab, or the closest one left of it if its file is gone.
     const before = paths.slice(0, (saved?.active ?? 0) + 1).filter(keep).length;
@@ -259,19 +311,26 @@ class VaultStore {
 
   /** Closes the tabs whose file matches `gone` (deleted, or inside a deleted folder). */
   private async closeTabs(gone: (path: string) => boolean) {
+    this.recent = this.recent.filter((p) => !gone(p));
+    await this.closeTabsWhere((t) => !!t.path && gone(t.path));
+  }
+
+  /** Closes the tabs matching `close`; the active one hands over to its neighbour. */
+  private async closeTabsWhere(close: (tab: Tab) => boolean) {
+    if (!this.tabs.some(close)) return this.saveTabs();
     const active = this.activeTab;
-    const activeGone = !!active?.path && gone(active.path);
+    const activeGone = !!active && close(active);
     if (activeGone) {
       clearTimeout(this.saveTimer);
       this.dirty = false;
       this.openPath = null;
+      this.openView = null;
     }
     const i = active ? this.tabs.indexOf(active) : -1;
     const left = this.tabs.slice(0, i).reverse();
     const right = this.tabs.slice(i + 1);
-    const next = [...right, ...left].find((t) => !t.path || !gone(t.path));
-    this.tabs = this.tabs.filter((t) => !t.path || !gone(t.path));
-    this.recent = this.recent.filter((p) => !gone(p));
+    const next = [...right, ...left].find((t) => !close(t));
+    this.tabs = this.tabs.filter((t) => !close(t));
     if (!activeGone) return this.saveTabs();
     if (next) await this.activateTab(next.id);
     else {

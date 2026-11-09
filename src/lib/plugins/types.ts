@@ -95,6 +95,19 @@ export interface OverlaySpec {
   component: Component;
 }
 
+/**
+ * A view that is not a file, shown in a tab like one, e.g. the graph.
+ * Open it with `vault.openView(id)`. Its tabs close when the plugin is turned off.
+ */
+export interface ViewSpec {
+  /** Unique id; also stored in `workspace.json` for the open tabs. */
+  id: string;
+  /** Title of the tab. */
+  label: string;
+  icon: Component;
+  component: Component;
+}
+
 /** The plugin's page in the settings dialog. */
 export interface SettingTabSpec {
   component: Component;
@@ -115,6 +128,8 @@ export interface PluginContext {
   addFileFooter(footer: FileFooterSpec): Dispose;
   addPaneHeader(header: PaneHeaderSpec): Dispose;
   addOverlay(overlay: OverlaySpec): Dispose;
+  /** A view that opens in a tab instead of a file, e.g. the graph. */
+  registerView(view: ViewSpec): Dispose;
   addSettingTab(tab: SettingTabSpec): Dispose;
   /** Runs `fn` when the plugin is turned off. */
   register(fn: Dispose): void;

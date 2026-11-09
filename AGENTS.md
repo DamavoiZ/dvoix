@@ -21,7 +21,7 @@ Eine Desktop-App für Notizen, Projekte, Aufgaben und Tracking, ähnlich wie Obs
 | --- | --- |
 | App-Hülle | Tauri 2 (`src-tauri/`) |
 | Kern | Rust-Crate `crates/dvoix-core/` ohne Tauri: `notify`, `pulldown-cmark`, `serde_yaml_ng`, `rusqlite` mit FTS5, `walkdir` |
-| Frontend | Svelte 5 (Runes), TypeScript, Vite, Tailwind CSS 4, Icons aus `@lucide/svelte` |
+| Frontend | Svelte 5 (Runes), TypeScript, Vite, Tailwind CSS 4, Icons aus `@lucide/svelte`, `force-graph` für die Graph-Ansicht |
 | Editor | CodeMirror 6 |
 
 ## Aufbau

@@ -4,6 +4,7 @@
   import { File, Plus, X } from "@lucide/svelte";
   import { fileTypeFor } from "../../../filetypes";
   import { contextMenu } from "../../../components/contextMenuState.svelte";
+  import { plugins } from "../../manager.svelte";
   import { vault, type Tab } from "../../../vault.svelte";
 
   const TAB_DRAG = "application/x-dvoix-tab";
@@ -13,6 +14,7 @@
   let dropAt = $state<number | null>(null);
 
   function title(tab: Tab): string {
+    if (tab.view) return plugins.view(tab.view)?.label ?? tab.view;
     if (!tab.path) return "Neuer Tab";
     const name = tab.path.split("/").pop()!;
     return fileTypeFor(tab.path)?.id === "markdown" ? name.replace(/\.md$/i, "") : name;
@@ -53,7 +55,7 @@
 >
   {#each vault.tabs as tab, i (tab.id)}
     {@const active = tab.id === vault.activeTabId}
-    {@const type = tab.path ? fileTypeFor(tab.path) : undefined}
+    {@const type = tab.view ? plugins.view(tab.view) : tab.path ? fileTypeFor(tab.path) : undefined}
     <div
       class="group relative flex h-[calc(100%+1px)] max-w-52 min-w-24 shrink items-center gap-1.5 -mb-px rounded-t-md border border-b-0 pr-1 pl-2.5 text-[13px] {active
         ? 'border-zinc-800 bg-zinc-950 text-zinc-100'
@@ -61,7 +63,7 @@
       role="tab"
       tabindex="0"
       aria-selected={active}
-      title={tab.path ?? "Neuer Tab"}
+      title={tab.path ?? title(tab)}
       draggable="true"
       ondragstart={(e) => {
         dragId = tab.id;

@@ -1,6 +1,6 @@
 <script lang="ts">
   // The open file: headers from plugins (tab bar), the file type's view,
-  // footers from plugins (backlinks). The top row doubles as the title bar:
+  // footers from plugins (backlinks). A tab can also show a plugin view instead. The top row doubles as the title bar:
   // empty space there moves the window, the window buttons sit on the right.
   import { fileTypeFor } from "../filetypes";
   import WindowControls from "./WindowControls.svelte";
@@ -10,6 +10,8 @@
 
   const path = $derived(vault.openPath);
   const type = $derived(path ? fileTypeFor(path) : undefined);
+  /** A plugin view (e.g. the graph) shown in the active tab instead of a file. */
+  const view = $derived(vault.openView ? plugins.view(vault.openView) : undefined);
   const SWITCHER = "quick-switcher:open";
 </script>
 
@@ -24,7 +26,13 @@
     </div>
     <div class="h-9 border-b border-zinc-800 bg-zinc-900/60"><WindowControls /></div>
   </div>
-  {#if path && type}
+  {#if view}
+    <div class="min-h-0 flex-1">
+      {#key view.id}
+        <view.component />
+      {/key}
+    </div>
+  {:else if path && type}
     <header class="flex items-center justify-between border-b border-zinc-800 px-4 py-2 text-xs text-zinc-500">
       <span class="truncate">{path}</span>
       <span>{vault.dirty ? "Speichert …" : "Gespeichert"}</span>

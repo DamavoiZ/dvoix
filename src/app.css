@@ -47,3 +47,27 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background-color: var(--color-zinc-600);
 }
+
+/* Colors of the graph view (drawn on a canvas, read from here at runtime).
+   The groups color notes by folder or tag, in this order. */
+:root {
+  --graph-node: var(--color-zinc-400);
+  --graph-link: var(--color-zinc-700);
+  --graph-label: var(--color-zinc-300);
+  --graph-highlight: var(--color-violet-400);
+  --graph-attachment: var(--color-zinc-500);
+  --graph-unresolved: var(--color-zinc-600);
+  --graph-folder: var(--color-amber-300);
+  --graph-tag: var(--color-emerald-400);
+  --graph-structure: var(--color-zinc-300);
+  --graph-group-1: var(--color-violet-400);
+  --graph-group-2: var(--color-sky-400);
+  --graph-group-3: var(--color-emerald-400);
+  --graph-group-4: var(--color-amber-400);
+  --graph-group-5: var(--color-rose-400);
+  --graph-group-6: var(--color-teal-300);
+  --graph-group-7: var(--color-orange-400);
+  --graph-group-8: var(--color-lime-400);
+  --graph-group-9: var(--color-fuchsia-400);
+  --graph-group-10: var(--color-cyan-300);
+}

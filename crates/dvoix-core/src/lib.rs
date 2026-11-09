@@ -15,7 +15,7 @@ pub mod vault;
 pub mod watcher;
 
 pub use error::{Error, Result};
-pub use index::{Index, NoteSummary, ProjectSummary, SearchHit, TagCount, TaskItem};
+pub use index::{GraphData, Index, NoteSummary, ProjectSummary, SearchHit, TagCount, TaskItem};
 pub use markdown::ParsedNote;
 pub use project::{ProjectMeta, ProjectStatus};
 pub use tasks::{Priority, Task};

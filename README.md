@@ -20,7 +20,8 @@ Eine Desktop-App für Notizen, Projektmanagement, Tracking und alles, was späte
 - Volltextsuche, Tag-Übersicht und Backlinks („Verlinkt von“)
 - Aufgaben: ganz normale Markdown-Checkboxen in jeder Notiz, optional mit Fälligkeit und Priorität. Im Editor sind sie anklickbar, die Aufgabenübersicht in der Seitenleiste sammelt alle Aufgaben des Vaults (nach Fälligkeit oder nach Notiz gruppiert)
 - Projekte: Notizen mit `type: projekt` im Frontmatter, mit Status, Fälligkeit und Fortschritt aus ihren Checkboxen in einer eigenen Projektliste
-- Alles ist ein Plugin, wie bei Obsidian: Datei-Explorer, Suche, Tags, Backlinks, Aufgaben, Projekte, Canvas, Schnellöffner und Tabs lassen sich in den Einstellungen (Zahnrad unten in der Icon-Leiste oder Strg/Cmd + ,) einzeln ausschalten
+- Graph-Ansicht (Strg/Cmd + G oder das Netz-Symbol in der Icon-Leiste) in einem eigenen Tab: Notizen als Punkte, verbunden über Links, über ihre Ordner (Ordner als eigene Knoten) und/oder über gemeinsame Tags (Tags als Knoten oder direkte Linien). Einstellbar sind Filter (`projekte #idee -archiv`), einzelne Notizen, Anhänge und noch fehlende Notizen ein/aus, Farben nach Ordner oder Tag, Größe nach Anzahl der Verbindungen, Pfeile, Linienstärke, ab welcher Zoomstufe Titel erscheinen und die Kräfte des Layouts. Klick öffnet die Notiz in einem neuen Tab, Hover hebt die Nachbarn hervor
+- Alles ist ein Plugin, wie bei Obsidian: Datei-Explorer, Suche, Tags, Backlinks, Aufgaben, Projekte, Canvas, Graph, Schnellöffner und Tabs lassen sich in den Einstellungen (Zahnrad unten in der Icon-Leiste oder Strg/Cmd + ,) einzeln ausschalten
 - Einstellungen: Editor (Zeilenlänge, Zeilennummern, Rechtschreibprüfung), Darstellung (Schriftgrößen) und eigene Optionen je Plugin
 - Alle Einstellungen eines Vaults liegen im Vault selbst unter `.dvoix/` (siehe unten), wandern also mit, wenn du den Ordner kopierst oder synchronisierst
 - Erster eigener Dateityp: `.canvas` im offenen [JSON-Canvas-Format](https://jsoncanvas.org) (Karten verschieben, Doppelklick legt eine Karte an)
@@ -31,7 +32,7 @@ Eine Desktop-App für Notizen, Projektmanagement, Tracking und alles, was späte
 | --- | --- |
 | App-Hülle | [Tauri 2](https://v2.tauri.app) |
 | Kern (Rust) | `notify` (Dateiwächter), `pulldown-cmark` + `serde_yaml_ng` (Markdown & Frontmatter), `rusqlite` mit FTS5 (Index & Suche) |
-| Frontend | Svelte 5, TypeScript, Vite, Tailwind CSS 4 |
+| Frontend | Svelte 5, TypeScript, Vite, Tailwind CSS 4, [force-graph](https://github.com/vasturiano/force-graph) (Graph-Ansicht auf Canvas) |
 | Editor | CodeMirror 6 |
 
 ## Aufbau
@@ -88,6 +89,7 @@ Jede Funktion ist ein Plugin mit Manifest, das sich über eine kleine API in die
 | `ctx.registerEditorExtension(...)` | CodeMirror-Erweiterung für den Markdown-Editor |
 | `ctx.addFileFooter(...)` / `ctx.addPaneHeader(...)` | etwas unter oder über der offenen Datei (Backlinks, Tab-Leiste) |
 | `ctx.addOverlay(...)` | Dialog auf oberster Ebene (Schnellöffner) |
+| `ctx.registerView(...)` | eigene Ansicht, die wie eine Datei in einem Tab läuft (Graph); öffnen mit `vault.openViewTab(id)` |
 | `ctx.addSettingTab(...)` | eigene Seite in den Einstellungen |
 | `ctx.loadData()` / `ctx.saveData()` | eigene Daten in `.dvoix/plugins/<id>/data.json` |
 
