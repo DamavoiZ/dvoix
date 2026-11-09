@@ -109,12 +109,7 @@ pub fn status(vault: &Vault) -> Result<GitStatus> {
 
     let out = git_raw(
         &repo.root,
-        &[
-            "status",
-            "--porcelain=v1",
-            "-z",
-            "--untracked-files=all",
-        ],
+        &["status", "--porcelain=v1", "-z", "--untracked-files=all"],
     )?;
     if !out.status.success() {
         return Err(Error::Git(git_error(&out)));
@@ -253,7 +248,15 @@ pub fn diff(vault: &Vault, path: &str, staged: bool, commit: Option<&str>) -> Re
     let out = match commit {
         Some(id) => git_raw(
             &repo.root,
-            &["show", "--no-color", "--format=", "--patch", id, "--", &path],
+            &[
+                "show",
+                "--no-color",
+                "--format=",
+                "--patch",
+                id,
+                "--",
+                &path,
+            ],
         )?,
         None if staged => git_raw(&repo.root, &["diff", "--no-color", "--cached", "--", &path])?,
         None => git_raw(&repo.root, &["diff", "--no-color", "--", &path])?,
@@ -321,14 +324,18 @@ pub fn discard(vault: &Vault, path: &str, untracked: bool) -> Result<()> {
 pub fn commit(vault: &Vault, message: &str, stage_all: bool) -> Result<String> {
     let message = message.trim();
     if message.is_empty() {
-        return Err(Error::Git("Die Commit-Nachricht darf nicht leer sein.".into()));
+        return Err(Error::Git(
+            "Die Commit-Nachricht darf nicht leer sein.".into(),
+        ));
     }
     let repo = Repo::of(vault)?;
     if stage_all {
         git(&repo.root, &["add", "-A", "--", &repo.vault_pathspec()])?;
     }
     git(&repo.root, &["commit", "-m", message])?;
-    Ok(git(&repo.root, &["rev-parse", "--short", "HEAD"])?.trim().to_string())
+    Ok(git(&repo.root, &["rev-parse", "--short", "HEAD"])?
+        .trim()
+        .to_string())
 }
 
 /// Checks out another branch.
@@ -336,7 +343,9 @@ pub fn checkout(vault: &Vault, name: &str) -> Result<()> {
     let repo = Repo::of(vault)?;
     let name = name.trim();
     if name.is_empty() {
-        return Err(Error::Git("Der Name des Branches darf nicht leer sein.".into()));
+        return Err(Error::Git(
+            "Der Name des Branches darf nicht leer sein.".into(),
+        ));
     }
     switch(&repo, &["switch", name])
 }
@@ -346,7 +355,9 @@ pub fn create_branch(vault: &Vault, name: &str) -> Result<()> {
     let repo = Repo::of(vault)?;
     let name = name.trim();
     if name.is_empty() {
-        return Err(Error::Git("Der Name des Branches darf nicht leer sein.".into()));
+        return Err(Error::Git(
+            "Der Name des Branches darf nicht leer sein.".into(),
+        ));
     }
     switch(&repo, &["switch", "-c", name])
 }
@@ -595,10 +606,12 @@ fn git_error(out: &Output) -> String {
         return "Es gibt nichts zu committen.".into();
     }
     if text.contains("CONFLICT") {
-        return "Beim Ziehen gibt es Konflikte. Bitte die Dateien im Vault lösen und committen.".into();
+        return "Beim Ziehen gibt es Konflikte. Bitte die Dateien im Vault lösen und committen."
+            .into();
     }
     if text.contains("would be overwritten") || text.contains("Please commit your changes") {
-        return "Lokale Änderungen würden überschrieben. Bitte erst committen oder verwerfen.".into();
+        return "Lokale Änderungen würden überschrieben. Bitte erst committen oder verwerfen."
+            .into();
     }
     if text.contains("Authentication failed") || text.contains("could not read Username") {
         return "git konnte sich nicht anmelden. Bitte die Anmeldedaten prüfen.".into();

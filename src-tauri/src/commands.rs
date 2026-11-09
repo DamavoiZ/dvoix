@@ -7,7 +7,9 @@
 
 use dvoix_core::{
     GraphData, NoteSummary, ProjectSummary, SearchHit, TaskItem, VaultEntry, git,
-    git::{Branch, Commit, GitStatus}, index::TagCount, tasks,
+    git::{Branch, Commit, GitStatus},
+    index::TagCount,
+    tasks,
 };
 use serde::Serialize;
 use tauri::{AppHandle, State};
@@ -274,13 +276,17 @@ pub fn git_stage_all(state: State<AppState>) -> CmdResult<()> {
 /// Throws the changes of one file away.
 #[tauri::command(async)]
 pub fn git_discard(state: State<AppState>, path: String, untracked: bool) -> CmdResult<()> {
-    with_ws(&state, |ws| git::discard(&ws.vault, &path, untracked).map_err(err))
+    with_ws(&state, |ws| {
+        git::discard(&ws.vault, &path, untracked).map_err(err)
+    })
 }
 
 /// Creates a commit, with the short id of the new commit as result.
 #[tauri::command(async)]
 pub fn git_commit(state: State<AppState>, message: String, stage_all: bool) -> CmdResult<String> {
-    with_ws(&state, |ws| git::commit(&ws.vault, &message, stage_all).map_err(err))
+    with_ws(&state, |ws| {
+        git::commit(&ws.vault, &message, stage_all).map_err(err)
+    })
 }
 
 /// The last commits, newest first.
@@ -310,7 +316,9 @@ pub fn git_checkout(state: State<AppState>, name: String) -> CmdResult<()> {
 /// Creates a branch and checks it out.
 #[tauri::command(async)]
 pub fn git_create_branch(state: State<AppState>, name: String) -> CmdResult<()> {
-    with_ws(&state, |ws| git::create_branch(&ws.vault, &name).map_err(err))
+    with_ws(&state, |ws| {
+        git::create_branch(&ws.vault, &name).map_err(err)
+    })
 }
 
 /// Pushes the current branch to its remote.
@@ -339,5 +347,7 @@ pub fn git_diff(
     staged: bool,
     commit: Option<String>,
 ) -> CmdResult<String> {
-    with_ws(&state, |ws| git::diff(&ws.vault, &path, staged, commit.as_deref()).map_err(err))
+    with_ws(&state, |ws| {
+        git::diff(&ws.vault, &path, staged, commit.as_deref()).map_err(err)
+    })
 }
