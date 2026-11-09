@@ -11,6 +11,7 @@ pub mod git;
 pub mod index;
 pub mod markdown;
 pub mod project;
+pub mod store;
 pub mod tasks;
 pub mod vault;
 pub mod watcher;

@@ -1,6 +1,19 @@
 # Plugins
 
-Jede Funktion von dvoix ist ein Plugin. Die API steht in `src/lib/plugins/types.ts`, die Verwaltung in `src/lib/plugins/manager.svelte.ts`. Die API ist so gebaut, dass später Community-Plugins darauf aufsetzen können, also gelten für Core-Plugins dieselben Grenzen.
+Jede Funktion von dvoix ist ein Plugin. Die API steht in `src/lib/plugins/types.ts`, die Verwaltung in `src/lib/plugins/manager.svelte.ts`. Store-Plugins (offiziell und Community) setzen auf dieselbe API auf, also gelten für Core-Plugins dieselben Grenzen.
+
+## Core-Plugin oder Store-Plugin?
+
+- **Core-Plugin** (`src/lib/plugins/core/`): Grundfunktionen, die fast jeder braucht und die eng mit der App verzahnt sind (Explorer, Suche, Aufgaben, Projekte, Tabs, Git, …). Wird mit der App ausgeliefert, lässt sich ausschalten.
+- **Store-Plugin**: alles Zusätzliche, das nicht jeder will (z. B. Kanban, Tracking). Eigenes Repository mit Releases, Eintrag in `registry.json` von `DamavoiZ/dvoix-plugins`. Anleitung in `docs/plugins/README.md`.
+
+## Plugin-Store (`src/lib/plugins/store/`)
+
+- `store.svelte.ts` lädt Store-Plugins aus `.dvoix/plugins/<id>/` (`main.js` als ES-Modul über eine Blob-URL) und verwaltet `.dvoix/store.json`. Der Manager kennt sie über `plugins.loadExtra`/`unloadExtra`, nicht über `corePlugins`.
+- `api.ts` ist die API für Store-Plugins: der `PluginContext`, aber mit `mount(el, props)` statt Svelte-Komponenten, SVG-Text als Icon, IDs mit `<plugin-id>:` davor und Berechtigungen (`vault:read`, `vault:write`, `editor`). Wird der `PluginContext` erweitert, hier und in `docs/plugins/README.md` nachziehen.
+- Neue Berechtigung: in `PERMISSIONS` in `crates/dvoix-core/src/store.rs`, im Typ `PluginPermission` in `src/lib/api.ts`, in `PERMISSION_LABELS` und in der Doku.
+- Downloads nur über `src-tauri/src/http.rs` (https, nur GitHub), URLs nur aus `store::release_url`/`latest_manifest_url`.
+- Die Berechtigungen sind keine Sandbox. Nie so tun, als wären sie eine, weder in der UI noch in der Doku.
 
 ## Regeln
 

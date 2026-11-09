@@ -1,0 +1,9 @@
+{
+  "id": "hello",
+  "name": "Hallo Welt",
+  "version": "1.0.0",
+  "description": "Beispiel-Plugin: zeigt ein Panel und einen Befehl und zählt die Notizen im Vault.",
+  "author": "damavoi",
+  "minAppVersion": "0.1.0",
+  "permissions": ["vault:read"]
+}

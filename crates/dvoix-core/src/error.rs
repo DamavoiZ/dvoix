@@ -18,6 +18,8 @@ pub enum Error {
     StaleTask(String),
     #[error("Git-Fehler: {0}")]
     Git(String),
+    #[error("Plugin-Fehler: {0}")]
+    Plugin(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

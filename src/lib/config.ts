@@ -6,6 +6,8 @@
 //   .dvoix/core-plugins.json        which core plugins are on ({ "tasks": true, ... })
 //   .dvoix/workspace.json           open tabs, side panel, expanded folders
 //   .dvoix/plugins/<id>/data.json   settings of one plugin
+//   .dvoix/plugins/<id>/manifest.json, main.js, styles.css   a plugin from the store
+//   .dvoix/store.json               store plugins: on/off, source, community switch
 //   .dvoix/index.sqlite             search index (cache, can be deleted)
 import { api } from "./api";
 

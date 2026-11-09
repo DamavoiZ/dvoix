@@ -4,10 +4,11 @@
 </script>
 
 <script lang="ts">
-  // Settings (Strg+,): editor, appearance, core plugins on/off, and one page per
-  // plugin that has settings. Everything is saved in `<vault>/.dvoix/`.
+  // Settings (Strg+,): editor, appearance, core plugins on/off, the plugin store,
+  // and one page per plugin that has settings. Everything is saved in `<vault>/.dvoix/`.
   import { Puzzle, X } from "@lucide/svelte";
   import Setting from "./Setting.svelte";
+  import StorePage from "./StorePage.svelte";
   import Toggle from "./Toggle.svelte";
   import { hotkeyLabel, plugins } from "../../plugins";
   import { APPEARANCE_DEFAULTS, settings, type ViewMode } from "../../settings.svelte";
@@ -17,7 +18,7 @@
   let page = $state("editor");
 
   const pluginPages = $derived(
-    plugins.all
+    [...plugins.all, ...plugins.extra]
       .filter((p) => plugins.settingTabs.some((t) => t.pluginId === p.manifest.id))
       .map((p) => ({ id: `plugin:${p.manifest.id}`, label: p.manifest.name, pluginId: p.manifest.id })),
   );
@@ -81,6 +82,7 @@
       <button class={navBtn(page === "editor")} onclick={() => (page = "editor")}>Editor</button>
       <button class={navBtn(page === "appearance")} onclick={() => (page = "appearance")}>Darstellung</button>
       <button class={navBtn(page === "plugins")} onclick={() => (page = "plugins")}>Core-Plugins</button>
+      <button class={navBtn(page === "store")} onclick={() => (page = "store")}>Plugin-Store</button>
       {#if pluginPages.length}
         <div class="px-3 pt-4 pb-1 text-[11px] font-medium tracking-wide text-zinc-500 uppercase">Plugin-Optionen</div>
         {#each pluginPages as p (p.id)}
@@ -98,7 +100,9 @@
               ? "Darstellung"
               : page === "plugins"
                 ? "Core-Plugins"
-                : (pluginPages.find((p) => p.id === page)?.label ?? "")}
+                : page === "store"
+                  ? "Plugin-Store"
+                  : (pluginPages.find((p) => p.id === page)?.label ?? "")}
         </h2>
         <button class="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" aria-label="Schließen" onclick={close}>
           <X size={16} />
@@ -168,6 +172,8 @@
               </div>
             {/if}
           {/each}
+        {:else if page === "store"}
+          <StorePage onOptions={(id) => (page = `plugin:${id}`)} />
         {:else if activeTab}
           <activeTab.component />
         {/if}
