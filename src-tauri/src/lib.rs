@@ -58,12 +58,30 @@ impl Workspace {
     }
 }
 
+/// WebKitGTK jumps line by line on every wheel step unless smooth scrolling is
+/// switched on, which made scrolling on Linux feel rough next to WebView2 on
+/// Windows. Wry leaves the setting alone, so it is set here.
+#[cfg(target_os = "linux")]
+fn smooth_scrolling(app: &tauri::App) {
+    use webkit2gtk::{SettingsExt, WebViewExt};
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    let _ = window.with_webview(|webview| {
+        if let Some(settings) = WebViewExt::settings(&webview.inner()) {
+            settings.set_enable_smooth_scrolling(true);
+        }
+    });
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             app.manage(AppState::default());
+            #[cfg(target_os = "linux")]
+            smooth_scrolling(app);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
