@@ -6,6 +6,7 @@ import { registerFileType } from "../filetypes";
 import type {
   CommandSpec,
   Dispose,
+  ExplorerEntriesSpec,
   FileFooterSpec,
   Hotkey,
   OverlaySpec,
@@ -56,6 +57,7 @@ class PluginManager {
   private overlayList = $state.raw<(OverlaySpec & Owned)[]>([]);
   private settingList = $state.raw<(SettingTabSpec & Owned)[]>([]);
   private viewList = $state.raw<(ViewSpec & Owned)[]>([]);
+  private explorerEntryList = $state.raw<(ExplorerEntriesSpec & Owned)[]>([]);
   private viewRemovedListeners = new Set<(id: string) => void>();
   private extensionList: { pluginId: string; extension: Extension }[] = [];
   private disposers = new Map<string, Dispose[]>();
@@ -69,6 +71,8 @@ class PluginManager {
   overlays = $derived(this.overlayList);
   settingTabs = $derived(this.settingList);
   views = $derived(this.viewList);
+  /** Extra file explorer entries of all loaded plugins (see `addExplorerEntries`). */
+  explorerEntries = $derived(this.explorerEntryList.flatMap((s) => s.entries()));
 
   /** Makes a plugin known to the app. Call before a vault is opened. */
   add(plugin: Plugin) {
@@ -267,6 +271,8 @@ class PluginManager {
           for (const fn of this.viewRemovedListeners) fn(view.id);
         });
       },
+      addExplorerEntries: (source) =>
+        addTo(() => this.explorerEntryList, (v) => (this.explorerEntryList = v), { ...source, pluginId }, (s) => s.id),
       register: (fn) => void track(fn),
       loadData: (defaults) => readJson(dataFile, defaults),
       saveData: (data) => writeJson(dataFile, data),

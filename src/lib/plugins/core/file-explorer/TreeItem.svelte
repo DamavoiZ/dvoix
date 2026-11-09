@@ -18,6 +18,8 @@
   // Like Obsidian: notes without ".md", other files with a small extension badge.
   const label = $derived(isNote ? entry.name.replace(/\.[^.]+$/, "") : entry.name.replace(/\.[^.]+$/, "") || entry.name);
   const badge = $derived(!entry.isDir && !isNote && entry.extension ? entry.extension.toUpperCase() : "");
+  /** Hidden entries (shown by the hidden-files plugin) are dimmed, like in a file manager. */
+  const hidden = $derived(entry.path.split("/").some((part) => part.startsWith(".")));
   /** Folder a drop on this row moves into. */
   const dropFolder = $derived(entry.isDir ? entry.path : entry.path.split("/").slice(0, -1).join("/"));
 
@@ -100,7 +102,7 @@
     <button class="flex h-full min-w-0 flex-1 items-center gap-2 text-left" onclick={click} onauxclick={(e) => {
       if (e.button === 1 && !entry.isDir) void vault.openFile(entry.path, { newTab: true });
     }}>
-      <span class="truncate" class:font-medium={entry.isDir}>{label}</span>
+      <span class="truncate" class:font-medium={entry.isDir} class:opacity-60={hidden}>{label}</span>
       {#if badge}
         <span class="shrink-0 rounded bg-zinc-800 px-1 py-px text-[9px] font-semibold tracking-wider text-zinc-400">{badge}</span>
       {/if}

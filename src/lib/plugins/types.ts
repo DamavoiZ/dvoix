@@ -5,6 +5,7 @@
 // removed again automatically when it is turned off.
 import type { Extension } from "@codemirror/state";
 import type { Component } from "svelte";
+import type { VaultEntry } from "../api";
 import type { FileType } from "../filetypes/types";
 
 /** Describes a plugin. For community plugins this would be their `manifest.json`. */
@@ -108,6 +109,17 @@ export interface ViewSpec {
   component: Component;
 }
 
+/**
+ * Extra entries for the file explorer that are not in `vault.entries`, e.g.
+ * hidden folders. They only show in the explorer; search, graph, quick
+ * switcher and links still see the normal entries only.
+ */
+export interface ExplorerEntriesSpec {
+  id: string;
+  /** Read reactively: return `$state` so the tree updates when it changes. */
+  entries: () => VaultEntry[];
+}
+
 /** The plugin's page in the settings dialog. */
 export interface SettingTabSpec {
   component: Component;
@@ -130,6 +142,8 @@ export interface PluginContext {
   addOverlay(overlay: OverlaySpec): Dispose;
   /** A view that opens in a tab instead of a file, e.g. the graph. */
   registerView(view: ViewSpec): Dispose;
+  /** More entries in the file explorer only, e.g. hidden folders. */
+  addExplorerEntries(source: ExplorerEntriesSpec): Dispose;
   addSettingTab(tab: SettingTabSpec): Dispose;
   /** Runs `fn` when the plugin is turned off. */
   register(fn: Dispose): void;

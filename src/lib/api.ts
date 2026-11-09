@@ -125,6 +125,15 @@ export interface GitFileDiff {
 export interface VaultChange {
   kind: "created" | "modified" | "removed";
   path: string;
+  /** In a hidden folder or a dot-file; only of interest to the hidden-files plugin. */
+  hidden: boolean;
+}
+
+/** Which hidden entries `listHiddenEntries` returns (see `dvoix_core::HiddenFilter`). */
+export interface HiddenFilter {
+  includeFiles: boolean;
+  includeAppDir: boolean;
+  exclude: string[];
 }
 
 /** A note rendered for the reading view (see `dvoix_core::markdown::render`). */
@@ -140,6 +149,7 @@ export const api = {
   openVault: (path: string) => invoke<VaultInfo>("open_vault", { path }),
   closeVault: () => invoke<void>("close_vault"),
   listEntries: () => invoke<VaultEntry[]>("list_entries"),
+  listHiddenEntries: (filter: HiddenFilter) => invoke<VaultEntry[]>("list_hidden_entries", { filter }),
   readFile: (path: string) => invoke<string>("read_file", { path }),
   writeFile: (path: string, content: string) => invoke<VaultEntry>("write_file", { path, content }),
   renderMarkdown: (content: string) => invoke<RenderedNote>("render_markdown", { content }),

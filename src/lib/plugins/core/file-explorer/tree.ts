@@ -5,6 +5,17 @@ export interface TreeNode {
   children: TreeNode[];
 }
 
+/**
+ * Adds extra entries (from other plugins) to the vault's, without duplicates and
+ * sorted by path again, so every folder comes before what is inside it.
+ */
+export function mergeEntries(entries: VaultEntry[], extra: VaultEntry[]): VaultEntry[] {
+  if (extra.length === 0) return entries;
+  const seen = new Set(entries.map((e) => e.path));
+  const merged = [...entries, ...extra.filter((e) => !seen.has(e.path))];
+  return merged.sort((a, b) => (a.path.toLowerCase() < b.path.toLowerCase() ? -1 : a.path.toLowerCase() > b.path.toLowerCase() ? 1 : 0));
+}
+
 /** Builds a folder tree from the flat entry list; folders first, then by name. */
 export function buildTree(entries: VaultEntry[]): TreeNode[] {
   const root: TreeNode[] = [];

@@ -37,7 +37,9 @@ impl Workspace {
             let vault = vault.clone();
             let index = Arc::clone(&index);
             VaultWatcher::start(&vault.clone(), move |change| {
-                if let Ok(mut index) = index.lock() {
+                if !change.hidden
+                    && let Ok(mut index) = index.lock()
+                {
                     let _ = match change.kind {
                         ChangeKind::Removed => index.remove(&change.path),
                         _ => index.update(&vault, &change.path),
@@ -68,6 +70,7 @@ pub fn run() {
             commands::open_vault,
             commands::close_vault,
             commands::list_entries,
+            commands::list_hidden_entries,
             commands::read_file,
             commands::write_file,
             commands::render_markdown,

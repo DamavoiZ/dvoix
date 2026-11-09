@@ -5,13 +5,31 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use walkdir::WalkDir;
 
 use crate::{APP_DIR, Error, Result};
 
 /// Folder (inside the vault) that deleted files are moved to, like in Obsidian.
 pub const TRASH_DIR: &str = ".trash";
+
+/// Upper bound for `Vault::list_hidden`: a hidden folder like `node_modules`
+/// or `.git` can hold tens of thousands of files, and the explorer would
+/// freeze on all of them. What lies beyond is simply not listed.
+pub const MAX_HIDDEN_ENTRIES: usize = 10_000;
+
+/// Which hidden entries `Vault::list_hidden` returns. Set by the
+/// "Versteckte Dateien" plugin from its settings.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HiddenFilter {
+    /// Also dot-files (`.gitignore`), not only dot-folders and their content.
+    pub include_files: bool,
+    /// Also dvoix's own `.dvoix/` folder.
+    pub include_app_dir: bool,
+    /// Names that stay hidden anyway, wherever they occur (e.g. `.git`).
+    pub exclude: Vec<String>,
+}
 
 #[derive(Debug, Clone)]
 pub struct Vault {
@@ -111,6 +129,48 @@ impl Vault {
             }
         }
         // Plain path order; the UI builds the tree and decides how to group it.
+        entries.sort_by_key(|e| e.path.to_lowercase());
+        Ok(entries)
+    }
+
+    /// The hidden entries that `list` leaves out: dot-folders with everything
+    /// in them and (with `include_files`) dot-files, sorted by path. Only for
+    /// showing them; they are never indexed. Temp files of `write` are never
+    /// returned, and the list stops at `MAX_HIDDEN_ENTRIES`.
+    pub fn list_hidden(&self, filter: &HiddenFilter) -> Result<Vec<VaultEntry>> {
+        let mut entries = Vec::new();
+        let walker = WalkDir::new(&self.root)
+            .min_depth(1)
+            .into_iter()
+            .filter_entry(|e| {
+                let name = e.file_name().to_string_lossy();
+                if filter.exclude.iter().any(|x| x.as_str() == name) || name.ends_with(".dvoix-tmp") {
+                    return false;
+                }
+                !(e.depth() == 1 && name == APP_DIR && !filter.include_app_dir)
+            });
+        for entry in walker {
+            let Ok(entry) = entry else { continue };
+            let Some(rel) = self.relative(entry.path()) else {
+                continue;
+            };
+            if !Self::is_ignored(&rel) {
+                continue;
+            }
+            // A dot-file outside a hidden folder only shows with `include_files`.
+            let in_hidden_dir = rel
+                .rsplit_once('/')
+                .is_some_and(|(parent, _)| Self::is_ignored(parent));
+            if !entry.file_type().is_dir() && !in_hidden_dir && !filter.include_files {
+                continue;
+            }
+            if let Ok(e) = self.entry_for(&rel, entry.path()) {
+                entries.push(e);
+            }
+            if entries.len() >= MAX_HIDDEN_ENTRIES {
+                break;
+            }
+        }
         entries.sort_by_key(|e| e.path.to_lowercase());
         Ok(entries)
     }
@@ -329,5 +389,45 @@ mod tests {
         vault.trash("projects/inbox.md").unwrap();
         assert!(vault.read("projects/inbox.md").is_err());
         assert!(dir.path().join(TRASH_DIR).join("inbox.md").exists());
+    }
+
+    #[test]
+    fn lists_hidden_entries_by_filter() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = Vault::open(dir.path()).unwrap();
+        vault.write("note.md", "x").unwrap();
+        vault.write(".obsidian/app.json", "{}").unwrap();
+        vault.write(".git/HEAD", "ref").unwrap();
+        vault.write("sub/.gitignore", "*.tmp").unwrap();
+        vault.write_config("app.json", "{}").unwrap();
+        fs::write(dir.path().join(".obsidian/.app.json.dvoix-tmp"), "x").unwrap();
+
+        let paths = |f: &HiddenFilter| -> Vec<String> {
+            vault.list_hidden(f).unwrap().into_iter().map(|e| e.path).collect()
+        };
+        let mut filter = HiddenFilter {
+            exclude: vec![".git".into()],
+            ..Default::default()
+        };
+        assert_eq!(paths(&filter), vec![".obsidian", ".obsidian/app.json"]);
+
+        filter.include_files = true;
+        filter.include_app_dir = true;
+        filter.exclude.clear();
+        assert_eq!(
+            paths(&filter),
+            vec![
+                ".dvoix",
+                ".dvoix/app.json",
+                ".git",
+                ".git/HEAD",
+                ".obsidian",
+                ".obsidian/app.json",
+                "sub/.gitignore",
+            ]
+        );
+        // The normal listing is unchanged.
+        let visible: Vec<_> = vault.list().unwrap().into_iter().map(|e| e.path).collect();
+        assert_eq!(visible, vec!["note.md", "sub"]);
     }
 }
