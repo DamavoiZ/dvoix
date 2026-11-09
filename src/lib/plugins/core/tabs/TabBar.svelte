@@ -41,7 +41,16 @@
   }
 </script>
 
-<div class="flex h-9 shrink-0 items-end gap-px overflow-x-auto border-b border-zinc-800 bg-zinc-900/60 px-1.5 pt-1.5" role="tablist">
+<!-- Scrolls sideways without a visible scrollbar; the mouse wheel scrolls it horizontally. -->
+<div
+  class="flex h-9 shrink-0 items-end gap-px overflow-x-auto overflow-y-hidden border-b [scrollbar-width:none] [&::-webkit-scrollbar]:hidden border-zinc-800 bg-zinc-900/60 px-1.5 pt-1.5"
+  role="tablist"
+  tabindex="-1"
+  onwheel={(e) => {
+    if (e.deltaX !== 0) return;
+    e.currentTarget.scrollLeft += e.deltaY;
+  }}
+>
   {#each vault.tabs as tab, i (tab.id)}
     {@const active = tab.id === vault.activeTabId}
     {@const type = tab.path ? fileTypeFor(tab.path) : undefined}

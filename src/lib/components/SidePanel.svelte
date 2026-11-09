@@ -1,10 +1,13 @@
 <script lang="ts">
   // The panel next to the ribbon. Which panels exist depends on the plugins
   // that are on (file explorer, search, tags, ...). Resizable by dragging its
-  // right edge, collapsible from the ribbon.
+  // right edge, collapsible from the ribbon. Its top row is part of the app's
+  // own title bar and moves the window.
+  import { PanelLeftClose } from "@lucide/svelte";
   import { plugins } from "../plugins";
   import { PANEL_DEFAULT, ui } from "../ui.svelte";
   import { vault } from "../vault.svelte";
+  import { dragRegion } from "../window.svelte";
 
   /** The chosen panel, or the first one if its plugin was turned off. */
   const panel = $derived(plugins.panels.find((p) => p.id === ui.panel) ?? plugins.panels[0]);
@@ -34,9 +37,19 @@
     class="relative flex shrink-0 flex-col border-r border-zinc-800 bg-zinc-900/60"
     style:width="{ui.panelWidth}px"
   >
-    {#if panel.header !== false}
-      <header class="px-4 pt-3 pb-2 text-xs font-medium tracking-wide text-zinc-500 uppercase">{panel.label}</header>
-    {/if}
+    <header class="flex h-9 shrink-0 items-center border-b border-zinc-800 pr-1.5 pl-4" use:dragRegion>
+      {#if panel.header !== false}
+        <span class="truncate text-xs font-medium tracking-wide text-zinc-500 uppercase">{panel.label}</span>
+      {/if}
+      <button
+        class="ml-auto flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
+        title="Seitenleiste einklappen"
+        aria-label="Seitenleiste einklappen"
+        onclick={() => ui.togglePanel(panel.id)}
+      >
+        <PanelLeftClose size={16} strokeWidth={1.75} />
+      </button>
+    </header>
 
     {#key panel.id}
       <panel.component />

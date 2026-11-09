@@ -16,7 +16,7 @@ export function buildTree(entries: VaultEntry[]): TreeNode[] {
     (parent ? folders.get(parent)?.children : root)?.push(node);
   }
   const sort = (nodes: TreeNode[]) => {
-    nodes.sort((a, b) => Number(b.entry.isDir) - Number(a.entry.isDir) || a.entry.name.localeCompare(b.entry.name, "de"));
+    nodes.sort((a, b) => Number(b.entry.isDir) - Number(a.entry.isDir) || a.entry.name.localeCompare(b.entry.name, "de", { numeric: true }));
     nodes.forEach((n) => sort(n.children));
   };
   sort(root);
