@@ -23,4 +23,6 @@ npm run check   # muss ohne Fehler und ohne neue Warnungen durchlaufen
 npm run build
 ```
 
+`npm run dev`, `npm run check` und `npm run build` prüfen vorher mit `scripts/check-deps.mjs`, ob alle Abhängigkeiten aus `package.json` installiert sind. Fehlt ein Paket, kommt das als Meldung mit dem Hinweis auf `npm install`, nicht als „Failed to resolve import …“ aus Vite.
+
 Bei sichtbaren Änderungen die App mit `npm run tauri dev` starten und es selbst ausprobieren. Geht das in deiner Umgebung nicht, sag es im PR.

@@ -23,6 +23,8 @@
   let graph: ForceGraph<SimNode, SimLink> | undefined;
   let data = $state<GraphData>({ notes: [], links: [] });
   let loadError = $state<string | null>(null);
+  /** force-graph itself is missing, so there is no graph to draw, only a hint. */
+  let importError = $state<string | null>(null);
   let panelOpen = $state(false);
   let fitted = false;
   let fitTimer: ReturnType<typeof setTimeout> | undefined;
@@ -47,6 +49,8 @@
     unresolved: settings.unresolved,
   });
   const model = $derived(buildGraph(data, vault.entries, modelSettings, vault.info?.name ?? "Vault"));
+  /** Why the graph is missing: the data did not load, or force-graph itself is not there. */
+  const error = $derived(importError ?? loadError);
 
   // ---------------------------------------------------------------- colors
 
@@ -178,9 +182,25 @@
 
   // ---------------------------------------------------------------- lifecycle
 
+  /**
+   * Loads force-graph on demand. A missing package (e.g. node_modules that is older
+   * than package.json) would otherwise end as an unhandled rejection and an empty tab.
+   */
+  async function loadForceGraph() {
+    try {
+      const { default: ForceGraphClass } = await import("force-graph");
+      return ForceGraphClass;
+    } catch (e) {
+      console.error("force-graph konnte nicht geladen werden", e);
+      importError = 'force-graph fehlt. Bitte "npm install" ausführen.';
+      return null;
+    }
+  }
+
   /** Loaded with the first graph tab, not at app start: it is the biggest part of this plugin. */
   async function createGraph() {
-    const { default: ForceGraphClass } = await import("force-graph");
+    const ForceGraphClass = await loadForceGraph();
+    if (!ForceGraphClass) return; // not installed, the view says so
     if (!container.isConnected) return; // tab closed while loading
     graph = new ForceGraphClass<SimNode, SimLink>(container)
       .backgroundColor("rgba(0,0,0,0)")
@@ -304,8 +324,8 @@
 <div class="relative h-full w-full overflow-hidden bg-zinc-950">
   <div bind:this={container} class="absolute inset-0"></div>
 
-  {#if loadError}
-    <div class="absolute inset-x-0 top-1/2 text-center text-sm text-red-300">Graph konnte nicht geladen werden: {loadError}</div>
+  {#if error}
+    <div class="absolute inset-x-0 top-1/2 text-center text-sm text-red-300">Graph konnte nicht geladen werden: {error}</div>
   {:else if !model.nodes.length}
     <div class="pointer-events-none absolute inset-x-0 top-1/2 text-center text-sm text-zinc-500">
       {settings.filter ? "Keine Notiz passt zum Filter." : "Noch keine Notizen im Vault."}

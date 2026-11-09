@@ -163,6 +163,8 @@ npm run tauri dev      # App mit Hot-Reload starten
 npm run tauri build    # Installer bauen
 ```
 
+Nach einem Pull, der neue Abhängigkeiten bringt, einmal `npm install` ausführen. `npm run dev`, `npm run check` und `npm run build` prüfen vorher selbst, ob alle Pakete aus `package.json` installiert sind, und sagen sonst, was fehlt – statt später in Vite mit „Failed to resolve import …“ aufzutauchen.
+
 Prüfen:
 
 ```sh

@@ -5,9 +5,12 @@
   "license": "MIT OR Apache-2.0",
   "type": "module",
   "scripts": {
+    "predev": "node scripts/check-deps.mjs",
     "dev": "vite",
+    "prebuild": "node scripts/check-deps.mjs",
     "build": "vite build",
     "preview": "vite preview",
+    "precheck": "node scripts/check-deps.mjs",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "tauri": "tauri"
   },
