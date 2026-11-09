@@ -37,9 +37,16 @@
     class="relative flex shrink-0 flex-col border-r border-zinc-800 bg-zinc-900/60"
     style:width="{ui.panelWidth}px"
   >
-    <header class="flex h-9 shrink-0 items-center border-b border-zinc-800 pr-1.5 pl-4" use:dragRegion>
+    <header class="flex h-9 shrink-0 items-center border-b border-zinc-800 pr-1.5 {panel.header === false && panel.actions ? 'pl-1.5' : 'pl-4'}" use:dragRegion>
       {#if panel.header !== false}
         <span class="truncate text-xs font-medium tracking-wide text-zinc-500 uppercase">{panel.label}</span>
+      {/if}
+      {#if panel.actions}
+        {#key panel.id}
+          <div class="flex min-w-0 items-center gap-0.5 {panel.header !== false ? 'ml-2' : ''}">
+            <panel.actions />
+          </div>
+        {/key}
       {/if}
       <button
         class="ml-auto flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
