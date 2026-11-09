@@ -1,3 +1,6 @@
+// State of the right-click menu, shared by every component that opens one.
+// Not named contextMenu.svelte.ts: on case-insensitive file systems (Windows,
+// macOS) the import "./contextMenu.svelte" would resolve to ContextMenu.svelte.
 import type { Component } from "svelte";
 
 export interface MenuItem {

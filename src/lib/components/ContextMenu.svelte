@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { contextMenu } from "./contextMenu.svelte";
+  import { contextMenu } from "./contextMenuState.svelte";
 
   let menu: HTMLDivElement | undefined = $state();
   let pos = $state({ x: 0, y: 0 });

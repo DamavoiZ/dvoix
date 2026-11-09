@@ -3,7 +3,7 @@
   // drag to reorder, "+" (Strg+T) for an empty tab.
   import { File, Plus, X } from "@lucide/svelte";
   import { fileTypeFor } from "../../../filetypes";
-  import { contextMenu } from "../../../components/contextMenu.svelte";
+  import { contextMenu } from "../../../components/contextMenuState.svelte";
   import { vault, type Tab } from "../../../vault.svelte";
 
   const TAB_DRAG = "application/x-dvoix-tab";
