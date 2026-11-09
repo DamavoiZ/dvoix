@@ -7,7 +7,8 @@ Eine Desktop-App für Notizen, Projektmanagement, Tracking und alles, was späte
 ## Was schon geht
 
 - Vault-Ordner wählen, der zuletzt geöffnete wird beim Start wieder geladen
-- Dateibaum mit Anlegen, Umbenennen (Doppelklick) und Löschen (landet in `.trash/` im Vault)
+- Seitenleiste wie in Obsidian: schmale Icon-Leiste ganz links (Dateien, Suche, Tags), daneben das Panel, in der Breite ziehbar und per Klick aufs aktive Icon einklappbar
+- Datei-Explorer mit Ordnerbaum: Ordner auf- und zuklappen (wird gemerkt), Rechtsklick-Menü zum Anlegen, Umbenennen und Löschen (landet in `.trash/` im Vault), Dateien per Drag & Drop in Ordner verschieben
 - Markdown-Editor (CodeMirror 6) mit YAML-Frontmatter, `[[Wikilinks]]` (Strg/Cmd + Klick öffnet oder legt die Notiz an) und `#tags`
 - Automatisches Speichern, atomar geschrieben (erst Temp-Datei, dann umbenennen)
 - Änderungen von außen (VS Code, Sync-Tools, git) erscheinen sofort in der App
@@ -37,7 +38,8 @@ src/                    Svelte-Frontend
   lib/api.ts            typisierte Aufrufe der Rust-Befehle
   lib/vault.svelte.ts   App-Zustand: offener Vault, offene Datei, Speichern
   lib/filetypes/        Dateityp-Registry, je Typ ein Ordner (markdown, canvas, ...)
-  lib/components/       Seitenleiste, Dateibaum, Suche, Tags, Dateiansicht
+  lib/ui.svelte.ts      Layout-Zustand: aktives Panel, Breite, aufgeklappte Ordner
+  lib/components/       Ribbon, Seitenpanel, Datei-Explorer, Suche, Tags, Dateiansicht
 ```
 
 Im Vault legt dvoix nur den versteckten Ordner `.dvoix/` an (Index, später Einstellungen). Den kannst du jederzeit löschen. Ordner, die mit `.` beginnen, werden nicht angezeigt und nicht indexiert.
@@ -53,14 +55,14 @@ Jedes Feature ist ein eigenes Modul aus Dateiendung und Ansicht. Beispiel Kanban
      id: "board",
      label: "Board",
      extensions: ["board"],
-     icon: "▤",
+     icon: Kanban, // beliebiges Icon aus @lucide/svelte
      view: BoardView,
      template: () => JSON.stringify({ columns: [] }, null, 2),
    };
    ```
 3. In `src/lib/filetypes/index.ts` mit `registerFileType(boardType)` eintragen.
 
-Damit erscheint „+ Board“ in der Seitenleiste und `.board`-Dateien öffnen sich in der neuen Ansicht. Soll der Typ auch durchsuchbar sein, bekommt `crates/dvoix-core/src/index.rs` eine Extraktion für die Endung (siehe `is_indexable`).
+Damit erscheint „Board erstellen“ in der Werkzeugleiste und im Rechtsklick-Menü des Explorers und `.board`-Dateien öffnen sich in der neuen Ansicht. Soll der Typ auch durchsuchbar sein, bekommt `crates/dvoix-core/src/index.rs` eine Extraktion für die Endung (siehe `is_indexable`).
 
 Für Projekte und Tracking ist Frontmatter der Baustein: `status: active`, `due: 2026-12-01` usw. landen im Index und lassen sich mit `notes_where("status", "active")` abfragen.
 

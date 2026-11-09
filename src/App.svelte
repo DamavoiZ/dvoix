@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import Sidebar from "./lib/components/Sidebar.svelte";
+  import Ribbon from "./lib/components/Ribbon.svelte";
+  import SidePanel from "./lib/components/SidePanel.svelte";
+  import ContextMenu from "./lib/components/ContextMenu.svelte";
   import FilePane from "./lib/components/FilePane.svelte";
   import Welcome from "./lib/components/Welcome.svelte";
   import { vault } from "./lib/vault.svelte";
@@ -20,9 +22,11 @@
   <div class="h-full"></div>
 {:else if vault.info}
   <div class="flex h-full">
-    <Sidebar />
+    <Ribbon />
+    <SidePanel />
     <FilePane />
   </div>
+  <ContextMenu />
 {:else}
   <Welcome />
 {/if}
