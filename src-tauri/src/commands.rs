@@ -1,5 +1,9 @@
 //! Commands callable from the frontend via `invoke("name", { ...args })`.
 //! The TypeScript side of this lives in `src/lib/api.ts`.
+//!
+//! Every command is `#[tauri::command(async)]`: plain sync commands run on the
+//! main thread, and opening or re-indexing a large vault there freezes the
+//! window (on Windows it stays white until the work is done).
 
 use dvoix_core::{
     NoteSummary, ProjectSummary, SearchHit, TaskItem, VaultEntry, index::TagCount, tasks,
@@ -39,12 +43,12 @@ fn reindex(ws: &Workspace, path: &str) -> CmdResult<()> {
         .map_err(err)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn last_vault(app: AppHandle) -> Option<String> {
     settings::load(&app).last_vault
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn open_vault(app: AppHandle, state: State<AppState>, path: String) -> CmdResult<VaultInfo> {
     let ws = Workspace::open(&app, &path).map_err(err)?;
     let info = VaultInfo {
@@ -59,7 +63,7 @@ pub fn open_vault(app: AppHandle, state: State<AppState>, path: String) -> CmdRe
     Ok(info)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn close_vault(app: AppHandle, state: State<AppState>) -> CmdResult<()> {
     *state.workspace.lock().map_err(err)? = None;
     let mut s = settings::load(&app);
@@ -68,17 +72,17 @@ pub fn close_vault(app: AppHandle, state: State<AppState>) -> CmdResult<()> {
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_entries(state: State<AppState>) -> CmdResult<Vec<VaultEntry>> {
     with_ws(&state, |ws| ws.vault.list().map_err(err))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn read_file(state: State<AppState>, path: String) -> CmdResult<String> {
     with_ws(&state, |ws| ws.vault.read(&path).map_err(err))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn write_file(state: State<AppState>, path: String, content: String) -> CmdResult<VaultEntry> {
     with_ws(&state, |ws| {
         let entry = ws.vault.write(&path, &content).map_err(err)?;
@@ -87,7 +91,7 @@ pub fn write_file(state: State<AppState>, path: String, content: String) -> CmdR
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn create_file(state: State<AppState>, path: String, content: String) -> CmdResult<VaultEntry> {
     with_ws(&state, |ws| {
         let entry = ws.vault.create(&path, &content).map_err(err)?;
@@ -96,12 +100,12 @@ pub fn create_file(state: State<AppState>, path: String, content: String) -> Cmd
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn create_folder(state: State<AppState>, path: String) -> CmdResult<VaultEntry> {
     with_ws(&state, |ws| ws.vault.create_dir(&path).map_err(err))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn rename_entry(state: State<AppState>, from: String, to: String) -> CmdResult<VaultEntry> {
     with_ws(&state, |ws| {
         let entry = ws.vault.rename(&from, &to).map_err(err)?;
@@ -116,7 +120,7 @@ pub fn rename_entry(state: State<AppState>, from: String, to: String) -> CmdResu
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn trash_entry(state: State<AppState>, path: String) -> CmdResult<()> {
     with_ws(&state, |ws| {
         ws.vault.trash(&path).map_err(err)?;
@@ -124,7 +128,7 @@ pub fn trash_entry(state: State<AppState>, path: String) -> CmdResult<()> {
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn search(state: State<AppState>, query: String) -> CmdResult<Vec<SearchHit>> {
     with_ws(&state, |ws| {
         ws.index
@@ -135,14 +139,14 @@ pub fn search(state: State<AppState>, query: String) -> CmdResult<Vec<SearchHit>
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn tags(state: State<AppState>) -> CmdResult<Vec<TagCount>> {
     with_ws(&state, |ws| {
         ws.index.lock().map_err(err)?.tags().map_err(err)
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn notes_with_tag(state: State<AppState>, tag: String) -> CmdResult<Vec<NoteSummary>> {
     with_ws(&state, |ws| {
         ws.index
@@ -153,7 +157,7 @@ pub fn notes_with_tag(state: State<AppState>, tag: String) -> CmdResult<Vec<Note
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn notes_where(
     state: State<AppState>,
     key: String,
@@ -168,21 +172,21 @@ pub fn notes_where(
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn backlinks(state: State<AppState>, path: String) -> CmdResult<Vec<NoteSummary>> {
     with_ws(&state, |ws| {
         ws.index.lock().map_err(err)?.backlinks(&path).map_err(err)
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn tasks(state: State<AppState>) -> CmdResult<Vec<TaskItem>> {
     with_ws(&state, |ws| {
         ws.index.lock().map_err(err)?.tasks().map_err(err)
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn projects(state: State<AppState>) -> CmdResult<Vec<ProjectSummary>> {
     with_ws(&state, |ws| {
         ws.index.lock().map_err(err)?.projects().map_err(err)
@@ -191,7 +195,7 @@ pub fn projects(state: State<AppState>) -> CmdResult<Vec<ProjectSummary>> {
 
 /// Checks or unchecks a task in its file. `text` must still match, so a task
 /// is never toggled on the wrong line after the file changed.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn set_task_done(
     state: State<AppState>,
     path: String,
@@ -208,20 +212,20 @@ pub fn set_task_done(
 
 /// Reads a file from the vault's `.dvoix/` folder (settings, workspace,
 /// plugin data). Returns `None` if it does not exist yet.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn read_config(state: State<AppState>, path: String) -> CmdResult<Option<String>> {
     with_ws(&state, |ws| ws.vault.read_config(&path).map_err(err))
 }
 
 /// Writes a file into the vault's `.dvoix/` folder.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn write_config(state: State<AppState>, path: String, content: String) -> CmdResult<()> {
     with_ws(&state, |ws| {
         ws.vault.write_config(&path, &content).map_err(err)
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn rebuild_index(state: State<AppState>) -> CmdResult<usize> {
     with_ws(&state, |ws| {
         ws.index
