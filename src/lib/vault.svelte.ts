@@ -2,6 +2,7 @@
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { api, onVaultChanged, type VaultEntry, type VaultInfo } from "./api";
 import { creatableFileTypes, type FileType } from "./filetypes";
+import { ui } from "./ui.svelte";
 
 const SAVE_DELAY_MS = 400;
 
@@ -40,6 +41,7 @@ class VaultStore {
     try {
       await this.flush();
       this.info = await api.openVault(path);
+      ui.useVault(this.info.path);
       this.openPath = null;
       this.content = "";
       this.error = null;
@@ -76,6 +78,7 @@ class VaultStore {
       this.openPath = path;
       this.dirty = false;
       this.error = null;
+      ui.reveal(path);
     } catch (e) {
       this.error = String(e);
     }
@@ -169,19 +172,38 @@ class VaultStore {
     const taken = new Set(this.entries.map((e) => e.path.toLowerCase()));
     let name = "Neuer Ordner";
     for (let n = 2; taken.has(`${prefix}${name}`.toLowerCase()); n++) name = `Neuer Ordner ${n}`;
-    await api.createFolder(`${prefix}${name}`).catch((e) => (this.error = String(e)));
-    await this.refresh();
+    try {
+      await api.createFolder(`${prefix}${name}`);
+      if (parent) ui.reveal(`${prefix}${name}`);
+      await this.refresh();
+      return `${prefix}${name}`;
+    } catch (e) {
+      this.error = String(e);
+    }
   }
 
   async rename(from: string, newName: string) {
     const parent = from.includes("/") ? from.slice(0, from.lastIndexOf("/") + 1) : "";
-    const to = `${parent}${newName}`;
-    if (to === from || !newName.trim()) return;
+    if (!newName.trim()) return;
+    await this.moveTo(from, `${parent}${newName.trim()}`);
+  }
+
+  /** Moves a file or folder into another folder ("" = vault root), e.g. by drag & drop. */
+  async move(from: string, folder: string) {
+    const name = from.split("/").pop()!;
+    if (folder === from || folder.startsWith(`${from}/`)) return; // not into itself
+    await this.moveTo(from, folder ? `${folder}/${name}` : name);
+  }
+
+  private async moveTo(from: string, to: string) {
+    if (to === from) return;
     try {
       await this.flush();
       await api.renameEntry(from, to);
+      ui.moved(from, to);
       if (this.openPath === from) this.openPath = to;
       else if (this.openPath?.startsWith(`${from}/`)) this.openPath = to + this.openPath.slice(from.length);
+      if (to.includes("/")) ui.reveal(to);
       await this.refresh();
     } catch (e) {
       this.error = String(e);

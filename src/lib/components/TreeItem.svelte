@@ -1,86 +1,117 @@
 <script lang="ts">
+  import { ChevronRight } from "@lucide/svelte";
   import Self from "./TreeItem.svelte";
   import type { TreeNode } from "./tree";
+  import { contextMenu } from "./contextMenu.svelte";
+  import { DRAG_TYPE, entryMenu } from "./fileMenu";
   import { vault } from "../vault.svelte";
+  import { ui } from "../ui.svelte";
   import { fileTypeFor } from "../filetypes";
 
   let { node, depth = 0 }: { node: TreeNode; depth?: number } = $props();
 
-  let expanded = $state(true);
-  let renaming = $state(false);
-  let draft = $state("");
-
   const entry = $derived(node.entry);
+  const expanded = $derived(ui.expanded.has(entry.path));
   const active = $derived(vault.openPath === entry.path);
-  // Hide the extension of files we have a view for, like Obsidian does for notes.
-  const label = $derived(
-    entry.isDir || fileTypeFor(entry.path)?.id === "fallback"
-      ? entry.name
-      : entry.name.replace(/\.[^.]+$/, ""),
-  );
+  const renaming = $derived(ui.renaming === entry.path);
+  const isNote = $derived(fileTypeFor(entry.path)?.id === "markdown");
+  // Like Obsidian: notes without ".md", other files with a small extension badge.
+  const label = $derived(isNote ? entry.name.replace(/\.[^.]+$/, "") : entry.name.replace(/\.[^.]+$/, "") || entry.name);
+  const badge = $derived(!entry.isDir && !isNote && entry.extension ? entry.extension.toUpperCase() : "");
+  /** Folder a drop on this row moves into. */
+  const dropFolder = $derived(entry.isDir ? entry.path : entry.path.split("/").slice(0, -1).join("/"));
+
+  let draft = $state("");
+  let dropTarget = $state(false);
 
   function click() {
-    if (entry.isDir) expanded = !expanded;
+    if (entry.isDir) ui.toggleFolder(entry.path);
     else void vault.openFile(entry.path);
   }
 
-  function startRename() {
+  function startEdit(el: HTMLInputElement) {
     draft = entry.name;
-    renaming = true;
-  }
-
-  async function finishRename() {
-    renaming = false;
-    await vault.rename(entry.path, draft.trim());
-  }
-
-  function focusSelect(el: HTMLInputElement) {
+    el.value = draft;
     el.focus();
     const dot = entry.isDir ? -1 : draft.lastIndexOf(".");
     el.setSelectionRange(0, dot > 0 ? dot : draft.length);
   }
+
+  async function finishRename() {
+    if (ui.renaming !== entry.path) return;
+    ui.renaming = null;
+    await vault.rename(entry.path, draft);
+  }
+
+  function dragOver(e: DragEvent) {
+    if (!e.dataTransfer?.types.includes(DRAG_TYPE)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    dropTarget = true;
+  }
+
+  function drop(e: DragEvent) {
+    dropTarget = false;
+    const from = e.dataTransfer?.getData(DRAG_TYPE);
+    if (!from) return;
+    e.preventDefault();
+    e.stopPropagation();
+    void vault.move(from, dropFolder);
+  }
 </script>
 
 <div
-  class="group flex items-center gap-1.5 rounded px-2 py-0.5 text-sm hover:bg-zinc-800/70"
-  class:bg-zinc-800={active}
-  class:text-white={active}
-  style:padding-left="{0.5 + depth * 0.85}rem"
+  class="group flex h-7 items-center gap-1 rounded-md pr-2 text-[13px] {active
+    ? 'bg-zinc-800 text-zinc-50'
+    : 'text-zinc-300 hover:bg-zinc-800/60'} {dropTarget && entry.isDir ? 'ring-1 ring-violet-500 ring-inset' : ''}"
+  style:padding-left="{0.5 + depth * 1}rem"
+  role="treeitem"
+  aria-selected={active}
+  aria-expanded={entry.isDir ? expanded : undefined}
+  tabindex="-1"
+  draggable={!renaming}
+  ondragstart={(e) => {
+    e.dataTransfer?.setData(DRAG_TYPE, entry.path);
+    if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+  }}
+  ondragover={dragOver}
+  ondragleave={() => (dropTarget = false)}
+  ondrop={drop}
+  oncontextmenu={(e) => contextMenu.show(e, entryMenu(entry))}
 >
+  <span class="flex w-4 shrink-0 justify-center text-zinc-500">
+    {#if entry.isDir}
+      <ChevronRight size={14} class="transition-transform {expanded ? 'rotate-90' : ''}" />
+    {/if}
+  </span>
+
   {#if renaming}
     <input
-      class="w-full rounded bg-zinc-900 px-1 text-sm outline outline-violet-500"
-      bind:value={draft}
-      use:focusSelect
+      class="h-6 w-full rounded bg-zinc-950 px-1.5 outline-1 outline-violet-500"
+      use:startEdit
+      oninput={(e) => (draft = e.currentTarget.value)}
       onblur={finishRename}
       onkeydown={(e) => {
         if (e.key === "Enter") e.currentTarget.blur();
-        if (e.key === "Escape") renaming = false;
+        if (e.key === "Escape") ui.renaming = null;
       }}
     />
   {:else}
-    <button class="flex min-w-0 flex-1 items-center gap-1.5 text-left" onclick={click} ondblclick={startRename}>
-      <span class="w-3 shrink-0 text-center text-xs text-zinc-500">
-        {entry.isDir ? (expanded ? "▾" : "▸") : fileTypeFor(entry.path)?.icon}
-      </span>
-      <span class="truncate">{label}</span>
-    </button>
-    <span class="hidden shrink-0 gap-1 text-xs text-zinc-500 group-hover:flex">
-      {#if entry.isDir}
-        {#each vault.creatable() as type (type.id)}
-          <button class="hover:text-zinc-200" title="{type.label} hier anlegen" onclick={() => vault.createFile(type, entry.path)}>
-            +{type.icon}
-          </button>
-        {/each}
+    <button class="flex h-full min-w-0 flex-1 items-center gap-2 text-left" onclick={click}>
+      <span class="truncate" class:font-medium={entry.isDir}>{label}</span>
+      {#if badge}
+        <span class="shrink-0 rounded bg-zinc-800 px-1 py-px text-[9px] font-semibold tracking-wider text-zinc-400">{badge}</span>
       {/if}
-      <button class="hover:text-zinc-200" title="Umbenennen" onclick={startRename}>✎</button>
-      <button class="hover:text-red-400" title="In den Papierkorb (.trash)" onclick={() => vault.trash(entry.path)}>🗑</button>
-    </span>
+    </button>
   {/if}
 </div>
 
 {#if entry.isDir && expanded}
-  {#each node.children as child (child.entry.path)}
-    <Self node={child} depth={depth + 1} />
-  {/each}
+  <div class="relative">
+    <!-- indent guide like in Obsidian -->
+    <div class="absolute top-0 bottom-0 w-px bg-zinc-800" style:left="{0.5 + depth * 1 + 0.5}rem"></div>
+    {#each node.children as child (child.entry.path)}
+      <Self node={child} depth={depth + 1} />
+    {/each}
+  </div>
 {/if}

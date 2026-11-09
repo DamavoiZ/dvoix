@@ -24,8 +24,8 @@ export interface FileType {
   label: string;
   /** Lower-case extensions without dot, e.g. ["md"]. */
   extensions: string[];
-  /** Short symbol for the file tree. */
-  icon: string;
+  /** Icon for menus and buttons (any Svelte component, e.g. from @lucide/svelte). */
+  icon: Component;
   /** The view that shows and edits the file. */
   view: Component<FileViewProps>;
   /** Content for a freshly created file. Omit if users can't create this type from the app. */
