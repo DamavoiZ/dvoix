@@ -48,6 +48,7 @@
   tabindex="-1"
   onwheel={(e) => {
     if (e.deltaX !== 0) return;
+    e.preventDefault();
     e.currentTarget.scrollLeft += e.deltaY;
   }}
 >

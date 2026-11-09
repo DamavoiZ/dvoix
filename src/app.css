@@ -5,10 +5,20 @@
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 }
 
+/* The window itself never scrolls, only panels and the editor do. Without
+   this, anything a bit taller than the window (or a scrollIntoView call) let
+   the whole app slide up under the title bar. #app is fixed to the viewport
+   and clips, so not even programmatic scrolling can move it. */
 html,
-body,
-#app {
+body {
   height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+#app {
+  position: fixed;
+  inset: 0;
+  overflow: clip;
 }
 
 body {
