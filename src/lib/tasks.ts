@@ -1,7 +1,7 @@
 // Shared helpers for the task and project panels: dates, labels, toggling.
-import { api, type Priority, type ProjectStatus, type TaskItem } from "../api";
-import { vault } from "../vault.svelte";
-import { reveal } from "../reveal.svelte";
+import { api, type Priority, type ProjectStatus, type TaskItem } from "./api";
+import { vault } from "./vault.svelte";
+import { reveal } from "./reveal.svelte";
 
 /** Today as `YYYY-MM-DD` in local time (task dates have no time zone). */
 export function today(): string {

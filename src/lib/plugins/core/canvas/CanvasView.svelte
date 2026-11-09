@@ -3,7 +3,7 @@
   // space for a new text card. Good enough to prove the file-type module
   // structure; a full editor (tldraw, Svelte Flow, ...) can replace it later
   // while keeping the same `.canvas` files.
-  import type { FileViewProps } from "../types";
+  import type { FileViewProps } from "../../../filetypes/types";
   import { colorOf, newId, parseCanvas, serializeCanvas, type CanvasNode, type JsonCanvas } from "./jsonCanvas";
 
   let { content, onchange, onopen }: FileViewProps = $props();

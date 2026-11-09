@@ -1,43 +1,48 @@
 <script lang="ts">
-  // The thin icon bar on the far left, like Obsidian's ribbon.
-  import { ArrowLeftRight, FolderKanban, FolderTree, Hash, ListChecks, Search } from "@lucide/svelte";
-  import type { Component } from "svelte";
-  import { ui, type PanelId } from "../ui.svelte";
+  // The thin icon bar on the far left, like Obsidian's ribbon. Its icons come
+  // from plugins: one per side panel, plus plugin actions.
+  import { ArrowLeftRight, Settings } from "@lucide/svelte";
+  import { plugins } from "../plugins";
+  import { ui } from "../ui.svelte";
   import { vault } from "../vault.svelte";
+  import { SETTINGS } from "./settings/SettingsDialog.svelte";
 
-  const panels: { id: PanelId; label: string; icon: Component }[] = [
-    { id: "files", label: "Dateien", icon: FolderTree },
-    { id: "search", label: "Suche", icon: Search },
-    { id: "tags", label: "Tags", icon: Hash },
-    { id: "tasks", label: "Aufgaben", icon: ListChecks },
-    { id: "projects", label: "Projekte", icon: FolderKanban },
-  ];
+  const items = $derived(
+    [
+      ...plugins.panels.map((p) => ({ key: `panel:${p.id}`, label: p.label, icon: p.icon, order: p.order ?? 100, panel: p.id, action: undefined })),
+      ...plugins.ribbonActions.map((a) => ({ key: `action:${a.id}`, label: a.label, icon: a.icon, order: a.order ?? 100, panel: undefined, action: a.action })),
+    ].sort((a, b) => a.order - b.order),
+  );
+
+  const btn = "flex h-8 w-8 items-center justify-center rounded-md transition-colors";
+  const idle = "text-zinc-500 hover:bg-zinc-800/60 hover:text-zinc-200";
 </script>
 
 <nav class="flex w-11 shrink-0 flex-col items-center gap-1 border-r border-zinc-800 bg-zinc-950 py-2" aria-label="Ribbon">
-  {#each panels as p (p.id)}
-    {@const active = ui.panelOpen && ui.panel === p.id}
+  {#each items as item (item.key)}
+    {@const active = !!item.panel && ui.panelOpen && ui.panel === item.panel}
     <button
-      class="flex h-8 w-8 items-center justify-center rounded-md transition-colors {active
-        ? 'bg-zinc-800 text-zinc-100'
-        : 'text-zinc-500 hover:bg-zinc-800/60 hover:text-zinc-200'}"
-      title={p.label}
-      aria-label={p.label}
-      aria-pressed={active}
-      onclick={() => ui.togglePanel(p.id)}
+      class="{btn} {active ? 'bg-zinc-800 text-zinc-100' : idle}"
+      title={item.label}
+      aria-label={item.label}
+      aria-pressed={item.panel ? active : undefined}
+      onclick={() => (item.panel ? ui.togglePanel(item.panel) : item.action?.())}
     >
-      <p.icon size={18} strokeWidth={1.75} />
+      <item.icon size={18} strokeWidth={1.75} />
     </button>
   {/each}
 
   <div class="flex-1"></div>
 
-  <button
-    class="flex h-8 w-8 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800/60 hover:text-zinc-200"
-    title="Anderen Vault öffnen"
-    aria-label="Anderen Vault öffnen"
-    onclick={() => vault.close()}
-  >
+  <button class="{btn} {idle}" title="Anderen Vault öffnen" aria-label="Anderen Vault öffnen" onclick={() => vault.close()}>
     <ArrowLeftRight size={18} strokeWidth={1.75} />
+  </button>
+  <button
+    class="{btn} {ui.modal === SETTINGS ? 'bg-zinc-800 text-zinc-100' : idle}"
+    title="Einstellungen (Strg+,)"
+    aria-label="Einstellungen"
+    onclick={() => ui.toggleModal(SETTINGS)}
+  >
+    <Settings size={18} strokeWidth={1.75} />
   </button>
 </nav>

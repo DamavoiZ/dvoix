@@ -2,9 +2,9 @@
   // Editor tabs above the open file: click to switch, middle click or × to close,
   // drag to reorder, "+" (Strg+T) for an empty tab.
   import { File, Plus, X } from "@lucide/svelte";
-  import { fileTypeFor } from "../filetypes";
-  import { contextMenu } from "./contextMenu.svelte";
-  import { vault, type Tab } from "../vault.svelte";
+  import { fileTypeFor } from "../../../filetypes";
+  import { contextMenu } from "../../../components/contextMenu.svelte";
+  import { vault, type Tab } from "../../../vault.svelte";
 
   const TAB_DRAG = "application/x-dvoix-tab";
 

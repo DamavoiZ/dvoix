@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { api, type SearchHit } from "../api";
-  import { vault } from "../vault.svelte";
+  import { api, type SearchHit } from "../../../api";
+  import { vault } from "../../../vault.svelte";
 
   let query = $state("");
   let hits = $state<SearchHit[]>([]);

@@ -193,6 +193,49 @@ impl Vault {
         self.entry(to)
     }
 
+    /// Resolves a path inside the vault's `.dvoix/` config folder, e.g.
+    /// `app.json` or `plugins/tasks/data.json`. Only plain names are allowed:
+    /// no `..`, no absolute paths, no hidden parts.
+    pub fn config_path(&self, rel: &str) -> Result<PathBuf> {
+        let mut out = self.app_dir();
+        let mut parts = 0;
+        for c in Path::new(rel).components() {
+            match c {
+                Component::Normal(part) if !part.to_string_lossy().starts_with('.') => {
+                    out.push(part);
+                    parts += 1;
+                }
+                _ => return Err(Error::OutsideVault(rel.to_string())),
+            }
+        }
+        if parts == 0 {
+            return Err(Error::OutsideVault(rel.to_string()));
+        }
+        Ok(out)
+    }
+
+    /// Reads a config file from `.dvoix/`; `None` if it does not exist yet.
+    pub fn read_config(&self, rel: &str) -> Result<Option<String>> {
+        match fs::read_to_string(self.config_path(rel)?) {
+            Ok(s) => Ok(Some(s)),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Writes a config file in `.dvoix/` atomically (temp file, then rename).
+    pub fn write_config(&self, rel: &str, content: &str) -> Result<()> {
+        let path = self.config_path(rel)?;
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let file_name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let tmp = path.with_file_name(format!(".{file_name}.dvoix-tmp"));
+        fs::write(&tmp, content)?;
+        fs::rename(&tmp, &path)?;
+        Ok(())
+    }
+
     /// Moves a file or folder into the vault's `.trash` folder instead of
     /// deleting it for good.
     pub fn trash(&self, rel: &str) -> Result<()> {
@@ -222,6 +265,22 @@ mod tests {
         assert!(vault.resolve("../secret.md").is_err());
         assert!(vault.resolve("/etc/passwd").is_err());
         assert!(vault.resolve("notes/ok.md").is_ok());
+    }
+
+    #[test]
+    fn config_files_live_in_app_dir_and_stay_hidden() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = Vault::open(dir.path()).unwrap();
+        assert_eq!(vault.read_config("app.json").unwrap(), None);
+        vault.write_config("plugins/tasks/data.json", "{}").unwrap();
+        assert_eq!(vault.read_config("plugins/tasks/data.json").unwrap().as_deref(), Some("{}"));
+        assert!(dir.path().join(APP_DIR).join("plugins/tasks/data.json").exists());
+        assert!(vault.list().unwrap().is_empty());
+
+        assert!(vault.write_config("../escape.json", "x").is_err());
+        assert!(vault.write_config("/etc/x.json", "x").is_err());
+        assert!(vault.write_config("plugins/.hidden", "x").is_err());
+        assert!(vault.write_config("", "x").is_err());
     }
 
     #[test]

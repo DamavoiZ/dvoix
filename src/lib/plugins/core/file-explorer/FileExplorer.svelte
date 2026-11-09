@@ -3,17 +3,19 @@
   import { ChevronsDownUp, FolderPlus } from "@lucide/svelte";
   import TreeItem from "./TreeItem.svelte";
   import { buildTree } from "./tree";
-  import { contextMenu } from "./contextMenu.svelte";
+  import { contextMenu } from "../../../components/contextMenu.svelte";
   import { DRAG_TYPE, createItems, newFolder } from "./fileMenu";
-  import { creatableFileTypes } from "../filetypes";
-  import { ui } from "../ui.svelte";
-  import { vault } from "../vault.svelte";
+  import { creatableFileTypes } from "../../../filetypes";
+  import { ui } from "../../../ui.svelte";
+  import { vault } from "../../../vault.svelte";
+  import { explorerSettings } from "./settings";
 
   const tree = $derived(buildTree(vault.entries));
   let rootDrop = $state(false);
 
-  /** New items go into the folder of the open file, like in Obsidian. */
+  /** New items go into the folder of the open file, like in Obsidian (or the root, see settings). */
   function currentFolder(): string {
+    if (explorerSettings.value.newFileLocation === "root") return "";
     const p = vault.openPath;
     return p && p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "";
   }

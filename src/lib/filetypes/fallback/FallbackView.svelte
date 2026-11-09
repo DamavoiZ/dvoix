@@ -5,6 +5,9 @@
 </script>
 
 <div class="flex h-full flex-col gap-3 p-8 text-sm text-zinc-400">
-  <p>Für <code class="text-zinc-200">{path}</code> gibt es noch keine eigene Ansicht.</p>
+  <p>
+    Für <code class="text-zinc-200">{path}</code> gibt es keine eigene Ansicht. Ist das passende Plugin vielleicht in den
+    Einstellungen ausgeschaltet?
+  </p>
   <pre class="overflow-auto rounded bg-zinc-900 p-4 font-mono text-xs text-zinc-300">{content.slice(0, 20000)}</pre>
 </div>

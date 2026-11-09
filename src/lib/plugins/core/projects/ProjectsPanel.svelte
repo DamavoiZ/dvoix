@@ -1,9 +1,9 @@
 <script lang="ts">
   // Notes with `type: projekt` in their frontmatter, with status, due date and task progress.
   import { Plus } from "@lucide/svelte";
-  import { api, type ProjectStatus, type ProjectSummary } from "../api";
-  import { vault } from "../vault.svelte";
-  import { dueBucket, formatDue, isoDate, priorityClass, priorityLabels, statusClass, statusLabels, today } from "../tasks/tasks";
+  import { api, type ProjectStatus, type ProjectSummary } from "../../../api";
+  import { vault } from "../../../vault.svelte";
+  import { dueBucket, formatDue, isoDate, priorityClass, priorityLabels, statusClass, statusLabels, today } from "../../../tasks";
 
   type Show = "running" | "closed" | "all";
 

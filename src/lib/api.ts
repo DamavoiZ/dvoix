@@ -90,6 +90,8 @@ export const api = {
   projects: () => invoke<ProjectSummary[]>("projects"),
   setTaskDone: (path: string, line: number, text: string, done: boolean) =>
     invoke<VaultEntry>("set_task_done", { path, line, text, done }),
+  readConfig: (path: string) => invoke<string | null>("read_config", { path }),
+  writeConfig: (path: string, content: string) => invoke<void>("write_config", { path, content }),
   rebuildIndex: () => invoke<number>("rebuild_index"),
 };
 

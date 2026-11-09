@@ -78,6 +78,8 @@ pub fn run() {
             commands::tasks,
             commands::projects,
             commands::set_task_done,
+            commands::read_config,
+            commands::write_config,
             commands::rebuild_index,
         ])
         .run(tauri::generate_context!())
