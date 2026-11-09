@@ -11,4 +11,6 @@ export const gitSettings = pluginSettings({
   showUntracked: true,
   /** Push the branch after every commit. */
   pushAfterCommit: false,
+  /** How the diff is laid out: old and new side by side, or in one column. */
+  diffLayout: "split" as "split" | "inline",
 });

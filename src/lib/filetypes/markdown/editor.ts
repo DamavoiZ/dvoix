@@ -179,7 +179,10 @@ export function createMarkdownEditor({ parent, doc, onchange, onlink, extensions
 
 /** Replaces the document (e.g. after the file changed on disk) without losing the editor. */
 export function setDoc(view: EditorView, doc: string): void {
-  if (view.state.doc.toString() === doc) return;
+  // CodeMirror keeps lines joined with "\n". A note with Windows line endings
+  // would never compare equal, get replaced and saved again, so it showed up
+  // as changed in git although nobody touched it.
+  if (view.state.doc.toString() === doc.replace(/\r\n?/g, "\n")) return;
   const head = Math.min(view.state.selection.main.head, doc.length);
   view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: doc }, selection: { anchor: head } });
 }

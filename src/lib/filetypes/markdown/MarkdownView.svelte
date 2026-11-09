@@ -39,7 +39,7 @@
     view = createMarkdownEditor({
       parent: host,
       doc,
-      onchange: (doc) => onchange(doc),
+      onchange: (doc) => onchange(withLineEndings(doc)),
       onlink: (target) => onopen(target),
       extensions,
     });
@@ -71,6 +71,11 @@
   });
 
   onMount(() => () => view?.destroy());
+
+  /** Gives an edited note back the line endings of the file, so only the edited lines change on disk. */
+  function withLineEndings(doc: string): string {
+    return content.includes("\r\n") ? doc.replace(/\n/g, "\r\n") : doc;
+  }
 
   function showRequestedLine() {
     if (!view) return;

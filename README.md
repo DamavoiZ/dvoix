@@ -172,6 +172,10 @@ Dateien lassen sich einzeln stagen, aus dem Index nehmen, verwerfen (unversionie
 
 Der Verlauf (Strg/Cmd + Umschalt + H) zeigt die letzten Commits; aufgeklappt zeigt jeder Commit die geänderten Dateien, ein Klick darauf den Diff.
 
+Der Diff zeigt die alte Fassung links und die neue rechts, beide scrollen gemeinsam. Geänderte Zeilen sind farbig hinterlegt (rot entfernt, grün neu), die geänderten Zeichen darin kräftiger. Lange unveränderte Abschnitte sind zugeklappt und lassen sich per Klick öffnen. Oben rechts lässt sich auf „Untereinander“ umschalten: dann steht alles in einer Spalte, entfernte Zeilen über den neuen. Die Wahl merkt sich das Plugin in `.dvoix/plugins/git/data.json`.
+
+Dateien, die dvoix selbst laufend neu schreibt, bleiben aus Git heraus: der Suchindex (`.dvoix/index.sqlite`), die offenen Tabs (`.dvoix/workspace.json`) und die Temp-Dateien beim Speichern (`*.dvoix-tmp`). Sie stehen nicht in der Liste der Änderungen und gehen bei „alles stagen“ nicht mit. Die übrigen Einstellungen in `.dvoix/` werden ganz normal versioniert. Notizen mit Windows-Zeilenenden (CRLF) behalten diese beim Speichern, damit sich nicht jede Zeile ändert.
+
 Liegt der Vault in einem Ordner eines größeren Repository, bleiben Dateien außerhalb des Vaults unsichtbar: gestaged und committet wird nur, was im Vault liegt. Wichtig ist auch, dass `user.name` und `user.email` gesetzt sind, sonst meldet git beim Commit, dass es die Absenderdaten nicht kennt.
 
 ## Entwickeln

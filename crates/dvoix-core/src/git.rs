@@ -19,6 +19,24 @@ const FIELD: char = '\u{1f}';
 /// Separator between two commits of `git log`.
 const RECORD: char = '\u{1e}';
 
+/// Files dvoix rewrites on its own while it runs: the search index (a cache)
+/// and the open tabs, plus the temp files of an atomic write. They change
+/// without the user changing anything, so "stage everything" leaves them out
+/// and the panel does not list them. Patterns are vault-relative and use the
+/// pathspec matching of git, where `*` also crosses `/`.
+const MACHINE_STATE: &[&str] = &[
+    ".dvoix/index.sqlite*",
+    ".dvoix/workspace.json",
+    "*.dvoix-tmp",
+];
+
+/// True when a vault-relative path is one of [`MACHINE_STATE`].
+fn is_machine_state(rel: &str) -> bool {
+    rel.starts_with(".dvoix/index.sqlite")
+        || rel == ".dvoix/workspace.json"
+        || rel.ends_with(".dvoix-tmp")
+}
+
 /// One file with changes, as shown in the source control panel.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -62,6 +80,16 @@ pub struct GitStatus {
     pub unstaged: Vec<ChangedFile>,
     /// Files that git does not know yet.
     pub untracked: Vec<ChangedFile>,
+}
+
+/// The two versions of a file that a diff compares.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileDiff {
+    /// The version before the change.
+    pub old: String,
+    /// The version after the change.
+    pub new: String,
 }
 
 /// One commit of the history.
@@ -137,6 +165,9 @@ pub fn status(vault: &Vault) -> Result<GitStatus> {
         let Some(path) = repo.to_vault(path) else {
             continue;
         };
+        if is_machine_state(&path) {
+            continue;
+        }
         if index == '?' && worktree == '?' {
             untracked.push(ChangedFile {
                 path,
@@ -240,29 +271,41 @@ pub fn branches(vault: &Vault) -> Result<Vec<Branch>> {
     Ok(out)
 }
 
-/// Shows the changes of one file as a diff: the changes in the working tree,
-/// the staged ones or the ones of a commit.
-pub fn diff(vault: &Vault, path: &str, staged: bool, commit: Option<&str>) -> Result<String> {
+/// Shows the changes of one file as its two versions, so the frontend can lay
+/// them out side by side or inline: the working tree against the index, the
+/// index against `HEAD`, or a commit against its parent. A side where the file
+/// does not exist (added, deleted, first commit) is empty.
+pub fn diff(vault: &Vault, path: &str, staged: bool, commit: Option<&str>) -> Result<FileDiff> {
     let repo = Repo::of(vault)?;
-    let path = repo.to_repo(path);
-    let out = match commit {
-        Some(id) => git_raw(
-            &repo.root,
-            &[
-                "show",
-                "--no-color",
-                "--format=",
-                "--patch",
-                id,
-                "--",
-                &path,
-            ],
-        )?,
-        None if staged => git_raw(&repo.root, &["diff", "--no-color", "--cached", "--", &path])?,
-        None => git_raw(&repo.root, &["diff", "--no-color", "--", &path])?,
+    let repo_path = repo.to_repo(path);
+    let (old, new) = match commit {
+        Some(id) => (
+            blob(&repo, &format!("{id}^"), &repo_path)?,
+            blob(&repo, id, &repo_path)?,
+        ),
+        None if staged => (
+            blob(&repo, "HEAD", &repo_path)?,
+            blob(&repo, "", &repo_path)?,
+        ),
+        None => {
+            let file = vault.resolve(path)?;
+            let new = match std::fs::read(&file) {
+                Ok(bytes) => String::from_utf8_lossy(&bytes).to_string(),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+                Err(e) => return Err(e.into()),
+            };
+            (blob(&repo, "", &repo_path)?, new)
+        }
     };
+    Ok(FileDiff { old, new })
+}
+
+/// The content of a file at a revision, `""` for the index. Empty when the file
+/// does not exist there, e.g. before it was added or above the first commit.
+fn blob(repo: &Repo, rev: &str, path: &str) -> Result<String> {
+    let out = git_raw(&repo.root, &["cat-file", "blob", &format!("{rev}:{path}")])?;
     if !out.status.success() {
-        return Err(Error::Git(git_error(&out)));
+        return Ok(String::new());
     }
     Ok(String::from_utf8_lossy(&out.stdout).to_string())
 }
@@ -281,7 +324,7 @@ pub fn stage(vault: &Vault, paths: &[String]) -> Result<()> {
 /// Stages every change of the vault.
 pub fn stage_all(vault: &Vault) -> Result<()> {
     let repo = Repo::of(vault)?;
-    git(&repo.root, &["add", "-A", "--", &repo.vault_pathspec()])?;
+    repo.add_all()?;
     Ok(())
 }
 
@@ -330,7 +373,7 @@ pub fn commit(vault: &Vault, message: &str, stage_all: bool) -> Result<String> {
     }
     let repo = Repo::of(vault)?;
     if stage_all {
-        git(&repo.root, &["add", "-A", "--", &repo.vault_pathspec()])?;
+        repo.add_all()?;
     }
     git(&repo.root, &["commit", "-m", message])?;
     Ok(git(&repo.root, &["rev-parse", "--short", "HEAD"])?
@@ -453,6 +496,20 @@ impl Repo {
         }
         rel.strip_prefix(&format!("{}/", self.prefix))
             .map(|s| s.to_string())
+    }
+
+    /// Stages every change of the vault except the files dvoix rewrites on
+    /// its own (see [`MACHINE_STATE`]).
+    fn add_all(&self) -> Result<()> {
+        let excludes: Vec<String> = MACHINE_STATE
+            .iter()
+            .map(|p| format!(":(exclude){}", self.to_repo(p)))
+            .collect();
+        let vault = self.vault_pathspec();
+        let mut args = vec!["add", "-A", "--", vault.as_str()];
+        args.extend(excludes.iter().map(String::as_str));
+        git(&self.root, &args)?;
+        Ok(())
     }
 
     /// The pathspec that covers the whole vault.
@@ -816,7 +873,79 @@ mod tests {
         fs::write(vault.root().join("note.md"), "# Note\nmore\n").expect("write");
 
         let diff = diff(&vault, "note.md", false, None).expect("diff");
-        assert!(diff.contains("+more"), "diff: {diff}");
+        assert_eq!(diff.old, "# Note\n");
+        assert_eq!(diff.new, "# Note\nmore\n");
+    }
+
+    #[test]
+    fn the_index_and_the_open_tabs_stay_out_of_commits() {
+        if !git_available() {
+            return;
+        }
+        let (dir, vault) = vault_with_repo();
+        fs::create_dir_all(dir.path().join(".dvoix")).expect("mkdir");
+        fs::write(dir.path().join(".dvoix/index.sqlite"), "cache").expect("write");
+        fs::write(dir.path().join(".dvoix/workspace.json"), "{}").expect("write");
+        fs::write(dir.path().join(".dvoix/app.json"), "{}").expect("write");
+
+        let state = status(&vault).expect("status");
+        let listed: Vec<_> = state.untracked.iter().map(|f| f.path.as_str()).collect();
+        assert!(listed.contains(&".dvoix/app.json"), "listed: {listed:?}");
+        assert!(
+            !listed
+                .iter()
+                .any(|p| p.contains("index.sqlite") || p.contains("workspace"))
+        );
+
+        commit(&vault, "First", true).expect("commit");
+        let files = git(dir.path(), &["ls-files"]).expect("ls-files");
+        assert!(files.contains(".dvoix/app.json"), "files: {files}");
+        assert!(!files.contains("index.sqlite"), "files: {files}");
+        assert!(!files.contains("workspace.json"), "files: {files}");
+    }
+
+    #[test]
+    fn a_diff_has_both_versions_of_a_commit() {
+        if !git_available() {
+            return;
+        }
+        let (_dir, vault) = vault_with_repo();
+        commit(&vault, "First", true).expect("commit");
+        fs::write(vault.root().join("note.md"), "# Note\nmore\n").expect("write");
+        commit(&vault, "Second", true).expect("commit");
+        let id = git(vault.root(), &["rev-parse", "HEAD"]).expect("rev-parse");
+        let id = id.trim();
+
+        let second = diff(&vault, "note.md", false, Some(id)).expect("diff");
+        assert_eq!(second.old, "# Note\n");
+        assert_eq!(second.new, "# Note\nmore\n");
+
+        // The first commit has no parent, so the old side is empty.
+        let first = diff(&vault, "note.md", false, Some(&format!("{id}^"))).expect("diff");
+        assert_eq!(first.old, "");
+        assert_eq!(first.new, "# Note\n");
+    }
+
+    #[test]
+    fn a_staged_diff_compares_the_index_with_head() {
+        if !git_available() {
+            return;
+        }
+        let (_dir, vault) = vault_with_repo();
+        commit(&vault, "First", true).expect("commit");
+        fs::write(vault.root().join("note.md"), "# Note\nstaged\n").expect("write");
+        stage(&vault, &["note.md".into()]).expect("stage");
+        fs::write(vault.root().join("note.md"), "# Note\nstaged\nnot yet\n").expect("write");
+
+        let staged = diff(&vault, "note.md", true, None).expect("diff");
+        assert_eq!(staged.old, "# Note\n");
+        assert_eq!(staged.new, "# Note\nstaged\n");
+
+        // An untracked file is all new.
+        fs::write(vault.root().join("new.md"), "fresh\n").expect("write");
+        let untracked = diff(&vault, "new.md", false, None).expect("diff");
+        assert_eq!(untracked.old, "");
+        assert_eq!(untracked.new, "fresh\n");
     }
 
     #[test]

@@ -1,6 +1,6 @@
 // State and actions of the git plugin: the state of the repository, the last
 // error and the commands that the panel, the commands and the history share.
-import { api, type GitBranch, type GitStatus } from "../../../api";
+import { api, type GitBranch, type GitFileDiff, type GitStatus } from "../../../api";
 import { gitSettings } from "./settings";
 
 /** The message of a failed git command. */
@@ -21,8 +21,8 @@ class GitState {
   busy = $state(false);
   /** The message for the next commit. */
   message = $state("");
-  /** The diff that is shown over the app, if any. */
-  diff = $state<{ title: string; text: string } | null>(null);
+  /** The diff that is shown over the app, if any: both versions of the file. */
+  diff = $state<({ title: string } & GitFileDiff) | null>(null);
 
   private timer: ReturnType<typeof setInterval> | undefined;
 
@@ -138,8 +138,8 @@ class GitState {
   /** Shows the changes of a file over the app. */
   async showDiff(path: string, staged: boolean, commit: string | null = null) {
     try {
-      const text = await api.gitDiff(path, staged, commit);
-      this.diff = { title: path, text };
+      const sides = await api.gitDiff(path, staged, commit);
+      this.diff = { title: path, ...sides };
       this.error = null;
     } catch (e) {
       this.error = reason(e);
