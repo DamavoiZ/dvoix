@@ -1,6 +1,7 @@
 <script lang="ts">
   // All settings of the graph: in the panel of the graph view and on the
   // plugin's page in the settings dialog. Changes apply right away.
+  import Select from "../../../components/Select.svelte";
   import Toggle from "../../../components/settings/Toggle.svelte";
   import { GRAPH_DEFAULTS, graphSettings, type GraphSettings } from "./settings";
 
@@ -20,9 +21,6 @@
     }
     graphSettings.save();
   }
-
-  const select =
-    "rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-sm text-zinc-200 outline-none focus:border-violet-500";
 </script>
 
 {#snippet toggle(key: BoolKey, label: string, hint?: string)}
@@ -77,10 +75,15 @@
     {#if s.tags}
       <div class="flex items-center justify-between gap-4 py-1.5">
         <span class="text-sm text-zinc-200">Tags zeigen als</span>
-        <select class={select} value={s.tagMode} onchange={(e) => set("tagMode", e.currentTarget.value as GraphSettings["tagMode"])}>
-          <option value="nodes">eigene Knoten</option>
-          <option value="shared">direkte Linien</option>
-        </select>
+        <Select
+          label="Tags zeigen als"
+          value={s.tagMode}
+          options={[
+            { value: "nodes", label: "eigene Knoten" },
+            { value: "shared", label: "direkte Linien" },
+          ]}
+          onchange={(v: GraphSettings["tagMode"]) => set("tagMode", v)}
+        />
       </div>
     {/if}
   </section>
@@ -89,11 +92,16 @@
     <h3 class="mb-1 text-xs font-semibold tracking-wide text-zinc-500 uppercase">Darstellung</h3>
     <div class="flex items-center justify-between gap-4 py-1.5">
       <span class="text-sm text-zinc-200">Farben nach</span>
-      <select class={select} value={s.colorBy} onchange={(e) => set("colorBy", e.currentTarget.value as GraphSettings["colorBy"])}>
-        <option value="none">keine</option>
-        <option value="folder">Ordner</option>
-        <option value="tag">Tag</option>
-      </select>
+      <Select
+        label="Farben nach"
+        value={s.colorBy}
+        options={[
+          { value: "none", label: "keine" },
+          { value: "folder", label: "Ordner" },
+          { value: "tag", label: "Tag" },
+        ]}
+        onchange={(v: GraphSettings["colorBy"]) => set("colorBy", v)}
+      />
     </div>
     {@render toggle("sizeByLinks", "Größe nach Verbindungen", "Viel verlinkte Notizen werden größer")}
     {@render toggle("arrows", "Pfeile", "Zeigt die Richtung von Links")}

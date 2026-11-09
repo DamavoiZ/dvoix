@@ -21,6 +21,13 @@ body {
   overflow: clip;
 }
 
+/* The app is dark only. Native parts drawn by the system (the popup of a
+   <select>, form controls) follow this, together with "theme": "Dark" in the
+   Tauri window config, which makes GTK on Linux use its dark variant. */
+:root {
+  color-scheme: dark;
+}
+
 body {
   @apply bg-zinc-950 text-zinc-200 antialiased;
   font-family: var(--font-sans);
