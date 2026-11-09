@@ -55,7 +55,7 @@ dvoix verteilt sich auf mehrere Repositories. Dieser Abschnitt steht gleich in d
 
 | Schicht | Technik |
 | --- | --- |
-| App-Hülle | Tauri 2 (`src-tauri/`), `ureq` für die Downloads des Plugin-Stores |
+| App-Hülle | Tauri 2 (`src-tauri/`), `ureq` für die Downloads des Plugin-Stores, `webkit2gtk` (nur Linux) für Einstellungen der Webview, die Tauri nicht anbietet |
 | Kern | Rust-Crate `crates/dvoix-core/` ohne Tauri: `notify`, `pulldown-cmark`, `serde_yaml_ng`, `rusqlite` mit FTS5, `walkdir` |
 | Frontend | Svelte 5 (Runes), TypeScript, Vite, Tailwind CSS 4, Icons aus `@lucide/svelte`, `force-graph` für die Graph-Ansicht |
 | Editor | CodeMirror 6 |

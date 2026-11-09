@@ -20,3 +20,7 @@ serde_json.workspace = true
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 ureq = "3.5"
+
+# Settings of the Linux webview that Tauri doesn't expose (smooth scrolling).
+[target.'cfg(target_os = "linux")'.dependencies]
+webkit2gtk = "2.0.2"

@@ -64,14 +64,29 @@ function activeLines(state: EditorState): Set<number> {
   return lines;
 }
 
+/** A part of the document that is on screen. */
+interface Range {
+  from: number;
+  to: number;
+}
+
+/**
+ * The visible ranges, widened to whole lines. Only these get decorations:
+ * the document outside is not drawn, and rebuilding the whole note on every
+ * key press and scroll step made typing and scrolling in long notes stutter.
+ */
+function visibleLines(view: EditorView): Range[] {
+  const { doc } = view.state;
+  return view.visibleRanges.map(({ from, to }) => ({ from: doc.lineAt(from).from, to: doc.lineAt(to).to }));
+}
+
 /** Hides the brackets of a wikilink and shows its name (or its alias). */
-function collectWikilinks(state: EditorState, hides: Hide[]): void {
+function collectWikilinks(state: EditorState, range: Range, hides: Hide[]): void {
   const tree = syntaxTree(state);
-  // The whole document is searched: the syntax tree is parsed for it anyway,
-  // and a wikilink outside the viewport still has to be found.
-  const text = state.doc.sliceString(0, state.doc.length);
+  // A wikilink never spans lines, so searching whole lines finds every one on screen.
+  const text = state.doc.sliceString(range.from, range.to);
   for (const match of text.matchAll(WIKILINK)) {
-    const start = match.index!;
+    const start = range.from + match.index!;
     const end = start + match[0].length;
     // A wikilink inside code is code, not a link.
     if (tree.resolveInner(start).name === "InlineCode") continue;
@@ -92,6 +107,7 @@ function collectWikilinks(state: EditorState, hides: Hide[]): void {
 /** Collects the syntax of the markdown parser: markers that get hidden. */
 function collectSyntax(
   state: EditorState,
+  range: Range,
   hides: Hide[],
   bullets: Hide[],
   rules: Hide[],
@@ -105,6 +121,8 @@ function collectSyntax(
   };
 
   syntaxTree(state).iterate({
+    from: range.from,
+    to: range.to,
     enter(node) {
       const { from, to, name } = node;
       const parent = node.node.parent?.name;
@@ -141,14 +159,14 @@ function collectSyntax(
           rules.push({ from, to, priority: 1 });
           break;
         case "Blockquote":
-          addLineClasses(state, lineClasses, from, to, "cm-lp-quote");
+          addLineClasses(state, lineClasses, Math.max(from, range.from), Math.min(to, range.to), "cm-lp-quote");
           break;
         case "FencedCode":
         case "CodeBlock":
-          addLineClasses(state, lineClasses, from, to, "cm-lp-code");
+          addLineClasses(state, lineClasses, Math.max(from, range.from), Math.min(to, range.to), "cm-lp-code");
           break;
         case "Frontmatter":
-          addLineClasses(state, lineClasses, from, to, "cm-lp-frontmatter");
+          addLineClasses(state, lineClasses, Math.max(from, range.from), Math.min(to, range.to), "cm-lp-frontmatter");
           break;
       }
     },
@@ -181,8 +199,10 @@ function buildDecorations(view: EditorView): DecorationSet {
   const rules: Hide[] = [];
   const lineClasses: { from: number; class: string }[] = [];
 
-  collectWikilinks(state, hides);
-  collectSyntax(state, hides, bullets, rules, lineClasses);
+  for (const range of visibleLines(view)) {
+    collectWikilinks(state, range, hides);
+    collectSyntax(state, range, hides, bullets, rules, lineClasses);
+  }
 
   // Ranges must not overlap. The first one wins, and a longer range comes
   // first when two start at the same place.
