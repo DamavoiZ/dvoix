@@ -6,7 +6,8 @@
 //! window (on Windows it stays white until the work is done).
 
 use dvoix_core::{
-    GraphData, NoteSummary, ProjectSummary, SearchHit, TaskItem, VaultEntry, index::TagCount, tasks,
+    GraphData, NoteSummary, ProjectSummary, RenderedNote, SearchHit, TaskItem, VaultEntry,
+    index::TagCount, markdown, tasks,
 };
 use serde::Serialize;
 use tauri::{AppHandle, State};
@@ -98,6 +99,13 @@ pub fn create_file(state: State<AppState>, path: String, content: String) -> Cmd
         reindex(ws, &path)?;
         Ok(entry)
     })
+}
+
+/// Renders a note as HTML for the reading view. It only depends on the text of
+/// the note, so it needs no vault.
+#[tauri::command(async)]
+pub fn render_markdown(content: String) -> RenderedNote {
+    markdown::render(&content)
 }
 
 #[tauri::command(async)]
