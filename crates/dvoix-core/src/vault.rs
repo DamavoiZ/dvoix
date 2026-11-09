@@ -144,7 +144,8 @@ impl Vault {
             .into_iter()
             .filter_entry(|e| {
                 let name = e.file_name().to_string_lossy();
-                if filter.exclude.iter().any(|x| x.as_str() == name) || name.ends_with(".dvoix-tmp") {
+                if filter.exclude.iter().any(|x| x.as_str() == name) || name.ends_with(".dvoix-tmp")
+                {
                     return false;
                 }
                 !(e.depth() == 1 && name == APP_DIR && !filter.include_app_dir)
@@ -403,7 +404,12 @@ mod tests {
         fs::write(dir.path().join(".obsidian/.app.json.dvoix-tmp"), "x").unwrap();
 
         let paths = |f: &HiddenFilter| -> Vec<String> {
-            vault.list_hidden(f).unwrap().into_iter().map(|e| e.path).collect()
+            vault
+                .list_hidden(f)
+                .unwrap()
+                .into_iter()
+                .map(|e| e.path)
+                .collect()
         };
         let mut filter = HiddenFilter {
             exclude: vec![".git".into()],

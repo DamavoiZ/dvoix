@@ -549,7 +549,9 @@ mod tests {
         let (_dir, vault) = sample_vault();
         let mut index = Index::for_vault(&vault).unwrap();
         index.rebuild(&vault).unwrap();
-        vault.write(".obsidian/geheim.md", "# Geheim\nwortxyz").unwrap();
+        vault
+            .write(".obsidian/geheim.md", "# Geheim\nwortxyz")
+            .unwrap();
         index.update(&vault, ".obsidian/geheim.md").unwrap();
         assert!(index.search("wortxyz", 10).unwrap().is_empty());
     }

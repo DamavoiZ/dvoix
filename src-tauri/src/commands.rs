@@ -6,8 +6,8 @@
 //! window (on Windows it stays white until the work is done).
 
 use dvoix_core::{
-    GraphData, HiddenFilter, NoteSummary, ProjectSummary, RenderedNote, SearchHit, TaskItem, VaultEntry,
-    index::TagCount, markdown, tasks,
+    GraphData, HiddenFilter, NoteSummary, ProjectSummary, RenderedNote, SearchHit, TaskItem,
+    VaultEntry, index::TagCount, markdown, tasks,
 };
 use serde::Serialize;
 use tauri::{AppHandle, State};
@@ -83,7 +83,10 @@ pub fn list_entries(state: State<AppState>) -> CmdResult<Vec<VaultEntry>> {
 /// Dot-folders and dot-files for the "Versteckte Dateien" plugin. They are
 /// only listed, never indexed.
 #[tauri::command(async)]
-pub fn list_hidden_entries(state: State<AppState>, filter: HiddenFilter) -> CmdResult<Vec<VaultEntry>> {
+pub fn list_hidden_entries(
+    state: State<AppState>,
+    filter: HiddenFilter,
+) -> CmdResult<Vec<VaultEntry>> {
     with_ws(&state, |ws| ws.vault.list_hidden(&filter).map_err(err))
 }
 
