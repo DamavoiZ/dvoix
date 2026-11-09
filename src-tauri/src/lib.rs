@@ -70,6 +70,7 @@ pub fn run() {
             commands::list_entries,
             commands::read_file,
             commands::write_file,
+            commands::render_markdown,
             commands::create_file,
             commands::create_folder,
             commands::rename_entry,

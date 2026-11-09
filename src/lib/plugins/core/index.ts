@@ -13,6 +13,7 @@ import { graphPlugin } from "./graph";
 import { gitPlugin } from "./git";
 import { quickSwitcherPlugin } from "./quick-switcher";
 import { tabsPlugin } from "./tabs";
+import { editorModesPlugin } from "./editor-modes";
 
 export const corePlugins: Plugin[] = [
   fileExplorerPlugin,
@@ -26,4 +27,5 @@ export const corePlugins: Plugin[] = [
   gitPlugin,
   quickSwitcherPlugin,
   tabsPlugin,
+  editorModesPlugin,
 ];
