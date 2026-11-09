@@ -8,7 +8,7 @@ use std::time::UNIX_EPOCH;
 use serde::Serialize;
 use walkdir::WalkDir;
 
-use crate::{Error, Result, APP_DIR};
+use crate::{APP_DIR, Error, Result};
 
 /// Folder (inside the vault) that deleted files are moved to, like in Obsidian.
 pub const TRASH_DIR: &str = ".trash";
@@ -76,7 +76,10 @@ impl Vault {
     /// Turns an absolute path back into a vault-relative, `/`-separated one.
     pub fn relative(&self, abs: &Path) -> Option<String> {
         let rel = abs.strip_prefix(&self.root).ok()?;
-        let parts: Vec<_> = rel.components().map(|c| c.as_os_str().to_string_lossy()).collect();
+        let parts: Vec<_> = rel
+            .components()
+            .map(|c| c.as_os_str().to_string_lossy())
+            .collect();
         if parts.is_empty() {
             return None;
         }
@@ -101,10 +104,10 @@ impl Vault {
                 Ok(e) => e,
                 Err(_) => continue,
             };
-            if let Some(rel) = self.relative(entry.path()) {
-                if let Ok(e) = self.entry_for(&rel, entry.path()) {
-                    entries.push(e);
-                }
+            if let Some(rel) = self.relative(entry.path())
+                && let Ok(e) = self.entry_for(&rel, entry.path())
+            {
+                entries.push(e);
             }
         }
         // Plain path order; the UI builds the tree and decides how to group it.
@@ -119,11 +122,16 @@ impl Vault {
 
     fn entry_for(&self, rel: &str, abs: &Path) -> Result<VaultEntry> {
         let meta = fs::metadata(abs)?;
-        let name = abs.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let name = abs
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
         let extension = if meta.is_dir() {
             String::new()
         } else {
-            abs.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default()
+            abs.extension()
+                .map(|e| e.to_string_lossy().to_lowercase())
+                .unwrap_or_default()
         };
         let modified = meta
             .modified()
@@ -156,7 +164,10 @@ impl Vault {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
-        let file_name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let file_name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
         let tmp = path.with_file_name(format!(".{file_name}.dvoix-tmp"));
         fs::write(&tmp, content)?;
         fs::rename(&tmp, &path)?;
@@ -229,7 +240,10 @@ impl Vault {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
-        let file_name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let file_name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
         let tmp = path.with_file_name(format!(".{file_name}.dvoix-tmp"));
         fs::write(&tmp, content)?;
         fs::rename(&tmp, &path)?;
@@ -242,7 +256,10 @@ impl Vault {
         let src = self.resolve(rel)?;
         let trash = self.root.join(TRASH_DIR);
         fs::create_dir_all(&trash)?;
-        let name = src.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let name = src
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
         let mut dst = trash.join(&name);
         let mut n = 1;
         while dst.exists() {
@@ -273,8 +290,19 @@ mod tests {
         let vault = Vault::open(dir.path()).unwrap();
         assert_eq!(vault.read_config("app.json").unwrap(), None);
         vault.write_config("plugins/tasks/data.json", "{}").unwrap();
-        assert_eq!(vault.read_config("plugins/tasks/data.json").unwrap().as_deref(), Some("{}"));
-        assert!(dir.path().join(APP_DIR).join("plugins/tasks/data.json").exists());
+        assert_eq!(
+            vault
+                .read_config("plugins/tasks/data.json")
+                .unwrap()
+                .as_deref(),
+            Some("{}")
+        );
+        assert!(
+            dir.path()
+                .join(APP_DIR)
+                .join("plugins/tasks/data.json")
+                .exists()
+        );
         assert!(vault.list().unwrap().is_empty());
 
         assert!(vault.write_config("../escape.json", "x").is_err());

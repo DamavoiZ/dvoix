@@ -18,7 +18,7 @@
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::tasks::{normalize_date, Priority};
+use crate::tasks::{Priority, normalize_date};
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "lowercase")]
@@ -34,12 +34,13 @@ impl ProjectStatus {
     pub fn parse(s: &str) -> Option<Self> {
         match s.trim().to_lowercase().as_str() {
             "aktiv" | "active" | "laufend" | "in arbeit" | "doing" => Some(Self::Active),
-            "wartend" | "waiting" | "pausiert" | "paused" | "on-hold" | "on hold" | "blockiert" | "blocked" => {
-                Some(Self::Waiting)
-            }
+            "wartend" | "waiting" | "pausiert" | "paused" | "on-hold" | "on hold" | "blockiert"
+            | "blocked" => Some(Self::Waiting),
             "idee" | "idea" | "geplant" | "planned" | "todo" | "backlog" => Some(Self::Idea),
             "erledigt" | "done" | "fertig" | "abgeschlossen" | "completed" => Some(Self::Done),
-            "abgebrochen" | "cancelled" | "canceled" | "verworfen" | "dropped" => Some(Self::Cancelled),
+            "abgebrochen" | "cancelled" | "canceled" | "verworfen" | "dropped" => {
+                Some(Self::Cancelled)
+            }
             _ => None,
         }
     }
@@ -58,7 +59,11 @@ pub struct ProjectMeta {
 
 /// Reads the project fields from a note's frontmatter, or `None` if the note is not a project.
 pub fn from_frontmatter(fm: &Value) -> Option<ProjectMeta> {
-    let ty = fm.get("type").and_then(Value::as_str)?.trim().to_lowercase();
+    let ty = fm
+        .get("type")
+        .and_then(Value::as_str)?
+        .trim()
+        .to_lowercase();
     if ty != "projekt" && ty != "project" {
         return None;
     }
@@ -68,7 +73,9 @@ pub fn from_frontmatter(fm: &Value) -> Option<ProjectMeta> {
         _ => None,
     };
     Some(ProjectMeta {
-        status: text("status").and_then(|s| ProjectStatus::parse(&s)).unwrap_or(ProjectStatus::Active),
+        status: text("status")
+            .and_then(|s| ProjectStatus::parse(&s))
+            .unwrap_or(ProjectStatus::Active),
         due: text("due").and_then(|d| normalize_date(&d)),
         start: text("start").and_then(|d| normalize_date(&d)),
         priority: text("priority").and_then(|p| Priority::parse(&p)),
@@ -95,7 +102,8 @@ mod tests {
 
     #[test]
     fn defaults_and_non_projects() {
-        let meta = from_frontmatter(&json!({ "type": "project", "status": "???", "due": "bald" })).unwrap();
+        let meta = from_frontmatter(&json!({ "type": "project", "status": "???", "due": "bald" }))
+            .unwrap();
         assert_eq!(meta.status, ProjectStatus::Active);
         assert_eq!(meta.due, None);
         assert!(from_frontmatter(&json!({ "status": "active" })).is_none());

@@ -150,7 +150,7 @@ Englische Werte (`active`, `waiting`, `done`, ...) gehen auch. Abhaken in der Au
 
 ## Entwickeln
 
-Voraussetzungen: [Rust](https://rustup.rs), Node.js 22 und die [Tauri-Systemabhängigkeiten](https://v2.tauri.app/start/prerequisites/) für dein Betriebssystem.
+Voraussetzungen: [Rust](https://rustup.rs) (aktuelles stable, wird über `rust-toolchain.toml` automatisch gewählt), Node.js 26 (siehe `.nvmrc`) und die [Tauri-Systemabhängigkeiten](https://v2.tauri.app/start/prerequisites/) für dein Betriebssystem.
 
 ```sh
 npm install

@@ -7,14 +7,14 @@
 
 use std::path::Path;
 
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use serde::Serialize;
 
+use crate::Result;
 use crate::markdown::{self, ParsedNote};
 use crate::project::{self, ProjectMeta};
 use crate::tasks::{self, Task};
 use crate::vault::{Vault, VaultEntry};
-use crate::Result;
 
 /// Bump this when the schema changes; an outdated index is rebuilt.
 const SCHEMA_VERSION: i64 = 2;
@@ -85,7 +85,9 @@ impl Index {
     }
 
     pub fn open_in_memory() -> Result<Self> {
-        let index = Self { conn: Connection::open_in_memory()? };
+        let index = Self {
+            conn: Connection::open_in_memory()?,
+        };
         index.migrate()?;
         Ok(index)
     }
@@ -96,7 +98,9 @@ impl Index {
     }
 
     fn migrate(&self) -> Result<()> {
-        let version: i64 = self.conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+        let version: i64 = self
+            .conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))?;
         if version != SCHEMA_VERSION {
             self.conn.execute_batch(
                 "DROP TABLE IF EXISTS notes;
@@ -150,7 +154,9 @@ impl Index {
         tx.execute_batch("DELETE FROM notes; DELETE FROM tags; DELETE FROM links; DELETE FROM notes_fts; DELETE FROM tasks;")?;
         let mut count = 0;
         for entry in files.iter().filter(|e| is_indexable(&e.path)) {
-            let Ok(content) = vault.read(&entry.path) else { continue };
+            let Ok(content) = vault.read(&entry.path) else {
+                continue;
+            };
             let parsed = markdown::parse(&content, stem(&entry.path));
             write_note(&tx, entry, &parsed, &tasks::extract(&content))?;
             count += 1;
@@ -203,16 +209,27 @@ impl Index {
         )?;
         let hits = stmt
             .query_map(params![query, limit], |r| {
-                Ok(SearchHit { path: r.get(0)?, title: r.get(1)?, snippet: r.get(2)? })
+                Ok(SearchHit {
+                    path: r.get(0)?,
+                    title: r.get(1)?,
+                    snippet: r.get(2)?,
+                })
             })?
             .collect::<std::result::Result<_, _>>()?;
         Ok(hits)
     }
 
     pub fn tags(&self) -> Result<Vec<TagCount>> {
-        let mut stmt = self.conn.prepare("SELECT tag, COUNT(*) FROM tags GROUP BY tag ORDER BY tag")?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT tag, COUNT(*) FROM tags GROUP BY tag ORDER BY tag")?;
         let tags = stmt
-            .query_map([], |r| Ok(TagCount { tag: r.get(0)?, count: r.get(1)? }))?
+            .query_map([], |r| {
+                Ok(TagCount {
+                    tag: r.get(0)?,
+                    count: r.get(1)?,
+                })
+            })?
             .collect::<std::result::Result<_, _>>()?;
         Ok(tags)
     }
@@ -295,14 +312,28 @@ impl Index {
         )?;
         let rows = stmt.query_map([], |r| {
             let fm: String = r.get(2)?;
-            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, fm, r.get(3)?, r.get(4)?, r.get(5)?))
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                fm,
+                r.get(3)?,
+                r.get(4)?,
+                r.get(5)?,
+            ))
         })?;
         let mut projects = Vec::new();
         for row in rows {
             let (path, title, fm, open_tasks, done_tasks, next_due) = row?;
             let fm: serde_json::Value = serde_json::from_str(&fm).unwrap_or_default();
             if let Some(meta) = project::from_frontmatter(&fm) {
-                projects.push(ProjectSummary { path, title, meta, open_tasks, done_tasks, next_due });
+                projects.push(ProjectSummary {
+                    path,
+                    title,
+                    meta,
+                    open_tasks,
+                    done_tasks,
+                    next_due,
+                });
             }
         }
         Ok(projects)
@@ -310,7 +341,9 @@ impl Index {
 
     fn summaries(&self, sql: &str, arg: &str) -> Result<Vec<NoteSummary>> {
         let mut stmt = self.conn.prepare(sql)?;
-        let notes = stmt.query_map([arg], row_to_summary)?.collect::<std::result::Result<_, _>>()?;
+        let notes = stmt
+            .query_map([arg], row_to_summary)?
+            .collect::<std::result::Result<_, _>>()?;
         Ok(notes)
     }
 }
@@ -333,16 +366,32 @@ fn delete_note(tx: &rusqlite::Transaction, rel: &str) -> rusqlite::Result<()> {
     Ok(())
 }
 
-fn write_note(tx: &rusqlite::Transaction, entry: &VaultEntry, note: &ParsedNote, tasks: &[Task]) -> rusqlite::Result<()> {
+fn write_note(
+    tx: &rusqlite::Transaction,
+    entry: &VaultEntry,
+    note: &ParsedNote,
+    tasks: &[Task],
+) -> rusqlite::Result<()> {
     tx.execute(
         "INSERT INTO notes (path, title, frontmatter, modified) VALUES (?1, ?2, ?3, ?4)",
-        params![entry.path, note.title, note.frontmatter.to_string(), entry.modified as i64],
+        params![
+            entry.path,
+            note.title,
+            note.frontmatter.to_string(),
+            entry.modified as i64
+        ],
     )?;
     for tag in &note.tags {
-        tx.execute("INSERT INTO tags (path, tag) VALUES (?1, ?2)", params![entry.path, tag])?;
+        tx.execute(
+            "INSERT INTO tags (path, tag) VALUES (?1, ?2)",
+            params![entry.path, tag],
+        )?;
     }
     for link in &note.links {
-        tx.execute("INSERT INTO links (source, target) VALUES (?1, ?2)", params![entry.path, link.to_lowercase()])?;
+        tx.execute(
+            "INSERT INTO links (source, target) VALUES (?1, ?2)",
+            params![entry.path, link.to_lowercase()],
+        )?;
     }
     tx.execute(
         "INSERT INTO notes_fts (path, title, body) VALUES (?1, ?2, ?3)",
@@ -390,9 +439,14 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let vault = Vault::open(dir.path()).unwrap();
         vault
-            .write("projekte/alpha.md", "---\nstatus: active\ntags: [projekt]\n---\n# Alpha\nVerweist auf [[Beta]].")
+            .write(
+                "projekte/alpha.md",
+                "---\nstatus: active\ntags: [projekt]\n---\n# Alpha\nVerweist auf [[Beta]].",
+            )
             .unwrap();
-        vault.write("beta.md", "# Beta\nEin #projekt mit Zeitplanung.").unwrap();
+        vault
+            .write("beta.md", "# Beta\nEin #projekt mit Zeitplanung.")
+            .unwrap();
         vault.write("bild.canvas", "{}").unwrap();
         (dir, vault)
     }
@@ -403,7 +457,13 @@ mod tests {
         let mut index = Index::for_vault(&vault).unwrap();
         assert_eq!(index.rebuild(&vault).unwrap(), 2);
 
-        assert_eq!(index.tags().unwrap(), vec![TagCount { tag: "projekt".into(), count: 2 }]);
+        assert_eq!(
+            index.tags().unwrap(),
+            vec![TagCount {
+                tag: "projekt".into(),
+                count: 2
+            }]
+        );
         let backlinks = index.backlinks("beta.md").unwrap();
         assert_eq!(backlinks.len(), 1);
         assert_eq!(backlinks[0].path, "projekte/alpha.md");
@@ -446,7 +506,10 @@ mod tests {
         tasks::set_done_in_vault(&vault, "projekte/umzug.md", 6, "Kartons", true).unwrap();
         index.update(&vault, "projekte/umzug.md").unwrap();
         assert_eq!(index.projects().unwrap()[0].done_tasks, 2);
-        assert!(tasks::set_done_in_vault(&vault, "projekte/umzug.md", 6, "Etwas anderes", false).is_err());
+        assert!(
+            tasks::set_done_in_vault(&vault, "projekte/umzug.md", 6, "Etwas anderes", false)
+                .is_err()
+        );
 
         index.remove("projekte").unwrap();
         assert_eq!(index.tasks().unwrap().len(), 1);

@@ -34,7 +34,10 @@ pub struct Heading {
 /// Splits `---\n yaml \n---\n body` into (yaml, body). Returns `None` for the
 /// yaml part if the document does not start with a frontmatter block.
 pub fn split_frontmatter(content: &str) -> (Option<&str>, &str) {
-    let rest = match content.strip_prefix("---\n").or_else(|| content.strip_prefix("---\r\n")) {
+    let rest = match content
+        .strip_prefix("---\n")
+        .or_else(|| content.strip_prefix("---\r\n"))
+    {
         Some(r) => r,
         None => return (None, content),
     };
@@ -52,21 +55,32 @@ pub fn split_frontmatter(content: &str) -> (Option<&str>, &str) {
 
 pub fn parse(content: &str, file_stem: &str) -> ParsedNote {
     let (yaml, body) = split_frontmatter(content);
-    let mut note = ParsedNote { frontmatter: Value::Object(Default::default()), ..Default::default() };
+    let mut note = ParsedNote {
+        frontmatter: Value::Object(Default::default()),
+        ..Default::default()
+    };
 
-    if let Some(yaml) = yaml {
-        if !yaml.trim().is_empty() {
-            match serde_yaml_ng::from_str::<Value>(yaml) {
-                Ok(Value::Object(map)) => note.frontmatter = Value::Object(map),
-                Ok(_) => note.frontmatter_error = Some("frontmatter must be a key/value map".into()),
-                Err(e) => note.frontmatter_error = Some(e.to_string()),
-            }
+    if let Some(yaml) = yaml
+        && !yaml.trim().is_empty()
+    {
+        match serde_yaml_ng::from_str::<Value>(yaml) {
+            Ok(Value::Object(map)) => note.frontmatter = Value::Object(map),
+            Ok(_) => note.frontmatter_error = Some("frontmatter must be a key/value map".into()),
+            Err(e) => note.frontmatter_error = Some(e.to_string()),
         }
     }
 
     let mut tags: Vec<String> = match note.frontmatter.get("tags") {
-        Some(Value::Array(items)) => items.iter().filter_map(|v| v.as_str()).map(normalize_tag).collect(),
-        Some(Value::String(s)) => s.split([',', ' ']).filter(|t| !t.is_empty()).map(normalize_tag).collect(),
+        Some(Value::Array(items)) => items
+            .iter()
+            .filter_map(|v| v.as_str())
+            .map(normalize_tag)
+            .collect(),
+        Some(Value::String(s)) => s
+            .split([',', ' '])
+            .filter(|t| !t.is_empty())
+            .map(normalize_tag)
+            .collect(),
         _ => Vec::new(),
     };
     let mut links = Vec::new();
@@ -83,7 +97,10 @@ pub fn parse(content: &str, file_stem: &str) -> ParsedNote {
         buffer.clear();
     };
 
-    for event in Parser::new_ext(body, Options::ENABLE_TABLES | Options::ENABLE_TASKLISTS | Options::ENABLE_STRIKETHROUGH) {
+    for event in Parser::new_ext(
+        body,
+        Options::ENABLE_TABLES | Options::ENABLE_TASKLISTS | Options::ENABLE_STRIKETHROUGH,
+    ) {
         match event {
             Event::Text(t) => {
                 text.push_str(&t);
@@ -113,7 +130,10 @@ pub fn parse(content: &str, file_stem: &str) -> ParsedNote {
             Event::End(TagEnd::Heading(_)) => {
                 flush(&mut buffer, &mut tags, &mut links);
                 if let Some((level, h)) = heading.take() {
-                    note.headings.push(Heading { level, text: h.trim().to_string() });
+                    note.headings.push(Heading {
+                        level,
+                        text: h.trim().to_string(),
+                    });
                 }
                 text.push('\n');
             }
@@ -141,7 +161,12 @@ pub fn parse(content: &str, file_stem: &str) -> ParsedNote {
         .get("title")
         .and_then(|v| v.as_str())
         .map(str::to_string)
-        .or_else(|| note.headings.iter().find(|h| h.level == 1).map(|h| h.text.clone()))
+        .or_else(|| {
+            note.headings
+                .iter()
+                .find(|h| h.level == 1)
+                .map(|h| h.text.clone())
+        })
         .unwrap_or_else(|| file_stem.to_string());
 
     dedup(&mut tags);
@@ -167,7 +192,11 @@ fn dedup(items: &mut Vec<String>) {
 
 /// Markdown links to other files in the vault (no URLs, no anchors).
 fn local_link(dest: &str) -> Option<String> {
-    if dest.is_empty() || dest.starts_with('#') || dest.contains("://") || dest.starts_with("mailto:") {
+    if dest.is_empty()
+        || dest.starts_with('#')
+        || dest.contains("://")
+        || dest.starts_with("mailto:")
+    {
         return None;
     }
     let target = dest.split('#').next().unwrap_or(dest);
@@ -198,7 +227,9 @@ pub(crate) fn scan_inline(text: &str, tags: &mut Vec<String>, links: &mut Vec<St
         let at_word_start = i == 0 || chars[i - 1].is_whitespace() || chars[i - 1] == '(';
         if chars[i] == '#' && at_word_start {
             let mut j = i + 1;
-            while j < chars.len() && (chars[j].is_alphanumeric() || matches!(chars[j], '_' | '-' | '/')) {
+            while j < chars.len()
+                && (chars[j].is_alphanumeric() || matches!(chars[j], '_' | '-' | '/'))
+            {
                 j += 1;
             }
             let tag: String = chars[i + 1..j].iter().collect();
@@ -227,7 +258,13 @@ mod tests {
         assert_eq!(n.frontmatter["due"], "2026-12-01");
         assert_eq!(n.tags, vec!["projekt", "work", "idee"]);
         assert_eq!(n.links, vec!["Beta", "gamma.md"]);
-        assert_eq!(n.headings, vec![Heading { level: 1, text: "Überschrift".into() }]);
+        assert_eq!(
+            n.headings,
+            vec![Heading {
+                level: 1,
+                text: "Überschrift".into()
+            }]
+        );
         assert!(n.text.contains("Siehe"));
     }
 

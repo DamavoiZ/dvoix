@@ -13,7 +13,10 @@ pub struct Settings {
 }
 
 fn file(app: &AppHandle) -> Option<PathBuf> {
-    app.path().app_config_dir().ok().map(|d| d.join("settings.json"))
+    app.path()
+        .app_config_dir()
+        .ok()
+        .map(|d| d.join("settings.json"))
 }
 
 pub fn load(app: &AppHandle) -> Settings {

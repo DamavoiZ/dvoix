@@ -1,11 +1,13 @@
 //! Commands callable from the frontend via `invoke("name", { ...args })`.
 //! The TypeScript side of this lives in `src/lib/api.ts`.
 
-use dvoix_core::{index::TagCount, tasks, NoteSummary, ProjectSummary, SearchHit, TaskItem, VaultEntry};
+use dvoix_core::{
+    NoteSummary, ProjectSummary, SearchHit, TaskItem, VaultEntry, index::TagCount, tasks,
+};
 use serde::Serialize;
 use tauri::{AppHandle, State};
 
-use crate::{settings, AppState, Workspace};
+use crate::{AppState, Workspace, settings};
 
 type CmdResult<T> = Result<T, String>;
 
@@ -30,7 +32,11 @@ fn with_ws<T>(state: &State<AppState>, f: impl FnOnce(&Workspace) -> CmdResult<T
 /// Re-indexes a file right away so search/backlinks are current even before
 /// the watcher reports the change.
 fn reindex(ws: &Workspace, path: &str) -> CmdResult<()> {
-    ws.index.lock().map_err(err)?.update(&ws.vault, path).map_err(err)
+    ws.index
+        .lock()
+        .map_err(err)?
+        .update(&ws.vault, path)
+        .map_err(err)
 }
 
 #[tauri::command]
@@ -41,7 +47,10 @@ pub fn last_vault(app: AppHandle) -> Option<String> {
 #[tauri::command]
 pub fn open_vault(app: AppHandle, state: State<AppState>, path: String) -> CmdResult<VaultInfo> {
     let ws = Workspace::open(&app, &path).map_err(err)?;
-    let info = VaultInfo { name: ws.vault.name(), path: ws.vault.root().to_string_lossy().into_owned() };
+    let info = VaultInfo {
+        name: ws.vault.name(),
+        path: ws.vault.root().to_string_lossy().into_owned(),
+    };
     *state.workspace.lock().map_err(err)? = Some(ws);
 
     let mut s = settings::load(&app);
@@ -117,43 +126,79 @@ pub fn trash_entry(state: State<AppState>, path: String) -> CmdResult<()> {
 
 #[tauri::command]
 pub fn search(state: State<AppState>, query: String) -> CmdResult<Vec<SearchHit>> {
-    with_ws(&state, |ws| ws.index.lock().map_err(err)?.search(&query, 50).map_err(err))
+    with_ws(&state, |ws| {
+        ws.index
+            .lock()
+            .map_err(err)?
+            .search(&query, 50)
+            .map_err(err)
+    })
 }
 
 #[tauri::command]
 pub fn tags(state: State<AppState>) -> CmdResult<Vec<TagCount>> {
-    with_ws(&state, |ws| ws.index.lock().map_err(err)?.tags().map_err(err))
+    with_ws(&state, |ws| {
+        ws.index.lock().map_err(err)?.tags().map_err(err)
+    })
 }
 
 #[tauri::command]
 pub fn notes_with_tag(state: State<AppState>, tag: String) -> CmdResult<Vec<NoteSummary>> {
-    with_ws(&state, |ws| ws.index.lock().map_err(err)?.notes_with_tag(&tag).map_err(err))
+    with_ws(&state, |ws| {
+        ws.index
+            .lock()
+            .map_err(err)?
+            .notes_with_tag(&tag)
+            .map_err(err)
+    })
 }
 
 #[tauri::command]
-pub fn notes_where(state: State<AppState>, key: String, value: String) -> CmdResult<Vec<NoteSummary>> {
-    with_ws(&state, |ws| ws.index.lock().map_err(err)?.notes_where(&key, &value).map_err(err))
+pub fn notes_where(
+    state: State<AppState>,
+    key: String,
+    value: String,
+) -> CmdResult<Vec<NoteSummary>> {
+    with_ws(&state, |ws| {
+        ws.index
+            .lock()
+            .map_err(err)?
+            .notes_where(&key, &value)
+            .map_err(err)
+    })
 }
 
 #[tauri::command]
 pub fn backlinks(state: State<AppState>, path: String) -> CmdResult<Vec<NoteSummary>> {
-    with_ws(&state, |ws| ws.index.lock().map_err(err)?.backlinks(&path).map_err(err))
+    with_ws(&state, |ws| {
+        ws.index.lock().map_err(err)?.backlinks(&path).map_err(err)
+    })
 }
 
 #[tauri::command]
 pub fn tasks(state: State<AppState>) -> CmdResult<Vec<TaskItem>> {
-    with_ws(&state, |ws| ws.index.lock().map_err(err)?.tasks().map_err(err))
+    with_ws(&state, |ws| {
+        ws.index.lock().map_err(err)?.tasks().map_err(err)
+    })
 }
 
 #[tauri::command]
 pub fn projects(state: State<AppState>) -> CmdResult<Vec<ProjectSummary>> {
-    with_ws(&state, |ws| ws.index.lock().map_err(err)?.projects().map_err(err))
+    with_ws(&state, |ws| {
+        ws.index.lock().map_err(err)?.projects().map_err(err)
+    })
 }
 
 /// Checks or unchecks a task in its file. `text` must still match, so a task
 /// is never toggled on the wrong line after the file changed.
 #[tauri::command]
-pub fn set_task_done(state: State<AppState>, path: String, line: u32, text: String, done: bool) -> CmdResult<VaultEntry> {
+pub fn set_task_done(
+    state: State<AppState>,
+    path: String,
+    line: u32,
+    text: String,
+    done: bool,
+) -> CmdResult<VaultEntry> {
     with_ws(&state, |ws| {
         let entry = tasks::set_done_in_vault(&ws.vault, &path, line, &text, done).map_err(err)?;
         reindex(ws, &path)?;
@@ -171,10 +216,18 @@ pub fn read_config(state: State<AppState>, path: String) -> CmdResult<Option<Str
 /// Writes a file into the vault's `.dvoix/` folder.
 #[tauri::command]
 pub fn write_config(state: State<AppState>, path: String, content: String) -> CmdResult<()> {
-    with_ws(&state, |ws| ws.vault.write_config(&path, &content).map_err(err))
+    with_ws(&state, |ws| {
+        ws.vault.write_config(&path, &content).map_err(err)
+    })
 }
 
 #[tauri::command]
 pub fn rebuild_index(state: State<AppState>) -> CmdResult<usize> {
-    with_ws(&state, |ws| ws.index.lock().map_err(err)?.rebuild(&ws.vault).map_err(err))
+    with_ws(&state, |ws| {
+        ws.index
+            .lock()
+            .map_err(err)?
+            .rebuild(&ws.vault)
+            .map_err(err)
+    })
 }
