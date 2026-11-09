@@ -2,7 +2,7 @@
 // ...) is only visible while the cursor is on that line, the way Obsidian shows
 // it. The text itself is never changed, only what is displayed.
 import { syntaxTree } from "@codemirror/language";
-import { RangeSetBuilder, type EditorState, type Extension } from "@codemirror/state";
+import { RangeSetBuilder, StateField, type EditorState, type Extension } from "@codemirror/state";
 import {
   Decoration,
   EditorView,
@@ -126,6 +126,12 @@ function collectSyntax(
     enter(node) {
       const { from, to, name } = node;
       const parent = node.node.parent?.name;
+      // A table off the cursor is drawn by `tables` below. With the cursor in
+      // it, its source stays as it is, so the pipes line up while editing.
+      if (name === "Table") {
+        addLineClasses(state, lineClasses, Math.max(from, range.from), Math.min(to, range.to), "cm-lp-table-source");
+        return false;
+      }
       switch (name) {
         case "HeaderMark":
           hide(from, to, true);
@@ -267,7 +273,170 @@ const livePreviewPlugin = ViewPlugin.fromClass(
   { decorations: (v) => v.decorations },
 );
 
-/** Hides the markdown syntax of every line the cursor is not on. */
+/** How a column is aligned, from the `:---:` row of a table. */
+type Align = "left" | "center" | "right" | null;
+
+/** Splits a table row at its pipes. `\|` and pipes inside `code` are text. */
+function splitRow(line: string): string[] {
+  let text = line.trim();
+  if (text.startsWith("|")) text = text.slice(1);
+  if (text.endsWith("|") && !text.endsWith("\\|")) text = text.slice(0, -1);
+  const cells: string[] = [];
+  let cell = "";
+  let inCode = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === "\\" && text[i + 1] === "|") {
+      cell += "|";
+      i++;
+    } else if (ch === "`") {
+      inCode = !inCode;
+      cell += ch;
+    } else if (ch === "|" && !inCode) {
+      cells.push(cell.trim());
+      cell = "";
+    } else {
+      cell += ch;
+    }
+  }
+  cells.push(cell.trim());
+  return cells;
+}
+
+function alignOf(cell: string): Align {
+  const left = cell.startsWith(":");
+  const right = cell.endsWith(":");
+  if (left && right) return "center";
+  if (right) return "right";
+  if (left) return "left";
+  return null;
+}
+
+/** Inline markdown inside a cell: code, bold, italic, strikethrough, links. `_` only counts outside of words, so `snake_case` stays text. */
+const INLINE = /`([^`]+)`|\*\*(.+?)\*\*|(?<!\w)__(.+?)__(?!\w)|~~(.+?)~~|\*(.+?)\*|(?<!\w)_(.+?)_(?!\w)|\[\[([^\]]+)\]\]|\[([^\]]*)\]\([^)]*\)/g;
+
+/**
+ * Fills a cell with its inline markdown. Built from DOM nodes instead of
+ * HTML, so text from the note can never become markup.
+ */
+function renderInline(text: string, parent: HTMLElement): void {
+  let last = 0;
+  for (const m of text.matchAll(INLINE)) {
+    if (m.index! > last) parent.append(text.slice(last, m.index));
+    last = m.index! + m[0].length;
+    const [, code, bold, bold2, strike, em, em2, wikilink, link] = m;
+    let el: HTMLElement;
+    if (code !== undefined) {
+      el = document.createElement("code");
+      el.textContent = code;
+    } else if (bold !== undefined || bold2 !== undefined) {
+      el = document.createElement("strong");
+      renderInline(bold ?? bold2, el);
+    } else if (strike !== undefined) {
+      el = document.createElement("s");
+      renderInline(strike, el);
+    } else if (em !== undefined || em2 !== undefined) {
+      el = document.createElement("em");
+      renderInline(em ?? em2, el);
+    } else if (wikilink !== undefined) {
+      el = document.createElement("span");
+      el.className = "cm-wikilink";
+      const pipe = wikilink.indexOf("|");
+      el.textContent = pipe >= 0 ? wikilink.slice(pipe + 1) : wikilink.split("#")[0];
+    } else {
+      el = document.createElement("span");
+      el.className = "cm-lp-link";
+      renderInline(link, el);
+    }
+    parent.append(el);
+  }
+  if (last < text.length) parent.append(text.slice(last));
+}
+
+/** A markdown table, drawn as a real table while the cursor is outside of it. */
+class TableWidget extends WidgetType {
+  constructor(readonly source: string) {
+    super();
+  }
+  eq(other: TableWidget) {
+    return other.source === this.source;
+  }
+  toDOM() {
+    const [header = "", delimiter = "", ...rows] = this.source.split("\n");
+    const aligns = splitRow(delimiter).map(alignOf);
+    const head = splitRow(header);
+    const columns = head.length;
+
+    const wrap = document.createElement("div");
+    wrap.className = "cm-lp-table-wrap";
+    const table = document.createElement("table");
+    table.className = "cm-lp-table";
+    const row = (cells: string[], tag: "th" | "td") => {
+      const tr = document.createElement("tr");
+      // Like GitHub: every row has as many cells as the header.
+      for (let i = 0; i < columns; i++) {
+        const cell = document.createElement(tag);
+        const align = aligns[i];
+        if (align) cell.style.textAlign = align;
+        renderInline(cells[i] ?? "", cell);
+        tr.append(cell);
+      }
+      return tr;
+    };
+    const thead = document.createElement("thead");
+    thead.append(row(head, "th"));
+    const tbody = document.createElement("tbody");
+    for (const r of rows) tbody.append(row(splitRow(r), "td"));
+    table.append(thead, tbody);
+    wrap.append(table);
+    return wrap;
+  }
+  /** A click goes to the editor: the cursor lands in the table and shows its source. */
+  ignoreEvent() {
+    return false;
+  }
+}
+
+/**
+ * Replaces every table the cursor is not in with a `TableWidget`. A
+ * replacement over several lines has to come from a state field, CodeMirror
+ * does not take it from a view plugin. Only top-level tables are drawn: a
+ * table inside a list or quote keeps its source.
+ */
+function buildTables(state: EditorState): DecorationSet {
+  const builder = new RangeSetBuilder<Decoration>();
+  const sel = state.selection.main;
+  syntaxTree(state).iterate({
+    enter(node) {
+      if (node.name === "Document") return true;
+      if (node.name === "Table") {
+        const from = state.doc.lineAt(node.from).from;
+        // `to - 1`: should the node end after its line break, the next line is not part of it.
+        const to = state.doc.lineAt(Math.max(node.from, node.to - 1)).to;
+        // The cursor touching the table, even at its edge, shows the source.
+        if (sel.to < from || sel.from > to) {
+          const widget = new TableWidget(state.doc.sliceString(from, to));
+          builder.add(from, to, Decoration.replace({ widget, block: true }));
+        }
+      }
+      return false;
+    },
+  });
+  return builder.finish();
+}
+
+const tables = StateField.define<DecorationSet>({
+  create: buildTables,
+  update(decorations, tr) {
+    if (tr.docChanged || tr.selection || syntaxTree(tr.startState) !== syntaxTree(tr.state)) {
+      return buildTables(tr.state);
+    }
+    return decorations;
+  },
+  provide: (field) => EditorView.decorations.from(field),
+});
+
+/** Hides the markdown syntax of every line the cursor is not on and draws tables. */
 export function livePreview(): Extension {
-  return livePreviewPlugin;
+  return [livePreviewPlugin, tables];
 }

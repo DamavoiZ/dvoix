@@ -7,6 +7,7 @@ import { hiddenFilesPlugin } from "./hidden-files";
 import { searchPlugin } from "./search";
 import { tagsPlugin } from "./tags";
 import { backlinksPlugin } from "./backlinks";
+import { linkSuggestPlugin } from "./link-suggest";
 import { tasksPlugin } from "./tasks";
 import { projectsPlugin } from "./projects";
 import { canvasPlugin } from "./canvas";
@@ -22,6 +23,7 @@ export const corePlugins: Plugin[] = [
   searchPlugin,
   tagsPlugin,
   backlinksPlugin,
+  linkSuggestPlugin,
   tasksPlugin,
   projectsPlugin,
   canvasPlugin,
