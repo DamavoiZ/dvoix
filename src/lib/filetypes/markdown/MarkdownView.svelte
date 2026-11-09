@@ -1,17 +1,22 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
   import { EditorView, lineNumbers } from "@codemirror/view";
   import type { Extension } from "@codemirror/state";
+  import { BookOpen, Code, Pencil } from "@lucide/svelte";
   import type { FileViewProps } from "../types";
-  import { createMarkdownEditor, revealLine, setDoc, setExtensions } from "./editor";
+  import { createMarkdownEditor, revealLine, setDoc, setExtensions, setLivePreview } from "./editor";
+  import ReadingView from "./ReadingView.svelte";
   import { reveal } from "../../reveal.svelte";
   import { plugins } from "../../plugins/manager.svelte";
-  import { settings } from "../../settings.svelte";
+  import { settings, type ViewMode } from "../../settings.svelte";
 
   let { path, content, onchange, onopen }: FileViewProps = $props();
 
-  let host: HTMLDivElement;
+  let host: HTMLDivElement | undefined = $state();
   let view: EditorView | undefined = $state();
+
+  /** How the note is shown: reading view, live preview or markdown source. */
+  const mode = $derived(settings.app.viewMode);
 
   /** Extensions from plugins (e.g. task checkboxes) and from the editor settings. */
   const extensions = $derived.by((): Extension[] => {
@@ -22,17 +27,30 @@
     return out;
   });
 
-  onMount(() => {
+  // The editor only exists while the note is edited; the reading view needs none.
+  $effect(() => {
+    if (mode === "read") {
+      view?.destroy();
+      view = undefined;
+      return;
+    }
+    if (!host || view) return;
+    const doc = untrack(() => content);
     view = createMarkdownEditor({
       parent: host,
-      doc: content,
+      doc,
       onchange: (doc) => onchange(doc),
       onlink: (target) => onopen(target),
       extensions,
     });
     view.focus();
     showRequestedLine();
-    return () => view?.destroy();
+  });
+
+  // The live preview shows the syntax only on the line of the cursor.
+  $effect(() => {
+    const live = mode === "edit";
+    if (view) setLivePreview(view, live);
   });
 
   // A plugin or setting changed: swap the extensions in place.
@@ -52,11 +70,62 @@
     showRequestedLine();
   });
 
+  onMount(() => () => view?.destroy());
+
   function showRequestedLine() {
     if (!view) return;
     const line = reveal.take(path);
     if (line !== null) revealLine(view, line);
   }
+
+  function setMode(next: ViewMode) {
+    settings.app.viewMode = next;
+    settings.saveApp();
+  }
+
+  const modeButton =
+    "rounded p-1 transition-colors hover:bg-zinc-800 hover:text-zinc-200";
 </script>
 
-<div class="h-full overflow-hidden" bind:this={host}></div>
+<div class="relative h-full">
+  {#if mode === "read"}
+    <ReadingView {path} {content} {onchange} {onopen} />
+  {:else}
+    <div class="h-full overflow-hidden" bind:this={host}></div>
+  {/if}
+
+  <!-- The three ways to show a note, like in Obsidian. -->
+  <div class="pointer-events-none absolute top-1.5 right-3 z-10">
+    <div
+      class="pointer-events-auto flex items-center gap-0.5 rounded-lg border border-zinc-800 bg-zinc-900/90 p-0.5 shadow-lg"
+    >
+      <button
+        class="{modeButton} {mode === 'read' ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500'}"
+        title="Lesen (Strg+E)"
+        aria-label="Lesen"
+        aria-pressed={mode === "read"}
+        onclick={() => setMode("read")}
+      >
+        <BookOpen size={14} />
+      </button>
+      <button
+        class="{modeButton} {mode === 'edit' ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500'}"
+        title="Bearbeiten (Strg+E)"
+        aria-label="Bearbeiten"
+        aria-pressed={mode === "edit"}
+        onclick={() => setMode("edit")}
+      >
+        <Pencil size={14} />
+      </button>
+      <button
+        class="{modeButton} {mode === 'source' ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500'}"
+        title="Quelltext (Strg+Umschalt+E)"
+        aria-label="Quelltext"
+        aria-pressed={mode === "source"}
+        onclick={() => setMode("source")}
+      >
+        <Code size={14} />
+      </button>
+    </div>
+  </div>
+</div>

@@ -3,7 +3,7 @@
 //! Frontmatter carries structured metadata (status, tags, due dates, ...) which
 //! is what project management and tracking features will query later.
 
-use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag, TagEnd};
+use pulldown_cmark::{CowStr, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 use serde::Serialize;
 use serde_json::Value;
 
@@ -177,6 +177,128 @@ pub fn parse(content: &str, file_stem: &str) -> ParsedNote {
     note
 }
 
+/// A note rendered for the reading view.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct RenderedNote {
+    /// The body as HTML, without the frontmatter.
+    pub html: String,
+    /// Frontmatter as JSON, shown as properties.
+    pub frontmatter: Value,
+}
+
+/// Renders a note for the reading view: the body as HTML and the frontmatter
+/// as JSON.
+pub fn render(content: &str) -> RenderedNote {
+    let (yaml, body) = split_frontmatter(content);
+    let mut frontmatter = Value::Object(Default::default());
+    if let Some(yaml) = yaml
+        && !yaml.trim().is_empty()
+        && let Ok(Value::Object(map)) = serde_yaml_ng::from_str::<Value>(yaml)
+    {
+        frontmatter = Value::Object(map);
+    }
+    RenderedNote {
+        html: render_body(body),
+        frontmatter,
+    }
+}
+
+/// Renders the body of a note as HTML.
+///
+/// Wikilinks become links with `data-wikilink` so the app can open the target,
+/// and HTML inside a note is escaped: a note is data, never code.
+pub fn render_body(body: &str) -> String {
+    let options = Options::ENABLE_TABLES | Options::ENABLE_TASKLISTS | Options::ENABLE_STRIKETHROUGH;
+    let mut events: Vec<Event> = Vec::new();
+    // pulldown-cmark splits text at `[`, `#` and friends, so a wikilink can be
+    // spread over several text events. They are collected before scanning.
+    let mut buffer = String::new();
+
+    for event in Parser::new_ext(body, options) {
+        match event {
+            Event::Text(text) => buffer.push_str(&text),
+            other => {
+                flush_text(&mut events, &mut buffer);
+                match other {
+                    // Raw HTML from a note is shown as text. `push_html` escapes
+                    // it, so nothing from a note can run in the app.
+                    Event::Html(html) | Event::InlineHtml(html) => {
+                        events.push(Event::Text(CowStr::from(html.into_string())));
+                    }
+                    other => events.push(other),
+                }
+            }
+        }
+    }
+    flush_text(&mut events, &mut buffer);
+
+    let mut html = String::new();
+    pulldown_cmark::html::push_html(&mut html, events.into_iter());
+    html
+}
+
+/// Emits the collected text, turning `[[wikilinks]]` into links.
+fn flush_text(events: &mut Vec<Event>, buffer: &mut String) {
+    if buffer.is_empty() {
+        return;
+    }
+    let mut rest = buffer.as_str();
+    while let Some(start) = rest.find("[[") {
+        let after = &rest[start + 2..];
+        let Some(end) = after.find("]]") else { break };
+        let inner = &after[..end];
+        if inner.contains('\n') {
+            break;
+        }
+        if !rest[..start].is_empty() {
+            events.push(Event::Text(CowStr::from(rest[..start].to_string())));
+        }
+        events.push(Event::Html(CowStr::from(wikilink_html(inner))));
+        rest = &after[end + 2..];
+    }
+    if !rest.is_empty() {
+        events.push(Event::Text(CowStr::from(rest.to_string())));
+    }
+    buffer.clear();
+}
+
+/// The HTML of a `[[wikilink]]`: the target is in `data-wikilink`, the text is
+/// the alias or the target itself.
+fn wikilink_html(inner: &str) -> String {
+    let (target, alias) = match inner.split_once('|') {
+        Some((target, alias)) => (target, Some(alias)),
+        None => (inner, None),
+    };
+    // A heading or block reference belongs to the target, not to the name.
+    let target = target.split('#').next().unwrap_or("").trim();
+    let label = match alias {
+        Some(alias) if !alias.trim().is_empty() => alias.trim(),
+        _ => target,
+    };
+    format!(
+        "<a class=\"wikilink\" href=\"#\" data-wikilink=\"{}\">{}</a>",
+        escape_html(target),
+        escape_html(label)
+    )
+}
+
+/// Escapes text that is shown as text (raw HTML from a note, link targets).
+fn escape_html(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&#39;"),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
 fn heading_level(level: HeadingLevel) -> u8 {
     level as u8
 }
@@ -286,5 +408,49 @@ mod tests {
         let (yaml, body) = split_frontmatter("---\nnot closed");
         assert!(yaml.is_none());
         assert_eq!(body, "---\nnot closed");
+    }
+
+    #[test]
+    fn renders_wikilinks_as_links() {
+        let html = render_body("Siehe [[Beta]] und [[Gamma|die Gamma]].");
+        assert!(html.contains(r##"<a class="wikilink" href="#" data-wikilink="Beta">Beta</a>"##));
+        assert!(html.contains(r#"data-wikilink="Gamma">die Gamma</a>"#));
+    }
+
+    #[test]
+    fn wikilink_target_keeps_the_note_without_its_heading() {
+        let html = render_body("[[Beta#Ziele]]");
+        assert!(html.contains(r#"data-wikilink="Beta""#));
+        assert!(!html.contains("Ziele"));
+    }
+
+    #[test]
+    fn does_not_link_wikilinks_in_code() {
+        let html = render_body("`[[Beta]]`");
+        assert!(!html.contains("wikilink"));
+    }
+
+    #[test]
+    fn escapes_html_from_the_note() {
+        let html = render_body("<script>alert(1)</script>");
+        assert!(!html.contains("<script>"));
+        assert!(html.contains("&lt;script&gt;"));
+    }
+
+    #[test]
+    fn renders_tables_tasks_and_strikethrough() {
+        let html = render_body("| a | b |\n| --- | --- |\n| 1 | 2 |\n\n- [x] fertig\n\n~~weg~~");
+        assert!(html.contains("<table>"));
+        assert!(html.contains("type=\"checkbox\""));
+        assert!(html.contains("<del>weg</del>"));
+    }
+
+    #[test]
+    fn renders_frontmatter_as_properties_and_not_as_content() {
+        let note = render("---\ntitle: Projekt Alpha\nstatus: active\n---\n# Hallo");
+        assert_eq!(note.frontmatter["title"], "Projekt Alpha");
+        assert_eq!(note.frontmatter["status"], "active");
+        assert!(note.html.contains("<h1>Hallo</h1>"));
+        assert!(!note.html.contains("status"));
     }
 }

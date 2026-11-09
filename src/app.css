@@ -33,6 +33,33 @@ body {
   outline: none;
 }
 
+/* Live preview: the markdown syntax is only visible on the line of the cursor.
+   The classes are put on the line by `src/lib/filetypes/markdown/livePreview.ts`. */
+.cm-lp-bullet {
+  color: var(--color-zinc-600);
+  padding-right: 0.2em;
+}
+.cm-lp-rule {
+  border: none;
+  border-top: 1px solid var(--color-zinc-800);
+  margin: 0.7em 0;
+}
+.cm-lp-quote {
+  border-left: 2px solid var(--color-zinc-700);
+  padding-left: 0.9em;
+  color: var(--color-zinc-400);
+}
+.cm-lp-code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  background-color: rgba(255, 255, 255, 0.03);
+}
+.cm-lp-frontmatter {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  color: var(--color-zinc-500);
+}
+
 /* Slim scrollbars in the app's colors instead of the light system ones with
    arrow buttons (WebView2 on Windows). Only the -webkit- rules are used on
    purpose: Chromium ignores them as soon as `scrollbar-width` or

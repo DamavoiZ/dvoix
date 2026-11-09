@@ -12,6 +12,7 @@
 - Eine Ansicht ohne eigene Datei (z. B. der Graph) registriert ihr Plugin mit `ctx.registerView(...)` und öffnet sie mit `vault.openViewTab(id)`. Sie läuft in einem Tab wie eine Datei und steht in `workspace.json` als `dvoix://view/<id>`. Wird das Plugin ausgeschaltet, schließen ihre Tabs von selbst.
 - Komponenten im App-Rahmen (`src/lib/components/`) bleiben feature-neutral. Sie rendern, was Plugins registriert haben (Panels, Footer, Header, Overlays), und kennen keine einzelnen Plugins.
 - Markdown-Editor-Erweiterungen kommen über `ctx.registerEditorExtension(...)` aus dem jeweiligen Plugin, nicht direkt in `src/lib/filetypes/markdown/editor.ts`.
+- Eine Notiz hat drei Ansichten: Lesen, Bearbeiten (Live-Vorschau) und Quelltext. Welche aktiv ist, steht in `settings.app.viewMode` (`.dvoix/app.json`), die Ansicht selbst liegt in `src/lib/filetypes/markdown/`. Die Live-Vorschau blendet die Markdown-Syntax mit CodeMirror-Decorations aus (`livePreview.ts`); neue Syntax-Regeln gehören dorthin, nicht in den Renderer.
 - Icons aus `@lucide/svelte`. Styling mit Tailwind und den CSS-Variablen aus `src/app.css`, damit hell/dunkel einheitlich bleiben.
 - UI-Texte auf Deutsch, kurz und ohne Fachjargon. Tastenkürzel mit Strg/Cmd beschriften.
 - Tastatur muss gehen: Dialoge mit Esc schließen, Listen mit Pfeiltasten und Enter bedienbar.

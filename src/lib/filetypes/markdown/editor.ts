@@ -16,6 +16,7 @@ import type { MarkdownConfig } from "@lezer/markdown";
 import { languages } from "@codemirror/language-data";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { tags as t } from "@lezer/highlight";
+import { livePreview } from "./livePreview";
 
 const WIKILINK = /\[\[([^\]\n]+)\]\]/g;
 
@@ -127,9 +128,17 @@ export interface EditorOptions {
 /** Holds the extensions from plugins and settings, so they can be swapped without a new editor. */
 const extra = new Compartment();
 
+/** Holds the live preview, so it can be switched off for the source view. */
+const preview = new Compartment();
+
 /** Replaces the plugin/settings extensions of a running editor. */
 export function setExtensions(view: EditorView, extensions: Extension[]): void {
   view.dispatch({ effects: extra.reconfigure(extensions) });
+}
+
+/** Shows the markdown syntax only on the line of the cursor (live preview). */
+export function setLivePreview(view: EditorView, on: boolean): void {
+  view.dispatch({ effects: preview.reconfigure(on ? livePreview() : []) });
 }
 
 export function createMarkdownEditor({ parent, doc, onchange, onlink, extensions = [] }: EditorOptions): EditorView {
@@ -148,6 +157,7 @@ export function createMarkdownEditor({ parent, doc, onchange, onlink, extensions
         theme,
         wikilinks,
         extra.of(extensions),
+        preview.of([]),
         EditorView.updateListener.of((u) => {
           if (u.docChanged) onchange(u.state.doc.toString());
         }),

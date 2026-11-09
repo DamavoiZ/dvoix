@@ -8,7 +8,12 @@ export interface AppSettings {
   spellcheck: boolean;
   /** Line numbers in the markdown editor. */
   lineNumbers: boolean;
+  /** How a note is shown: reading view, live preview or the markdown source. */
+  viewMode: ViewMode;
 }
+
+/** The three ways a note can be shown, like in Obsidian. */
+export type ViewMode = "read" | "edit" | "source";
 
 export interface AppearanceSettings {
   /** Editor font size in px. */
@@ -17,7 +22,12 @@ export interface AppearanceSettings {
   interfaceFontSize: number;
 }
 
-export const APP_DEFAULTS: AppSettings = { readableLineLength: true, spellcheck: false, lineNumbers: false };
+export const APP_DEFAULTS: AppSettings = {
+  readableLineLength: true,
+  spellcheck: false,
+  lineNumbers: false,
+  viewMode: "edit",
+};
 export const APPEARANCE_DEFAULTS: AppearanceSettings = { fontSize: 15, interfaceFontSize: 16 };
 
 class SettingsStore {
