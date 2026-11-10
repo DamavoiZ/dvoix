@@ -16,8 +16,6 @@
   let view: EditorView | undefined = $state();
   /** The text the editor last produced, so it is not put into it again. */
   let editorText = $state<string | undefined>();
-  /** The heading the reading view should scroll to, e.g. from the outline. */
-  let headingTarget = $state<string | null>(null);
   /** Whether the file uses Windows line endings; decided once per note. */
   let crlf = false;
 
@@ -93,15 +91,9 @@
   }
 
   function showRequestedLine() {
-    if (view) {
-      const target = reveal.take(path);
-      if (target) revealLine(view, target.line);
-      return;
-    }
-    // Without an editor the reading view shows the note: it scrolls to the
-    // heading instead of to the line.
-    const heading = reveal.takeHeading(path);
-    if (heading) headingTarget = heading;
+    if (!view) return;
+    const target = reveal.take(path);
+    if (target) revealLine(view, target.line);
   }
 
   function setMode(next: ViewMode) {
@@ -115,7 +107,7 @@
 
 <div class="relative h-full">
   {#if mode === "read"}
-    <ReadingView {path} {content} {onchange} {onopen} heading={headingTarget} />
+    <ReadingView {path} {content} {onchange} {onopen} />
   {:else}
     <div class="h-full overflow-hidden" bind:this={host}></div>
   {/if}

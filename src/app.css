@@ -440,7 +440,6 @@ input[type="checkbox"]:disabled {
 
 /* The reading view and the notes docked in the right sidebar. The markdown is
    inserted as HTML, so these rules have to be global. */
-/* The rendered markdown is inserted as HTML, so these rules have to be global. */
 .reading .reading-inner {
   max-width: 48rem;
   margin: 0 auto;
@@ -503,7 +502,7 @@ input[type="checkbox"]:disabled {
   margin: 0.2em 0 0;
 }
 /* A task has its checkbox instead of a bullet; the box sits where the bullet would be. */
-.reading :global(.prose li:has(> input[type="checkbox"])) {
+.reading .prose li:has(> input[type="checkbox"]) {
   list-style: none;
 }
 .reading .prose li > input[type="checkbox"] {

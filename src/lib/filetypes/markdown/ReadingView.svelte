@@ -8,8 +8,9 @@
   import { applyChange, parseFrontmatter } from "./frontmatter";
   import { highlightCodeBlocks } from "./codeHighlight";
   import { embedImage, isImage, parseEmbed } from "../../attachments";
+  import { reveal } from "../../reveal.svelte";
 
-  let { path, content, onchange, onopen, heading = null }: FileViewProps & { heading?: string | null } = $props();
+  let { path, content, onchange, onopen }: FileViewProps = $props();
 
   let rendered = $state<RenderedNote | null>(null);
   let failed = $state(false);
@@ -82,13 +83,18 @@
     onopen(href.split("#")[0]);
   }
 
-  // The outline asked for a heading: scroll to the one with that text.
+  // The outline asked for a heading: scroll to the one with that position or text.
   $effect(() => {
-    const text = heading;
-    if (!text || !prose) return;
-    const target = [...prose.querySelectorAll("h1,h2,h3,h4,h5,h6")].find(
-      (h) => h.textContent?.trim() === text,
-    );
+    void reveal.target;
+    if (!prose) return;
+    const heading = reveal.takeHeading(path);
+    if (!heading) return;
+    const all = [...prose.querySelectorAll("h1,h2,h3,h4,h5,h6")];
+    const byIndex = heading.index !== undefined ? all[heading.index] : undefined;
+    const target =
+      byIndex?.textContent?.trim() === heading.text
+        ? byIndex
+        : all.find((h) => h.textContent?.trim() === heading.text);
     target?.scrollIntoView({ block: "start" });
   });
 </script>

@@ -25,10 +25,15 @@ function stripPrefix(text: string): string {
 function plainText(text: string): string {
   return text
     .replace(/`([^`]*)`/g, "$1")
-    .replace(/\*\*([^*]*)\*\*/g, "$1")
-    .replace(/\*([^*]*)\*/g, "$1")
-    .replace(/~~([^~]*)~~/g, "$1")
+    .replace(/!\[\[([^\]|]*)(?:\|([^\]]*))?\]\]/g, (_, target: string, alias?: string) => alias || target)
+    .replace(/\[\[([^\]|]*)(?:\|([^\]]*))?\]\]/g, (_, target: string, alias?: string) => alias || target)
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
     .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\*\*([^*]*)\*\*/g, "$1")
+    .replace(/__([^_]*)__/g, "$1")
+    .replace(/\*([^*]*)\*/g, "$1")
+    .replace(/(^|[\s(])_([^_]*)_(?=$|[\s).,!?:;])/g, "$1$2")
+    .replace(/~~([^~]*)~~/g, "$1")
     .trim();
 }
 
@@ -49,7 +54,8 @@ export function parseHeadings(markdown: string): Heading[] {
   let beforeIsHeading = false;
 
   for (let i = 0; i < lines.length; i++) {
-    const line = stripPrefix(lines[i]).trim();
+    const raw = lines[i];
+    const line = stripPrefix(raw).trim();
     const trimmed = line.trim();
 
     // The frontmatter at the very start of a note is metadata, not text.
@@ -85,8 +91,8 @@ export function parseHeadings(markdown: string): Heading[] {
       continue;
     }
 
-    // A heading written with a line of = or - under the text.
-    if (/^=+$/.test(trimmed) || /^-+$/.test(trimmed)) {
+    // A heading written with a line of = or - under a plain paragraph line.
+    if (!raw.trimStart().match(/^(?:>|[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t])/) && (/^=+$/.test(trimmed) || /^-+$/.test(trimmed))) {
       const text = plainText(before);
       if (text && !beforeIsHeading) {
         headings.push({ level: trimmed[0] === "=" ? 1 : 2, text, line: i - 1 });
@@ -96,7 +102,7 @@ export function parseHeadings(markdown: string): Heading[] {
       continue;
     }
 
-    before = line;
+    before = raw.trimStart().match(/^(?:>|[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t])/) ? "" : line;
     beforeIsHeading = false;
   }
   return headings;
