@@ -3,6 +3,7 @@
 
 mod commands;
 mod http;
+mod process;
 mod settings;
 
 use std::sync::{Arc, Mutex};
@@ -34,6 +35,8 @@ pub struct Workspace {
 #[derive(Default)]
 pub struct AppState {
     pub workspace: Mutex<Option<Workspace>>,
+    /// Programs started by store plugins; killed when the vault closes.
+    pub processes: Arc<process::Processes>,
 }
 
 impl Workspace {
@@ -170,6 +173,8 @@ pub fn run() {
             commands::store_install,
             commands::store_uninstall,
             commands::store_installed,
+            commands::process_spawn,
+            commands::process_kill,
         ])
         .run(tauri::generate_context!())
         .expect("error while running dvoix");
@@ -206,6 +211,7 @@ mod tests {
         vault.write("note.md", "# Note").unwrap();
         let state = AppState {
             workspace: Mutex::new(Some(workspace(&vault))),
+            processes: Default::default(),
         };
 
         commands::with_ws(&state, |ws| {

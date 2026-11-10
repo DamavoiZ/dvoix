@@ -44,6 +44,7 @@ The **tag of the release is the version** from `manifest.json`, without a `v` in
 | `vault:read` | `dvoix.vault.list()`, `dvoix.vault.read(path)` |
 | `vault:write` | `dvoix.vault.write(path, content)` |
 | `editor` | `dvoix.registerEditorExtension(...)` |
+| `process` | `dvoix.process.spawn(...)`: run programs on the computer, started in the vault folder |
 
 Permissions are shown in the store before anyone installs. If a plugin calls something it did not declare, the API throws an error. This is not a sandbox: like in Obsidian, a plugin runs inside the app and could bypass the API. That is why community plugins sit behind a switch with a warning.
 
@@ -81,6 +82,24 @@ Views are `mount(el, props)` functions: they draw into an empty element and opti
 | `loadData(defaults)` / `saveData(data)` | settings in `.dvoix/plugins/<id>/data.json` |
 | `vault.list()`, `vault.read(path)`, `vault.write(path, text)`, `vault.openFile(path)` | files, paths relative to the vault |
 | `register(fn)` | `fn` runs when the plugin is switched off |
+| `workspace.activeFile()` | vault-relative path of the file in the active tab, `null` for views and empty tabs |
+| `process.spawn({ command, args, stdin, env, onStdout, onStderr, onExit })` | needs `process`; see below |
+
+### Running programs (`process`)
+
+```js
+const proc = dvoix.process.spawn({
+  command: "claude",            // looked up on PATH (on Windows also .cmd/.exe via PATHEXT), or a path
+  args: ["-p", "--output-format", "stream-json", "--verbose"],
+  stdin: "Summarize my notes",  // written to stdin, then stdin is closed
+  onStdout: (chunk) => {},      // text, in chunks of any size
+  onStderr: (chunk) => {},
+  onExit: (code) => {},         // null if killed or if it could not be started
+});
+proc.kill();
+```
+
+The program always runs in the vault folder, with the rights of the user, so it can reach more than the vault. If it can't be started (e.g. not installed), the reason arrives on `onStderr` and `onExit(null)` follows. Running programs are killed when the plugin is switched off and when the vault is closed. On Windows no console window opens. Prefer stdin over arguments for free text: `cmd.exe` changes quotes and newlines in the arguments of `.cmd` files.
 
 Colors: the CSS variables of Tailwind (e.g. `var(--color-zinc-300)`, `var(--color-violet-500)`) match the rest of the app. Give classes in `styles.css` their own prefix; the file applies to the whole app.
 

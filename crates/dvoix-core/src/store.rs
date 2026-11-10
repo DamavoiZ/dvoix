@@ -33,7 +33,7 @@ pub const STYLES_FILE: &str = "styles.css";
 pub const MAX_FILE_BYTES: u64 = 8 * 1024 * 1024;
 
 /// What a plugin may use of the API (see `src/lib/plugins/store/api.ts`).
-pub const PERMISSIONS: &[&str] = &["vault:read", "vault:write", "editor"];
+pub const PERMISSIONS: &[&str] = &["vault:read", "vault:write", "editor", "process"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
