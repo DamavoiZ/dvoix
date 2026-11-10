@@ -6,6 +6,12 @@ export interface TreeNode {
 }
 
 /**
+ * Compares the names of the files. One collator for all of them:
+ * `localeCompare` with options builds a new one for every call.
+ */
+const byName = new Intl.Collator("en", { numeric: true });
+
+/**
  * Adds extra entries (from other plugins) to the vault's, without duplicates and
  * sorted by path again, so every folder comes before what is inside it.
  */
@@ -13,7 +19,10 @@ export function mergeEntries(entries: VaultEntry[], extra: VaultEntry[]): VaultE
   if (extra.length === 0) return entries;
   const seen = new Set(entries.map((e) => e.path));
   const merged = [...entries, ...extra.filter((e) => !seen.has(e.path))];
-  return merged.sort((a, b) => (a.path.toLowerCase() < b.path.toLowerCase() ? -1 : a.path.toLowerCase() > b.path.toLowerCase() ? 1 : 0));
+  // The key is built once per entry and not twice for every comparison.
+  const keyed = merged.map((entry) => ({ entry, key: entry.path.toLowerCase() }));
+  keyed.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+  return keyed.map((k) => k.entry);
 }
 
 /** Builds a folder tree from the flat entry list; folders first, then by name. */
@@ -27,7 +36,7 @@ export function buildTree(entries: VaultEntry[]): TreeNode[] {
     (parent ? folders.get(parent)?.children : root)?.push(node);
   }
   const sort = (nodes: TreeNode[]) => {
-    nodes.sort((a, b) => Number(b.entry.isDir) - Number(a.entry.isDir) || a.entry.name.localeCompare(b.entry.name, "en", { numeric: true }));
+    nodes.sort((a, b) => Number(b.entry.isDir) - Number(a.entry.isDir) || byName.compare(a.entry.name, b.entry.name));
     nodes.forEach((n) => sort(n.children));
   };
   sort(root);

@@ -8,7 +8,7 @@
 
   let backlinks = $state<NoteSummary[]>([]);
   $effect(() => {
-    void vault.revision;
+    void vault.changes.notes.number;
     const p = path;
     if (fileTypeFor(p)?.id === "markdown") api.backlinks(p).then((b) => (backlinks = b)).catch(() => (backlinks = []));
     else backlinks = [];

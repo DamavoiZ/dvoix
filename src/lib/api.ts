@@ -127,6 +127,12 @@ export interface VaultChange {
   path: string;
   /** In a hidden folder or a dot-file; only of interest to the hidden-files plugin. */
   hidden: boolean;
+  /**
+   * The entry of the path, as far as it could be read: its size and the time
+   * it was changed. Missing when the file is gone, so the list of the vault
+   * can be corrected without listing the whole vault again.
+   */
+  entry?: VaultEntry;
 }
 
 /** Which hidden entries `listHiddenEntries` returns (see `dvoix_core::HiddenFilter`). */

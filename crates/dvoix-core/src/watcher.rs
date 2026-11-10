@@ -12,7 +12,7 @@ use notify::event::{ModifyKind, RenameMode};
 use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::Serialize;
 
-use crate::{Result, Vault};
+use crate::{Result, Vault, VaultEntry};
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -31,6 +31,11 @@ pub struct VaultChange {
     /// changes are only reported for the "Hidden files" plugin and are
     /// never indexed.
     pub hidden: bool,
+    /// The entry of the path, as far as it could be read: its size and the
+    /// time it was changed. `None` when the file is gone or could not be
+    /// read. It lets the app correct its list of the vault without listing
+    /// the whole vault again.
+    pub entry: Option<VaultEntry>,
 }
 
 /// How long a batch waits for more changes before it is handed over.
@@ -188,10 +193,16 @@ fn to_changes(vault: &Vault, event: &notify::Event) -> Vec<VaultChange> {
             if is_noisy(&rel) {
                 return None;
             }
+            let hidden = Vault::is_ignored(&rel);
+            // The entry of the path, so the app can correct its list of the
+            // vault without listing the whole vault again. Hidden paths are
+            // not part of that list, so they are not read.
+            let entry = if hidden { None } else { vault.entry(&rel).ok() };
             Some(VaultChange {
                 kind: kind_for(p)?,
-                hidden: Vault::is_ignored(&rel),
+                hidden,
                 path: rel,
+                entry,
             })
         })
         .collect()
@@ -224,6 +235,28 @@ mod tests {
     }
 
     #[test]
+    fn a_change_carries_the_entry_of_the_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = Vault::open(dir.path()).unwrap();
+        std::fs::write(dir.path().join("note.md"), "# Note").unwrap();
+
+        let change = VaultChange {
+            kind: ChangeKind::Modified,
+            path: "note.md".into(),
+            hidden: false,
+            entry: vault.entry("note.md").ok(),
+        };
+
+        let entry = change.entry.expect("the entry of the file");
+        assert_eq!(entry.path, "note.md");
+        assert_eq!(entry.name, "note.md");
+        assert_eq!(entry.extension, "md");
+        assert_eq!(entry.size, 6);
+        assert!(!entry.is_dir);
+        assert!(entry.modified > 0);
+    }
+
+    #[test]
     fn marks_hidden_changes_and_drops_noisy_ones() {
         assert!(is_noisy(".git/objects/ab/cdef"));
         assert!(is_noisy(".dvoix/workspace.json"));
@@ -245,6 +278,7 @@ mod tests {
                 kind: ChangeKind::Modified,
                 path: format!("note-{i}.md"),
                 hidden: false,
+                entry: None,
             });
         }
         let batch = rx

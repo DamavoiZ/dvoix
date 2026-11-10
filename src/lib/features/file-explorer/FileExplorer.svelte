@@ -8,7 +8,12 @@
   import { plugins } from "../../plugins/manager.svelte";
 
   // Other plugins can add entries only the explorer shows (hidden folders).
-  const tree = $derived(buildTree(mergeEntries(vault.entries, plugins.explorerEntries)));
+  // The tree follows the list of the vault, which is only replaced when the
+  // shape of the vault changes: a file that was only written stays as it is.
+  const tree = $derived.by(() => {
+    void vault.changes.structure.number;
+    return buildTree(mergeEntries(vault.entries, plugins.explorerEntries));
+  });
   let rootDrop = $state(false);
 </script>
 

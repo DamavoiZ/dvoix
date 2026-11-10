@@ -262,7 +262,7 @@
 
   // Reload when files change on disk.
   $effect(() => {
-    void vault.revision;
+    void vault.changes.notes.number;
     api
       .graph()
       .then((d) => {

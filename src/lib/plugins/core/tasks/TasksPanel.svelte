@@ -34,7 +34,7 @@
   let query = $state("");
 
   $effect(() => {
-    void vault.revision;
+    void vault.changes.notes.number;
     api
       .tasks()
       .then((t) => (tasks = t))
@@ -43,7 +43,7 @@
   });
 
   const now = $derived.by(() => {
-    void vault.revision; // re-evaluate "today" now and then, e.g. after midnight
+    void vault.changes.files.number; // re-evaluate "today" now and then, e.g. after midnight
     return today();
   });
 

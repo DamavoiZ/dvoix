@@ -7,12 +7,12 @@
   let notes = $state<NoteSummary[]>([]);
 
   $effect(() => {
-    void vault.revision;
+    void vault.changes.notes.number;
     api.tags().then((t) => (tags = t)).catch(() => (tags = []));
   });
 
   $effect(() => {
-    void vault.revision;
+    void vault.changes.notes.number;
     const tag = selected;
     if (tag) api.notesWithTag(tag).then((n) => (notes = n)).catch(() => (notes = []));
     else notes = [];

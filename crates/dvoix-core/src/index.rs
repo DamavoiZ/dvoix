@@ -1226,6 +1226,7 @@ mod tests {
                 kind: ChangeKind::Modified,
                 path: format!("batch/note-{i}.md"),
                 hidden: false,
+                entry: None,
             })
             .collect();
         // The files did not change, so nothing has to be written at all.
@@ -1269,6 +1270,7 @@ mod tests {
             kind: ChangeKind::Modified,
             path: "beta.md".into(),
             hidden: false,
+            entry: None,
         }];
         index.apply_changes(&vault, &changes).unwrap();
         assert_eq!(index.writes(), before, "the note was read a second time");
@@ -1294,16 +1296,19 @@ mod tests {
                 kind: ChangeKind::Created,
                 path: "new.md".into(),
                 hidden: false,
+                entry: None,
             },
             VaultChange {
                 kind: ChangeKind::Removed,
                 path: "beta.md".into(),
                 hidden: false,
+                entry: None,
             },
             VaultChange {
                 kind: ChangeKind::Created,
                 path: "projects/gamma.md".into(),
                 hidden: false,
+                entry: None,
             },
         ];
         index.apply_changes(&vault, &changes).unwrap();

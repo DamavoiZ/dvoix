@@ -146,6 +146,7 @@ fn main() {
             kind: ChangeKind::Modified,
             path: format!("burst/note-{i}.md"),
             hidden: false,
+            entry: None,
         })
         .collect();
 

@@ -18,13 +18,16 @@ cargo run --release --example index_bench -- 80000 2000
 
 # The editor: the live preview and the check of the note.
 node scripts/bench-editor.mjs
+
+# The panels: the lookups of links, the tree of the vault, the suggestions.
+node scripts/bench-panels.mjs
 ```
 
 The note size matters. The old delete of a search row walked the whole search
 table, so its cost grew with the text of the entire vault.
 
-The numbers of the editor move a little from run to run; the tables below
-are the values of a run that was repeated three times.
+The numbers move a little from run to run. Every table below is one run; the
+numbers of the editor were taken from a run that was repeated three times.
 
 ## The results
 
@@ -177,6 +180,56 @@ the change avoids.
 The line endings of a note were also looked for in the whole text on every
 keystroke. They are decided once per note now.
 
+### The panels
+
+Three things happened on every change on disk, and all three were done for
+the whole vault.
+
+**The vault was listed again.** Every change asked the backend for the list
+of all the files of the vault, and the app got 20 000 entries over the
+connection and made a proxy of every one of them. Now only a file that was
+written is corrected in place; the vault is listed again when a file was
+added or removed, because then the tree of the vault really changes.
+
+The list itself costs 37 ms with 20 100 entries (see above), and that is
+what a save of a note used to cost.
+
+**Every panel refreshed.** The panels did not know what had changed, so
+every one of them asked the backend again. Now the vault keeps three
+counters: a note changed, the shape of the vault changed, any file changed.
+The panels of notes (tags, tasks, projects, backlinks, search, graph) read
+the first, the panels of the repository read the last one. A file that is
+not a note changes none of the panels of notes.
+
+**The lookups of links walked over all the files.** Following a link or
+looking for the name of a file looked at every file of the vault, twice
+over, with a `toLowerCase()` for every one of them. The files are now in
+two maps, by path and by name, that are built once per change of the list.
+
+| 20 000 files | Before | After |
+| --- | --- | --- |
+| look for the target of a link | 1.32 ms | 0.0003 ms |
+| build the maps once | — | 3.9 ms |
+
+The tree of the vault is built once per change of the list as well. Its
+names were compared with `localeCompare`, which builds a new collator for
+every single comparison.
+
+| 20 100 entries | Before | After |
+| --- | --- | --- |
+| build the tree | 72.0 ms | 6.3 ms |
+| add the entries of the plugins | 10.5 ms | 5.7 ms |
+
+The suggestions of links were built again for every keystroke: every file
+of the vault got a label, a name and a place in the list, and the list was
+sorted. That happens now once per change of the vault.
+
+| 20 000 files | Before | After |
+| --- | --- | --- |
+| build the targets | 13.7 ms | 8.4 ms |
+| build the targets | every keystroke | once per change |
+| walk the targets for a suggestion | — | 0.26 ms |
+
 ## The attempts
 
 ### Kept: the search row takes the rowid of its note
@@ -266,6 +319,14 @@ The blocks of the live preview were first looked up by their text in a map,
 so a block that moved would keep its widget. The map costs more than it
 saves: the blocks are matched by their place in the document, which needs no
 lookup at all, and the map made a keystroke slower. Not used.
+
+### Rejected: sorting the names of the tree in lower case
+
+The names of the tree could be compared in lower case instead of with a
+collator. That is faster, but it is a different order: a collator puts "a"
+before "B", a comparison in lower case cannot tell them apart. The order of
+the tree is what the user sees, so the collator was kept — but only one of
+them, for all the comparisons.
 
 ## Still open
 

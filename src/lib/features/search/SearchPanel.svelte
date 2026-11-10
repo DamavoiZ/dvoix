@@ -7,7 +7,7 @@
 
   $effect(() => {
     const q = query;
-    void vault.revision; // search again when files change
+    void vault.changes.notes.number; // search again when files change
     const timer = setTimeout(async () => {
       hits = q.trim() ? await api.search(q).catch(() => []) : [];
     }, 120);
