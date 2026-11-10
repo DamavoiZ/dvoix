@@ -2,14 +2,14 @@ import { ListChecks } from "@lucide/svelte";
 import type { Plugin } from "../../types";
 import TasksPanel from "./TasksPanel.svelte";
 import TasksSettings from "./TasksSettings.svelte";
-import { taskEditorExtensions } from "./editor";
+import { taskMetaExtensions } from "./editor";
 import { taskSettings } from "./settings";
 
 export const tasksPlugin: Plugin = {
   manifest: {
     id: "tasks",
     name: "Tasks",
-    description: "Markdown checkboxes as tasks: clickable in the editor and collected in an overview with due date and priority.",
+    description: "Markdown checkboxes as tasks: collected in an overview with due date and priority, highlighted in the editor.",
     version: "1.0.0",
   },
   icon: ListChecks,
@@ -18,17 +18,18 @@ export const tasksPlugin: Plugin = {
     ctx.addPanel({ id: "tasks", label: "Tasks", icon: ListChecks, component: TasksPanel, order: 40 });
     ctx.addSettingTab({ component: TasksSettings });
 
-    // Editor extensions follow the settings: rebuilt when a toggle changes.
-    let removeExtensions = ctx.registerEditorExtension(taskEditorExtensions(taskSettings.value));
-    let last = JSON.stringify([taskSettings.value.checkboxes, taskSettings.value.highlightMeta]);
-    ctx.register(
-      taskSettings.onChange((s) => {
-        const key = JSON.stringify([s.checkboxes, s.highlightMeta]);
-        if (key === last) return;
-        last = key;
-        removeExtensions();
-        removeExtensions = ctx.registerEditorExtension(taskEditorExtensions(s));
-      }),
-    );
+    // The highlighting follows the setting: added or removed when it changes.
+    // Clickable checkboxes are the core feature `checkboxes`, not part of this plugin.
+    let remove: (() => void) | undefined;
+    const apply = (on: boolean) => {
+      if (on === !!remove) return;
+      if (on) remove = ctx.registerEditorExtension(taskMetaExtensions());
+      else {
+        remove?.();
+        remove = undefined;
+      }
+    };
+    apply(taskSettings.value.highlightMeta);
+    ctx.register(taskSettings.onChange((s) => apply(s.highlightMeta)));
   },
 };
