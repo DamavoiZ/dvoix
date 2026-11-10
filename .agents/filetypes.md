@@ -17,5 +17,5 @@ A file type is a `FileType` (`src/lib/filetypes/types.ts`) and is registered by 
 
 1. `src/lib/plugins/core/<id>/` with `<Name>View.svelte`, a format module and `index.ts`.
 2. Register it in `corePlugins` in `core/index.ts`.
-3. Create, edit, change from outside, turn the plugin off and on: everything must work.
+3. Create, edit, change from outside, turn the plugin off and on: everything must work. A new file type is never a core feature.
 4. `npm run check` and `npm run build`.

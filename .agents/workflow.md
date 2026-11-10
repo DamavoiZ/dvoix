@@ -3,7 +3,7 @@
 ## Before the change
 
 - Read `AGENTS.md` and the matching file in `.agents/`.
-- Read the affected code before you change it. Follow the existing patterns (take a similar plugin as the template).
+- Read the affected code before you change it. Follow the existing patterns (take a similar core feature or plugin as the template).
 - Clarify unclear requirements briefly, or pick the most obvious reading and name it in the PR.
 
 ## During the change

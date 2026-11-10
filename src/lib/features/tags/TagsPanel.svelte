@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { api, type NoteSummary, type TagCount } from "../../../api";
-  import { vault } from "../../../vault.svelte";
+  import { api, type NoteSummary, type TagCount } from "../../api";
+  import { vault } from "../../vault.svelte";
 
   let tags = $state<TagCount[]>([]);
   let selected = $state<string | null>(null);

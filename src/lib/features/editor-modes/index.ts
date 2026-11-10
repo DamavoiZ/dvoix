@@ -1,8 +1,8 @@
 // The three ways to show a note: reading view, live preview and the markdown
-// source. The switch itself sits in the note view, this plugin adds the
+// source. The switch itself sits in the note view, this feature adds the
 // commands and the shortcuts for it.
-import type { Plugin } from "../../types";
-import { settings, type ViewMode } from "../../../settings.svelte";
+import type { Plugin } from "../../plugins/types";
+import { settings, type ViewMode } from "../../settings.svelte";
 
 function setMode(mode: ViewMode) {
   settings.app.viewMode = mode;
@@ -21,10 +21,10 @@ function toggleSource() {
   setMode(current === "source" ? "edit" : "source");
 }
 
-export const editorModesPlugin: Plugin = {
+export const editorModesFeature: Plugin = {
   manifest: {
     id: "editor-modes",
-    name: "Ansichten",
+    name: "Views",
     description: "Read notes, edit them in the live preview or open them as source.",
     version: "1.0.0",
   },

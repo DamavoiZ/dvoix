@@ -1,9 +1,9 @@
 // Suggests notes while typing a `[[wikilink]]` in the editor.
 import { Link } from "@lucide/svelte";
-import type { Plugin } from "../../types";
+import type { Plugin } from "../../plugins/types";
 import { linkSuggestExtensions } from "./editor";
 
-export const linkSuggestPlugin: Plugin = {
+export const linkSuggestFeature: Plugin = {
   manifest: {
     id: "link-suggest",
     name: "Link suggestions",

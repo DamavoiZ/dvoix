@@ -4,24 +4,33 @@
 </script>
 
 <script lang="ts">
-  // Settings (Ctrl+,): editor, appearance, core plugins on/off, the plugin store,
-  // and one page per plugin that has settings. Everything is saved in `<vault>/.dvoix/`.
+  // Settings (Ctrl+,): editor, appearance, keyboard shortcuts, core plugins on/off,
+  // the plugin store, and one page per core feature or plugin that has settings. Everything is saved in `<vault>/.dvoix/`.
   import { Puzzle, X } from "@lucide/svelte";
   import Select from "../Select.svelte";
   import Setting from "./Setting.svelte";
   import StorePage from "./StorePage.svelte";
   import Toggle from "./Toggle.svelte";
-  import { hotkeyLabel, plugins } from "../../plugins";
+  import { hotkeyLabel, plugins, type Plugin } from "../../plugins";
   import { APPEARANCE_DEFAULTS, settings, type ViewMode } from "../../settings.svelte";
   import { ui } from "../../ui.svelte";
   import { vault } from "../../vault.svelte";
 
   let page = $state("editor");
 
-  const pluginPages = $derived(
-    [...plugins.all, ...plugins.extra]
+  /** Settings pages of everything in `list` that registered one. */
+  const pagesOf = (list: Plugin[]) =>
+    list
       .filter((p) => plugins.settingTabs.some((t) => t.pluginId === p.manifest.id))
-      .map((p) => ({ id: `plugin:${p.manifest.id}`, label: p.manifest.name, pluginId: p.manifest.id })),
+      .map((p) => ({ id: `plugin:${p.manifest.id}`, label: p.manifest.name, pluginId: p.manifest.id }));
+  const featurePages = $derived(pagesOf(plugins.features));
+  const pluginPages = $derived(pagesOf([...plugins.all, ...plugins.extra]));
+  const allPages = $derived([...featurePages, ...pluginPages]);
+  /** Everything that registered commands with shortcuts, core features first. */
+  const shortcutGroups = $derived(
+    [...plugins.features, ...plugins.all, ...plugins.extra]
+      .map((p) => ({ id: p.manifest.id, name: p.manifest.name, commands: commandsOf(p.manifest.id) }))
+      .filter((g) => g.commands.length),
   );
   const activeTab = $derived(
     page.startsWith("plugin:") ? plugins.settingTabs.find((t) => `plugin:${t.pluginId}` === page) : undefined,
@@ -80,6 +89,11 @@
       <div class="px-3 pt-2 pb-1 text-[11px] font-medium tracking-wide text-zinc-500 uppercase">Options</div>
       <button class={navBtn(page === "editor")} onclick={() => (page = "editor")}>Editor</button>
       <button class={navBtn(page === "appearance")} onclick={() => (page = "appearance")}>Appearance</button>
+      <button class={navBtn(page === "shortcuts")} onclick={() => (page = "shortcuts")}>Keyboard shortcuts</button>
+      {#each featurePages as p (p.id)}
+        <button class={navBtn(page === p.id)} onclick={() => (page = p.id)}>{p.label}</button>
+      {/each}
+      <div class="px-3 pt-4 pb-1 text-[11px] font-medium tracking-wide text-zinc-500 uppercase">Plugins</div>
       <button class={navBtn(page === "plugins")} onclick={() => (page = "plugins")}>Core plugins</button>
       <button class={navBtn(page === "store")} onclick={() => (page = "store")}>Plugin store</button>
       {#if pluginPages.length}
@@ -97,11 +111,13 @@
             ? "Editor"
             : page === "appearance"
               ? "Appearance"
-              : page === "plugins"
-                ? "Core plugins"
-                : page === "store"
-                  ? "Plugin store"
-                  : (pluginPages.find((p) => p.id === page)?.label ?? "")}
+              : page === "shortcuts"
+                ? "Keyboard shortcuts"
+                : page === "plugins"
+                  ? "Core plugins"
+                  : page === "store"
+                    ? "Plugin store"
+                    : (allPages.find((p) => p.id === page)?.label ?? "")}
         </h2>
         <button class="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" aria-label="Close" onclick={close}>
           <X size={16} />
@@ -124,7 +140,7 @@
               label="Default view"
               value={settings.app.viewMode}
               options={[
-                { value: "read", label: "Lesen" },
+                { value: "read", label: "Read" },
                 { value: "edit", label: "Edit (live preview)" },
                 { value: "source", label: "Source" },
               ]}
@@ -145,10 +161,25 @@
               onchange={(e) => setSize("interfaceFontSize", e.currentTarget.value)}
             />
           </Setting>
+        {:else if page === "shortcuts"}
+          {#each shortcutGroups as g (g.id)}
+            <div class="pt-4 pb-1 text-[11px] font-medium tracking-wide text-zinc-500 uppercase">{g.name}</div>
+            {#each g.commands as c (c.fullId)}
+              <div class="flex items-center justify-between gap-4 py-1 text-sm text-zinc-300">
+                <span class="truncate">{c.name}</span>
+                <span class="flex shrink-0 gap-1">
+                  {#each c.hotkeys! as h, i (i)}
+                    <kbd class="rounded bg-zinc-800 px-1.5 py-px text-xs text-zinc-400">{hotkeyLabel(h)}</kbd>
+                  {/each}
+                </span>
+              </div>
+            {/each}
+          {/each}
         {:else if page === "plugins"}
           <p class="py-3 text-xs text-zinc-500">
-            Every feature of dvoix is a plugin. Turned-off plugins disappear from the sidebar, menus and keyboard shortcuts,
-            your files stay unchanged.
+            Optional functions that come with dvoix. Turned-off plugins disappear from the sidebar, menus and keyboard
+            shortcuts, your files stay unchanged. Basic functions such as the file explorer, search, tags, backlinks, tabs and
+            views are always on.
           </p>
           {#each plugins.all as p (p.manifest.id)}
             {@const id = p.manifest.id}

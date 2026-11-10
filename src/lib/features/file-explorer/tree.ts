@@ -1,4 +1,4 @@
-import type { VaultEntry } from "../../../api";
+import type { VaultEntry } from "../../api";
 
 export interface TreeNode {
   entry: VaultEntry;

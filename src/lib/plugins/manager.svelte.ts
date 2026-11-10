@@ -1,5 +1,6 @@
-// Loads and unloads plugins and keeps everything they registered (panels,
-// commands, file types, ...) in one place for the rest of the app to render.
+// Loads and unloads core features and plugins and keeps everything they
+// registered (panels, commands, file types, ...) in one place for the rest of
+// the app to render. Core features are always loaded; plugins can be turned off.
 import type { Extension } from "@codemirror/state";
 import { readJsonRaw, readJson, writeJson } from "../config";
 import { registerFileType } from "../filetypes";
@@ -37,6 +38,8 @@ type WithOrder = { order?: number };
 const byOrder = <T extends WithOrder>(list: T[]) => [...list].sort((a, b) => (a.order ?? 100) - (b.order ?? 100));
 
 class PluginManager {
+  /** Core features (`src/lib/features/`): always loaded, no on/off switch. */
+  readonly features: Plugin[] = [];
   /** All core plugins, in load order. */
   readonly all: Plugin[] = [];
   /**
@@ -80,20 +83,39 @@ class PluginManager {
   /** Extra file explorer entries of all loaded plugins (see `addExplorerEntries`). */
   explorerEntries = $derived(this.explorerEntryList.flatMap((s) => s.entries()));
 
-  /** Makes a plugin known to the app. Call before a vault is opened. */
+  /** Makes a core plugin known to the app. Call before a vault is opened. */
   add(plugin: Plugin) {
-    if (this.all.some((p) => p.manifest.id === plugin.manifest.id)) {
-      throw new Error(`Plugin "${plugin.manifest.id}" is already registered`);
-    }
+    this.assertFree(plugin.manifest.id);
     this.all.push(plugin);
   }
 
+  /** Makes a core feature known to the app. Call before a vault is opened. */
+  addFeature(feature: Plugin) {
+    this.assertFree(feature.manifest.id);
+    this.features.push(feature);
+  }
+
   get(id: string): Plugin | undefined {
-    return this.all.find((p) => p.manifest.id === id) ?? this.extra.find((p) => p.manifest.id === id);
+    return (
+      this.features.find((p) => p.manifest.id === id) ??
+      this.all.find((p) => p.manifest.id === id) ??
+      this.extra.find((p) => p.manifest.id === id)
+    );
+  }
+
+  /** Whether the id belongs to a core feature, which cannot be turned off. */
+  isFeature(id: string): boolean {
+    return this.features.some((p) => p.manifest.id === id);
+  }
+
+  /** Whether the id is taken by a core feature or a core plugin. */
+  isBuiltIn(id: string): boolean {
+    return this.isFeature(id) || this.all.some((p) => p.manifest.id === id);
   }
 
   /** Whether a core plugin is on (store plugins: see `pluginStore.isEnabled`). */
   isEnabled(id: string): boolean {
+    if (this.isFeature(id)) return true;
     const p = this.all.find((p) => p.manifest.id === id);
     if (!p) return false;
     return this.enabled[id] ?? p.manifest.enabledByDefault ?? true;
@@ -119,12 +141,13 @@ class PluginManager {
     return this.extensionList.map((e) => e.extension);
   }
 
-  /** Reads `core-plugins.json` and loads every plugin that is on. */
+  /** Loads every core feature, then reads `core-plugins.json` and loads every plugin that is on. */
   async loadVault() {
     await this.serial(async () => {
       const saved = await readJsonRaw(ENABLED_FILE);
       this.enabled = saved && typeof saved === "object" ? (saved as Record<string, boolean>) : {};
       this.errors = {};
+      for (const f of this.features) await this.load(f);
       for (const p of this.all) if (this.isEnabled(p.manifest.id)) await this.load(p);
       // Write the file once so it shows what is on, even before anything was changed.
       if (!saved) this.saveEnabled();
@@ -194,6 +217,10 @@ class PluginManager {
 
   // ------------------------------------------------------------------ internals
 
+  private assertFree(id: string) {
+    if (this.isBuiltIn(id)) throw new Error(`Plugin "${id}" is already registered`);
+  }
+
   /** Plugin changes run one after another so quick toggling can't interleave. */
   private serial(fn: () => Promise<void>): Promise<void> {
     const next = this.queue.then(fn, fn);
@@ -203,6 +230,8 @@ class PluginManager {
 
   private saveEnabled() {
     const out: Record<string, boolean> = { ...this.enabled };
+    // Vaults from before a plugin became a core feature may still list it here.
+    for (const f of this.features) delete out[f.manifest.id];
     for (const p of this.all) out[p.manifest.id] = this.isEnabled(p.manifest.id);
     writeJson(ENABLED_FILE, out);
   }

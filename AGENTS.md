@@ -4,7 +4,7 @@ Fixed rules for all AI agents (Claude, Codex, Copilot, …) working in this repo
 
 ## What dvoix is
 
-A desktop app for notes, projects, tasks and tracking, similar to Obsidian. All data lives as ordinary files in a folder on disk (the **vault**). Every feature is a **core plugin**. A vault's settings live inside the vault under `.dvoix/`.
+A desktop app for notes, projects, tasks and tracking, similar to Obsidian. All data lives as ordinary files in a folder on disk (the **vault**). Basic note and editor functions are **core features** that are always on; optional functions are **core plugins** that can be turned off. A vault's settings live inside the vault under `.dvoix/`.
 
 ## The dvoix repos
 
@@ -21,7 +21,8 @@ dvoix is spread across several repositories. This section is also in the `AGENTS
 
 | Task | Repo |
 | --- | --- |
-| Basic function almost everyone needs (explorer, search, tasks, …) | `dvoix`, as a core plugin under `src/lib/plugins/core/` |
+| Basic note and editor function that is always there (explorer, search, tags, backlinks, tabs, views, …) | `dvoix`, as a core feature under `src/lib/features/` |
+| Optional function that ships with the app (tasks, projects, graph, Git, …) | `dvoix`, as a core plugin under `src/lib/plugins/core/` |
 | Extra function not everyone wants (kanban, tracking, …) | its own repo `dvoi-dev/dvoix-<name>` as a store plugin, plus an entry in `dvoix-plugins` |
 | Extend the plugin API (`PluginContext`, permissions) | `dvoix`, plus `docs/plugins/README.md` there and the `plugin-api.md` page on the website |
 | Explain how to use dvoix | `dvoix-website`, page in `src/content/docs/` |
@@ -45,7 +46,7 @@ dvoix is spread across several repositories. This section is also in the `AGENTS
 ## The seven basic rules
 
 1. **The files are the only source of truth.** Everything else (`.dvoix/index.sqlite`, in-memory state) is cache and must be rebuildable from the files at any time. Never keep data only in the index, in `localStorage` or in the app.
-2. **Every feature is a plugin.** New functions come as a folder under `src/lib/plugins/core/<id>/` and only hook in through the `PluginContext`. No special cases for a feature in `App.svelte` or in the components under `src/lib/components/`.
+2. **Basic functions are core features, everything else is a plugin.** Functions almost every note needs (file explorer, search, tags, backlinks, link suggestions, quick switcher, tabs, views) are core features under `src/lib/features/<id>/`: always on, no on/off switch. Optional functions are core plugins under `src/lib/plugins/core/<id>/` (can be turned off) or store plugins. Both hook in only through the `PluginContext`. No special cases for a feature in `App.svelte` or in the components under `src/lib/components/`.
 3. **Vault settings belong in `<vault>/.dvoix/`.** Only "which vault was opened last" lives in the operating system's configuration folder (`src-tauri/src/settings.rs`).
 4. **Writing is atomic and minimal.** Files are written through `Vault::write` (temp file, then rename). If a function changes a note (e.g. ticks off a task), it changes only the affected line and never reformats the whole file.
 5. **Paths are vault-relative and go through `Vault::resolve`.** No access outside the vault, no absolute paths from the frontend.
@@ -70,8 +71,9 @@ src/lib/api.ts           typed wrappers for every Rust command
 src/lib/config.ts        read/write JSON in <vault>/.dvoix/ (deferred, batched)
 src/lib/*.svelte.ts      app state (vault, ui, settings, window) with runes
 src/lib/filetypes/       file type registry, Markdown editor, fallback view
+src/lib/features/        one folder per core feature (always on), list in features/index.ts
 src/lib/plugins/         plugin API (types.ts), management (manager.svelte.ts), settings (pluginSettings.svelte.ts)
-src/lib/plugins/core/    one folder per core plugin, list in core/index.ts
+src/lib/plugins/core/    one folder per core plugin (can be turned off), list in core/index.ts
 src/lib/plugins/store/   plugin store: load/install store plugins, their API (api.ts)
 docs/plugins/            guide and example for store plugins, example plugin list
 src/lib/components/      app frame: ribbon, side panel, file pane, settings, context menu
@@ -104,7 +106,7 @@ Before every commit, `npm run check`, `npm run build` and `cargo test --workspac
 
 | File | When to read |
 | --- | --- |
-| [`.agents/plugins.md`](.agents/plugins.md) | new plugin, changing a plugin, plugin settings |
+| [`.agents/plugins.md`](.agents/plugins.md) | new core feature or plugin, changing one, plugin settings |
 | [`.agents/filetypes.md`](.agents/filetypes.md) | new file type (e.g. `.board`, `.track`) |
 | [`.agents/rust-core.md`](.agents/rust-core.md) | changes in the Rust core, new Tauri commands, index |
 | [`.agents/frontend.md`](.agents/frontend.md) | Svelte components, app state, editor |

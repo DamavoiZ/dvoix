@@ -48,11 +48,6 @@ class VaultStore {
   error = $state<string | null>(null);
   /** Bumped on every change on disk so panels (backlinks, tags) can refresh. */
   revision = $state(0);
-  /**
-   * Several tabs at once. Switched on by the tabs plugin; without it there is
-   * always exactly one tab and "open in new tab" opens in that one.
-   */
-  tabsEnabled = $state(false);
 
   private saveTimer: ReturnType<typeof setTimeout> | undefined;
   private refreshTimer: ReturnType<typeof setTimeout> | undefined;
@@ -130,16 +125,6 @@ class VaultStore {
     this.recent = [];
   }
 
-  /** Called by the tabs plugin. Turning tabs off keeps only the active one. */
-  setTabsEnabled(on: boolean) {
-    this.tabsEnabled = on;
-    if (on || this.tabs.length < 2) return;
-    const active = this.activeTab ?? this.tabs[0];
-    this.tabs = [active];
-    this.activeTabId = active.id;
-    this.saveTabs();
-  }
-
   async refresh() {
     this.entries = await api.listEntries();
     this.revision++;
@@ -166,7 +151,7 @@ class VaultStore {
     const content = await this.read(path);
     if (content === null) return;
     const active = this.activeTab;
-    if (active && (!opts.newTab || !this.tabsEnabled)) {
+    if (active && !opts.newTab) {
       active.path = path;
       active.view = undefined;
     } else {
@@ -187,7 +172,7 @@ class VaultStore {
     if (existing) return this.activateTab(existing.id);
     await this.flush();
     const active = this.activeTab;
-    if (active && (!opts.newTab || !this.tabsEnabled)) {
+    if (active && !opts.newTab) {
       active.path = null;
       active.view = id;
     } else {
@@ -308,7 +293,6 @@ class VaultStore {
     // The previously active tab, or the closest one left of it if its file is gone.
     const before = paths.slice(0, (saved?.active ?? 0) + 1).filter(keep).length;
     const tab = this.tabs[Math.max(0, before - 1)];
-    if (!this.tabsEnabled) this.tabs = [tab];
     this.activeTabId = 0;
     await this.activateTab(tab.id);
   }

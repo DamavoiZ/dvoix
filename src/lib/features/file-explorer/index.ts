@@ -1,11 +1,11 @@
 import { FolderTree } from "@lucide/svelte";
-import type { Plugin } from "../../types";
+import type { Plugin } from "../../plugins/types";
 import FileExplorer from "./FileExplorer.svelte";
 import FileExplorerActions from "./FileExplorerActions.svelte";
 import FileExplorerSettings from "./FileExplorerSettings.svelte";
 import { explorerSettings } from "./settings";
 
-export const fileExplorerPlugin: Plugin = {
+export const fileExplorerFeature: Plugin = {
   manifest: {
     id: "file-explorer",
     name: "File explorer",

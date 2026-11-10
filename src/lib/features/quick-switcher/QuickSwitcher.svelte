@@ -1,10 +1,10 @@
 <script lang="ts">
   // Quick switcher (Ctrl+O): fuzzy search over all files of the vault, like Obsidian's.
   import { FilePlus } from "@lucide/svelte";
-  import { fileTypeFor } from "../../../filetypes";
-  import { fuzzyMatch, highlight } from "../../../fuzzy";
-  import { ui } from "../../../ui.svelte";
-  import { vault } from "../../../vault.svelte";
+  import { fileTypeFor } from "../../filetypes";
+  import { fuzzyMatch, highlight } from "../../fuzzy";
+  import { ui } from "../../ui.svelte";
+  import { vault } from "../../vault.svelte";
 
   const LIMIT = 60;
 
@@ -156,7 +156,7 @@
     <footer class="flex gap-4 border-t border-zinc-800 px-4 py-2 text-[11px] text-zinc-500">
       <span><kbd>↑↓</kbd> to select</span>
       <span><kbd>Enter</kbd> to open</span>
-      {#if vault.tabsEnabled}<span><kbd>Ctrl+Enter</kbd> in new tab</span>{/if}
+      <span><kbd>Ctrl+Enter</kbd> in new tab</span>
       <span><kbd>Shift+Enter</kbd> to create new</span>
       <span><kbd>Esc</kbd> to close</span>
     </footer>

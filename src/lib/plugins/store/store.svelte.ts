@@ -173,9 +173,9 @@ class PluginStore {
     return !!now && !!next && isNewer(next.version, now.version);
   }
 
-  /** The id is taken by a core plugin. */
+  /** The id is taken by a core feature or a core plugin. */
   clashesWithCore(id: string): boolean {
-    return plugins.all.some((p) => p.manifest.id === id);
+    return plugins.isBuiltIn(id);
   }
 
   async setEnabled(id: string, on: boolean) {

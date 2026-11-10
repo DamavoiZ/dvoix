@@ -1,6 +1,6 @@
 <script lang="ts">
-  import Select from "../../../components/Select.svelte";
-  import Setting from "../../../components/settings/Setting.svelte";
+  import Select from "../../components/Select.svelte";
+  import Setting from "../../components/settings/Setting.svelte";
   import { explorerSettings } from "./settings";
 </script>
 

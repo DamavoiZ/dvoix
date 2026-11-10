@@ -367,9 +367,7 @@ pub fn discard(vault: &Vault, path: &str, untracked: bool) -> Result<()> {
 pub fn commit(vault: &Vault, message: &str, stage_all: bool) -> Result<String> {
     let message = message.trim();
     if message.is_empty() {
-        return Err(Error::Git(
-            "The commit message must not be empty.".into(),
-        ));
+        return Err(Error::Git("The commit message must not be empty.".into()));
     }
     let repo = Repo::of(vault)?;
     if stage_all {
@@ -386,9 +384,7 @@ pub fn checkout(vault: &Vault, name: &str) -> Result<()> {
     let repo = Repo::of(vault)?;
     let name = name.trim();
     if name.is_empty() {
-        return Err(Error::Git(
-            "The branch name must not be empty.".into(),
-        ));
+        return Err(Error::Git("The branch name must not be empty.".into()));
     }
     switch(&repo, &["switch", name])
 }
@@ -398,9 +394,7 @@ pub fn create_branch(vault: &Vault, name: &str) -> Result<()> {
     let repo = Repo::of(vault)?;
     let name = name.trim();
     if name.is_empty() {
-        return Err(Error::Git(
-            "The branch name must not be empty.".into(),
-        ));
+        return Err(Error::Git("The branch name must not be empty.".into()));
     }
     switch(&repo, &["switch", "-c", name])
 }
@@ -413,9 +407,7 @@ pub fn push(vault: &Vault) -> Result<String> {
         (Some(_), _) => vec!["push"],
         (None, Some(remote)) => vec!["push", "-u", remote, &info.branch],
         (None, None) => {
-            return Err(Error::Git(
-                "There is no remote to push to.".into(),
-            ));
+            return Err(Error::Git("There is no remote to push to.".into()));
         }
     };
     let out = git_raw(&repo.root, &args)?;
@@ -667,8 +659,7 @@ fn git_error(out: &Output) -> String {
             .into();
     }
     if text.contains("would be overwritten") || text.contains("Please commit your changes") {
-        return "Local changes would be overwritten. Please commit or discard them first."
-            .into();
+        return "Local changes would be overwritten. Please commit or discard them first.".into();
     }
     if text.contains("Authentication failed") || text.contains("could not read Username") {
         return "git could not sign in. Please check your credentials.".into();
