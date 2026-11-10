@@ -17,7 +17,6 @@ import type {
   PluginContext,
   PluginManifest,
   RibbonActionSpec,
-  RightSidebarSpec,
   SettingTabSpec,
   ViewSpec,
 } from "./types";
@@ -60,7 +59,6 @@ class PluginManager {
   editorRevision = $state(0);
 
   private panelList = $state.raw<(PanelSpec & Owned)[]>([]);
-  private rightSidebarList = $state.raw<(RightSidebarSpec & Owned)[]>([]);
   private ribbonList = $state.raw<(RibbonActionSpec & Owned)[]>([]);
   private commandList = $state.raw<Command[]>([]);
   private footerList = $state.raw<(FileFooterSpec & Owned)[]>([]);
@@ -74,11 +72,7 @@ class PluginManager {
   private disposers = new Map<string, Dispose[]>();
   private queue: Promise<void> = Promise.resolve();
 
-  panels = $derived(byOrder(this.panelList.filter((p) => p.side !== "right")));
-  /** The panels of the right sidebar (see `PluginContext.addPanel`). */
-  rightPanels = $derived(byOrder(this.panelList.filter((p) => p.side === "right")));
-  /** The sidebars on the right edge of the window (see `PluginContext.addRightSidebar`). */
-  rightSidebars = $derived(byOrder(this.rightSidebarList));
+  panels = $derived(byOrder(this.panelList));
   ribbonActions = $derived(byOrder(this.ribbonList));
   commands = $derived(this.commandList);
   fileFooters = $derived(byOrder(this.footerList));
@@ -302,8 +296,6 @@ class PluginManager {
       manifest,
       addPanel: (panel) =>
         addTo(() => this.panelList, (v) => (this.panelList = v), { ...panel, pluginId }, (p) => p.id),
-      addRightSidebar: (sidebar) =>
-        addTo(() => this.rightSidebarList, (v) => (this.rightSidebarList = v), { ...sidebar, pluginId }, (s) => s.id),
       addRibbonAction: (action) =>
         addTo(() => this.ribbonList, (v) => (this.ribbonList = v), { ...action, pluginId }, (a) => a.id),
       addCommand: (command) =>

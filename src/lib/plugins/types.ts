@@ -46,31 +46,6 @@ export interface PanelSpec {
   actions?: Component;
   /** Position in the ribbon, lower comes first (default 100). */
   order?: number;
-  /**
-   * Which side of the window the panel belongs to. A panel on the right goes
-   * into the right sidebar (see `RightSidebarSpec`), not into the left one.
-   */
-  side?: "left" | "right";
-}
-
-/**
- * The right edge of the window: a narrow band with an icon per panel and the
- * column with the panels next to it. A plugin that registers this draws the
- * whole thing, so it decides what its band and its column look like.
- */
-export interface RightSidebarSpec {
-  /** Unique id of this sidebar. */
-  id: string;
-  /** The component that draws the band and the column. */
-  component: Component;
-  /**
-   * Button in the title row of the window, next to the window buttons, that
-   * shows or hides the sidebar. Like the arrow in Obsidian: the sidebar is
-   * gone when it is hidden, the button stays.
-   */
-  toggle?: Component;
-  /** Position on the right edge, lower comes first (default 100). */
-  order?: number;
 }
 
 /** A button in the ribbon that does something instead of opening a panel. */
@@ -160,8 +135,6 @@ export interface PluginContext {
   addPanel(panel: PanelSpec): Dispose;
   addRibbonAction(action: RibbonActionSpec): Dispose;
   addCommand(command: CommandSpec): Dispose;
-  /** The right edge of the window, e.g. a sidebar with panels of the right side. */
-  addRightSidebar(sidebar: RightSidebarSpec): Dispose;
   /** A new file type: extension, view and (optionally) a template for "create". */
   registerFileType(type: FileType): Dispose;
   /** CodeMirror extensions for the markdown editor. */
