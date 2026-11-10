@@ -378,8 +378,7 @@ pub fn rebuild_index(state: State<AppState>) -> CmdResult<usize> {
 /// The plugin list from the registry repository.
 #[tauri::command(async)]
 pub fn store_registry() -> CmdResult<Vec<RegistryEntry>> {
-    let text =
-        http::get_text(store::REGISTRY_URL)?.ok_or("The plugin list was not found")?;
+    let text = http::get_text(store::REGISTRY_URL)?.ok_or("The plugin list was not found")?;
     store::parse_registry(&text).map_err(err)
 }
 

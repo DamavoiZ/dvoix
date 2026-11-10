@@ -34,11 +34,15 @@ pub enum ProjectStatus {
 impl ProjectStatus {
     pub fn parse(s: &str) -> Option<Self> {
         match s.trim().to_lowercase().as_str() {
-            "active" | "aktiv" | "doing" | "in progress" | "in arbeit" | "laufend" => Some(Self::Active),
+            "active" | "aktiv" | "doing" | "in progress" | "in arbeit" | "laufend" => {
+                Some(Self::Active)
+            }
             "waiting" | "wartend" | "paused" | "pausiert" | "on-hold" | "on hold" | "blocked"
             | "blockiert" => Some(Self::Waiting),
             "idea" | "idee" | "planned" | "geplant" | "todo" | "backlog" => Some(Self::Idea),
-            "done" | "erledigt" | "finished" | "fertig" | "abgeschlossen" | "completed" => Some(Self::Done),
+            "done" | "erledigt" | "finished" | "fertig" | "abgeschlossen" | "completed" => {
+                Some(Self::Done)
+            }
             "cancelled" | "abgebrochen" | "canceled" | "dropped" | "verworfen" => {
                 Some(Self::Cancelled)
             }
