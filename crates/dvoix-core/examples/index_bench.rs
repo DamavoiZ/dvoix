@@ -14,6 +14,7 @@ use std::time::{Duration, Instant};
 
 use dvoix_core::Vault;
 use dvoix_core::index::Index;
+use dvoix_core::watcher::{ChangeKind, VaultChange};
 
 /// The text every note has: a heading, some words, a link and a task.
 const NOTE: &str = "---\ntype: note\ntags: [project]\n---\n# Note\n\nA note with some words to search for. It links to [[Other]] and has a task.\n\n- [ ] Something to do #project\n";
@@ -71,6 +72,9 @@ fn main() {
     );
 
     let mut index = Index::for_vault(&vault).expect("the index opens");
+
+    let (elapsed, entries) = time(|| vault.list().expect("the vault is listed"));
+    row(&format!("list the vault ({} entries)", entries.len()), elapsed);
 
     let (elapsed, indexed) = time(|| index.rebuild(&vault).expect("the index builds"));
     println!("{indexed} notes indexed\n");
@@ -135,4 +139,44 @@ fn main() {
     // The removal of a folder with 100 notes in it.
     let (elapsed, ()) = time(|| index.remove("folder50").expect("the folder is removed"));
     row("remove a folder of 100 notes", elapsed);
+
+    // A burst of changes, like a git checkout: 100 notes at once.
+    let changes: Vec<VaultChange> = (0..100)
+        .map(|i| VaultChange {
+            kind: ChangeKind::Modified,
+            path: format!("burst/note-{i}.md"),
+            hidden: false,
+        })
+        .collect();
+
+    // Every run gets files that really changed, so every run has the same
+    // work to do.
+    let write_burst = |tag: &str| {
+        for i in 0..100 {
+            vault
+                .write(
+                    &format!("burst/note-{i}.md"),
+                    &format!("{tag} {}", note_with_body(body)),
+                )
+                .expect("the note is written");
+        }
+    };
+
+    write_burst("first");
+    let (elapsed, ()) = time(|| {
+        for change in &changes {
+            index
+                .apply_changes(&vault, std::slice::from_ref(change))
+                .expect("the change is applied");
+        }
+    });
+    row("100 changes one by one", elapsed);
+
+    write_burst("second");
+    let (elapsed, ()) = time(|| {
+        index
+            .apply_changes(&vault, &changes)
+            .expect("the changes are applied")
+    });
+    row("the same 100 changes in one batch", elapsed);
 }

@@ -12,7 +12,7 @@ use dvoix_core::{
 use serde::Serialize;
 use tauri::{AppHandle, State};
 
-use crate::{AppState, Workspace, http, settings};
+use crate::{AppState, VaultHandle, Workspace, http, settings};
 
 use dvoix_core::store::{self, InstalledPlugin, PluginFiles, PluginManifest, RegistryEntry};
 
@@ -31,16 +31,24 @@ fn err(e: impl ToString) -> String {
     e.to_string()
 }
 
-/// Runs `f` with the open workspace, or fails if no vault is open.
-fn with_ws<T>(state: &State<AppState>, f: impl FnOnce(&Workspace) -> CmdResult<T>) -> CmdResult<T> {
-    let guard = state.workspace.lock().map_err(err)?;
-    let ws = guard.as_ref().ok_or("No vault is open")?;
-    f(ws)
+/// Runs `f` with the open vault. The lock of the workspace is only held to
+/// get the vault; `f` reads and writes files without holding it, so a slow
+/// listing does not hold up the other commands.
+pub(crate) fn with_ws<T>(
+    state: &AppState,
+    f: impl FnOnce(&VaultHandle) -> CmdResult<T>,
+) -> CmdResult<T> {
+    let handle = {
+        let guard = state.workspace.lock().map_err(err)?;
+        let ws = guard.as_ref().ok_or("No vault is open")?;
+        ws.handle.clone()
+    };
+    f(&handle)
 }
 
 /// Re-indexes a file right away so search/backlinks are current even before
 /// the watcher reports the change.
-fn reindex(ws: &Workspace, path: &str) -> CmdResult<()> {
+fn reindex(ws: &VaultHandle, path: &str) -> CmdResult<()> {
     ws.index
         .lock()
         .map_err(err)?
@@ -57,10 +65,12 @@ pub fn last_vault(app: AppHandle) -> Option<String> {
 pub fn open_vault(app: AppHandle, state: State<AppState>, path: String) -> CmdResult<VaultInfo> {
     let ws = Workspace::open(&app, &path).map_err(err)?;
     let info = VaultInfo {
-        name: ws.vault.name(),
-        path: ws.vault.root().to_string_lossy().into_owned(),
+        name: ws.handle.vault.name(),
+        path: ws.handle.vault.root().to_string_lossy().into_owned(),
     };
-    *state.workspace.lock().map_err(err)? = Some(ws);
+    // The old vault is dropped outside the lock, so its watcher can finish.
+    let old = state.workspace.lock().map_err(err)?.replace(ws);
+    drop(old);
 
     let mut s = settings::load(&app);
     s.last_vault = Some(info.path.clone());
@@ -70,7 +80,9 @@ pub fn open_vault(app: AppHandle, state: State<AppState>, path: String) -> CmdRe
 
 #[tauri::command(async)]
 pub fn close_vault(app: AppHandle, state: State<AppState>) -> CmdResult<()> {
-    *state.workspace.lock().map_err(err)? = None;
+    // The workspace is dropped outside the lock, so its watcher can finish.
+    let old = state.workspace.lock().map_err(err)?.take();
+    drop(old);
     let mut s = settings::load(&app);
     s.last_vault = None;
     settings::save(&app, &s);

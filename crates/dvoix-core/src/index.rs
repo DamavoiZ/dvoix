@@ -17,12 +17,16 @@ use crate::markdown::{self, ParsedNote};
 use crate::project::{self, ProjectMeta};
 use crate::tasks::{self, Task};
 use crate::vault::{Vault, VaultEntry};
+use crate::watcher::{ChangeKind, VaultChange};
 
 /// Bump this when the schema changes; an outdated index is rebuilt.
 const SCHEMA_VERSION: i64 = 4;
 
 pub struct Index {
     conn: Connection,
+    /// How many transactions the index has written. Only the tests read it.
+    #[cfg_attr(not(test), allow(dead_code))]
+    writes: usize,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -117,7 +121,7 @@ pub fn is_indexable(path: &str) -> bool {
 impl Index {
     pub fn open(path: &Path) -> Result<Self> {
         let conn = Connection::open(path)?;
-        let index = Self { conn };
+        let index = Self { conn, writes: 0 };
         index.migrate()?;
         Ok(index)
     }
@@ -125,6 +129,7 @@ impl Index {
     pub fn open_in_memory() -> Result<Self> {
         let index = Self {
             conn: Connection::open_in_memory()?,
+            writes: 0,
         };
         index.migrate()?;
         Ok(index)
@@ -205,6 +210,7 @@ impl Index {
             count += 1;
         }
         tx.commit()?;
+        self.writes += 1;
         Ok(count)
     }
 
@@ -261,6 +267,7 @@ impl Index {
         }
 
         tx.commit()?;
+        self.writes += 1;
         Ok(count)
     }
 
@@ -282,6 +289,7 @@ impl Index {
             write_note(&tx, entry, &parsed, &tasks::extract(&content))?;
         }
         tx.commit()?;
+        self.writes += 1;
         Ok(())
     }
 
@@ -301,15 +309,103 @@ impl Index {
         delete_note(&tx, rel)?;
         write_note(&tx, &entry, &parsed, &tasks::extract(&content))?;
         tx.commit()?;
+        self.writes += 1;
         Ok(())
+    }
+
+    /// Applies a batch of changes to the index, all in one transaction.
+    ///
+    /// A change for a file that is gone takes its note out of the index, a
+    /// change for a file that exists reads it again. A change for a file
+    /// whose moment of change and size are already known is left alone, so
+    /// a note that dvoix wrote itself is not read a second time.
+    pub fn apply_changes(&mut self, vault: &Vault, changes: &[VaultChange]) -> Result<()> {
+        let actions = self.actions_for(vault, changes)?;
+        if actions.is_empty() {
+            return Ok(());
+        }
+        let tx = self.conn.transaction()?;
+        for action in actions {
+            match action {
+                Action::Remove(path) => remove_note(&tx, path)?,
+                Action::Reindex(path) => {
+                    let entry = vault.entry(path)?;
+                    let content = vault.read(path)?;
+                    let parsed = markdown::parse(&content, stem(path));
+                    delete_note(&tx, path)?;
+                    write_note(&tx, &entry, &parsed, &tasks::extract(&content))?;
+                }
+            }
+        }
+        tx.commit()?;
+        self.writes += 1;
+        Ok(())
+    }
+
+    /// What a batch of changes means for the index.
+    fn actions_for<'c>(
+        &self,
+        vault: &Vault,
+        changes: &'c [VaultChange],
+    ) -> Result<Vec<Action<'c>>> {
+        let mut actions = Vec::new();
+        for change in changes {
+            if change.hidden {
+                continue;
+            }
+            match change.kind {
+                ChangeKind::Removed => actions.push(Action::Remove(&change.path)),
+                ChangeKind::Created | ChangeKind::Modified => {
+                    if !is_indexable(&change.path) {
+                        // Only a folder that was indexed can bring notes with
+                        // it; anything else is nothing to do.
+                        if self.knows(&change.path)? {
+                            actions.push(Action::Remove(&change.path));
+                        }
+                        continue;
+                    }
+                    if !vault.resolve(&change.path)?.is_file() {
+                        actions.push(Action::Remove(&change.path));
+                        continue;
+                    }
+                    let entry = vault.entry(&change.path)?;
+                    let state = (entry.modified as i64, entry.size as i64);
+                    if self.state_of(&change.path)? != Some(state) {
+                        actions.push(Action::Reindex(&change.path));
+                    }
+                }
+            }
+        }
+        Ok(actions)
+    }
+
+    /// The moment of change and the size the index knows about a note.
+    fn state_of(&self, rel: &str) -> Result<Option<(i64, i64)>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT modified, size FROM notes WHERE path = ?1")?;
+        let mut rows = stmt.query([rel])?;
+        Ok(match rows.next()? {
+            Some(row) => Some((row.get(0)?, row.get(1)?)),
+            None => None,
+        })
+    }
+
+    /// True when the index holds a note with this path or below it.
+    fn knows(&self, rel: &str) -> Result<bool> {
+        let mut stmt = self.conn.prepare(
+            "SELECT EXISTS(SELECT 1 FROM notes WHERE path = ?1 OR path LIKE ?2)",
+        )?;
+        let found: i64 = stmt.query_row([rel, &format!("{rel}/%")], |r| r.get(0))?;
+        Ok(found != 0)
     }
 
     /// Removes a file (or every file below a folder) from the index.
     pub fn remove(&mut self, rel: &str) -> Result<()> {
         let tx = self.conn.transaction()?;
-        delete_note(&tx, rel)?;
-        remove_prefix(&tx, &format!("{rel}/"))?;
+        remove_note(&tx, rel)?;
         tx.commit()?;
+        self.writes += 1;
         Ok(())
     }
 
@@ -520,6 +616,12 @@ impl Index {
         &self.conn
     }
 
+    /// How many transactions the index has written.
+    #[cfg(test)]
+    fn writes(&self) -> usize {
+        self.writes
+    }
+
     /// Everything the index holds, as text, so two indexes can be compared.
     #[cfg(test)]
     fn dump(&self) -> String {
@@ -568,6 +670,21 @@ fn row_to_summary(r: &rusqlite::Row) -> rusqlite::Result<NoteSummary> {
         title: r.get(1)?,
         frontmatter: serde_json::from_str(&fm).unwrap_or(serde_json::Value::Null),
     })
+}
+
+/// What a change of the vault means for the index.
+enum Action<'a> {
+    /// The note (and everything below it) goes out of the index.
+    Remove(&'a str),
+    /// The note is read again and written to the index.
+    Reindex(&'a str),
+}
+
+/// Takes a note out of the index, and everything below it when it is a
+/// folder.
+fn remove_note(tx: &rusqlite::Transaction, rel: &str) -> rusqlite::Result<()> {
+    delete_note(tx, rel)?;
+    remove_prefix(tx, &format!("{rel}/"))
 }
 
 /// Removes every note below `prefix` from the index.
@@ -1072,8 +1189,7 @@ mod tests {
 
     /// A folder that was renamed keeps its notes, with their new path.
     #[test]
-    fn a_renamed_folder_keeps_its_notes() {
-        let (_dir, vault) = sample_vault();
+    fn a_renamed_folder_keeps_its_notes() {        let (_dir, vault) = sample_vault();
         vault.write("projects/gamma.md", "# Gamma\nA #project note.").unwrap();
         let mut index = Index::for_vault(&vault).unwrap();
         index.rebuild(&vault).unwrap();
@@ -1089,5 +1205,112 @@ mod tests {
         assert!(!notes.iter().any(|n| n.path.starts_with("projects/")));
         // The link of alpha to beta still works.
         assert_eq!(index.backlinks("beta.md").unwrap().len(), 1);
+    }
+
+    /// A batch of changes is written with one transaction, not one per
+    /// change.
+    #[test]
+    fn a_batch_of_changes_costs_one_transaction() {
+        let (_dir, vault) = sample_vault();
+        for i in 0..20 {
+            vault
+                .write(&format!("batch/note-{i}.md"), &format!("# Note {i}\nA schedule."))
+                .unwrap();
+        }
+        let mut index = Index::for_vault(&vault).unwrap();
+        index.rebuild(&vault).unwrap();
+        let before = index.writes();
+
+        let changes: Vec<VaultChange> = (0..20)
+            .map(|i| VaultChange {
+                kind: ChangeKind::Modified,
+                path: format!("batch/note-{i}.md"),
+                hidden: false,
+            })
+            .collect();
+        // The files did not change, so nothing has to be written at all.
+        index.apply_changes(&vault, &changes).unwrap();
+        assert_eq!(index.writes(), before, "the batch wrote although nothing changed");
+
+        // Now the files really change.
+        for i in 0..20 {
+            vault
+                .write(
+                    &format!("batch/note-{i}.md"),
+                    &format!("# Note {i}\nA timetable."),
+                )
+                .unwrap();
+        }
+        index.apply_changes(&vault, &changes).unwrap();
+        assert_eq!(
+            index.writes(),
+            before + 1,
+            "the batch did not cost one transaction"
+        );
+        assert_eq!(index.search("schedule", 50).unwrap().len(), 1);
+        assert_eq!(index.search("timetable", 50).unwrap().len(), 20);
+    }
+
+    /// A note that dvoix wrote itself is not read a second time: the change
+    /// the watcher reports about it finds the index already up to date.
+    #[test]
+    fn a_note_that_was_already_indexed_is_not_read_again() {
+        let (_dir, vault) = sample_vault();
+        let mut index = Index::for_vault(&vault).unwrap();
+        index.rebuild(&vault).unwrap();
+
+        // The command writes the note and indexes it right away.
+        vault.write("beta.md", "# Beta\nA timetable.").unwrap();
+        index.update(&vault, "beta.md").unwrap();
+        let before = index.writes();
+
+        // The watcher reports the same change a moment later.
+        let changes = vec![VaultChange {
+            kind: ChangeKind::Modified,
+            path: "beta.md".into(),
+            hidden: false,
+        }];
+        index.apply_changes(&vault, &changes).unwrap();
+        assert_eq!(index.writes(), before, "the note was read a second time");
+        assert_eq!(index.search("timetable", 10).unwrap().len(), 1);
+    }
+
+    /// A batch with changes that came and went leaves the index in step with
+    /// the files.
+    #[test]
+    fn a_batch_of_mixed_changes_leaves_the_index_in_step() {
+        let (_dir, vault) = sample_vault();
+        let mut index = Index::for_vault(&vault).unwrap();
+        index.rebuild(&vault).unwrap();
+
+        vault.write("new.md", "# New\nA new note.").unwrap();
+        vault.trash("beta.md").unwrap();
+        vault
+            .write("projects/gamma.md", "# Gamma\nMore text with a #project tag.")
+            .unwrap();
+
+        let changes = vec![
+            VaultChange {
+                kind: ChangeKind::Created,
+                path: "new.md".into(),
+                hidden: false,
+            },
+            VaultChange {
+                kind: ChangeKind::Removed,
+                path: "beta.md".into(),
+                hidden: false,
+            },
+            VaultChange {
+                kind: ChangeKind::Created,
+                path: "projects/gamma.md".into(),
+                hidden: false,
+            },
+        ];
+        index.apply_changes(&vault, &changes).unwrap();
+
+        assert_eq!(index.counts().unwrap(), (3, 3));
+        assert_eq!(index.search("new note", 10).unwrap().len(), 1);
+        assert!(index.search("schedule", 10).unwrap().is_empty());
+        assert_eq!(index.notes_with_tag("project").unwrap().len(), 2);
     }
 }

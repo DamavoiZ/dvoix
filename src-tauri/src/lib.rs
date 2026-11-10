@@ -7,17 +7,28 @@ mod settings;
 
 use std::sync::{Arc, Mutex};
 
-use dvoix_core::{ChangeKind, Index, Vault, VaultWatcher};
+use dvoix_core::{ChangeBatcher, Index, Vault, VaultChange, VaultWatcher};
 use tauri::{AppHandle, Emitter, Manager};
 
 /// Event sent to the frontend whenever something in the vault changed on disk.
 pub const VAULT_CHANGED_EVENT: &str = "vault://changed";
 
-/// Everything that belongs to the currently open vault.
-pub struct Workspace {
+/// The parts of the open vault a command needs.
+///
+/// They are taken out of the lock of the workspace, so no command holds that
+/// lock while it reads or writes files. A slow listing of the vault does not
+/// hold up reading a file any more.
+#[derive(Clone)]
+pub struct VaultHandle {
     pub vault: Vault,
     pub index: Arc<Mutex<Index>>,
+}
+
+/// Everything that belongs to the currently open vault.
+pub struct Workspace {
+    pub handle: VaultHandle,
     _watcher: VaultWatcher,
+    _batcher: ChangeBatcher,
 }
 
 #[derive(Default)]
@@ -35,27 +46,53 @@ impl Workspace {
         index.sync(&vault)?;
         let index = Arc::new(Mutex::new(index));
 
+        // The changes of the watcher are collected and handed over in
+        // batches, so a burst of changes costs one pass over the index
+        // instead of one per change.
+        let batcher = ChangeBatcher::start({
+            let index = Arc::clone(&index);
+            let vault = vault.clone();
+            let app = app.clone();
+            move |changes: Vec<VaultChange>| {
+                {
+                    let Ok(mut index) = index.lock() else {
+                        return;
+                    };
+                    if let Err(e) = index.apply_changes(&vault, &changes) {
+                        // One change that does not work must not lose the others.
+                        eprintln!("dvoix: the index could not be updated: {e}");
+                        for change in &changes {
+                            let _ = index.apply_changes(&vault, std::slice::from_ref(change));
+                        }
+                    }
+                }
+                // The app is told about the changes now, not when they came
+                // in: the index knows about them, so the panels read the new
+                // state and not the one from before.
+                for change in &changes {
+                    let _ = app.emit(VAULT_CHANGED_EVENT, change);
+                }
+            }
+        })?;
+
         let watcher = {
             let app = app.clone();
-            let vault = vault.clone();
-            let index = Arc::clone(&index);
-            VaultWatcher::start(&vault.clone(), move |change| {
-                if !change.hidden
-                    && let Ok(mut index) = index.lock()
-                {
-                    let _ = match change.kind {
-                        ChangeKind::Removed => index.remove(&change.path),
-                        _ => index.update(&vault, &change.path),
-                    };
+            let sender = batcher.sender();
+            VaultWatcher::start(&vault, move |change| {
+                if change.hidden {
+                    // Hidden files are not indexed, so the app is told right
+                    // away: there is nothing to wait for.
+                    let _ = app.emit(VAULT_CHANGED_EVENT, &change);
+                } else {
+                    sender.send(change);
                 }
-                let _ = app.emit(VAULT_CHANGED_EVENT, &change);
             })?
         };
 
         Ok(Self {
-            vault,
-            index,
+            handle: VaultHandle { vault, index },
             _watcher: watcher,
+            _batcher: batcher,
         })
     }
 }
@@ -87,8 +124,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            commands::last_vault,
-            commands::open_vault,
+            commands::last_vault,            commands::open_vault,
             commands::close_vault,
             commands::list_entries,
             commands::list_hidden_entries,
@@ -136,4 +172,56 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running dvoix");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use dvoix_core::Vault;
+
+    /// A workspace without a window, for the tests.
+    fn workspace(vault: &Vault) -> Workspace {
+        let mut index = Index::for_vault(vault).unwrap();
+        index.sync(vault).unwrap();
+        let index = Arc::new(Mutex::new(index));
+        let batcher = ChangeBatcher::start(|_| {}).unwrap();
+        let watcher = VaultWatcher::start(vault, |_| {}).unwrap();
+        Workspace {
+            handle: VaultHandle {
+                vault: vault.clone(),
+                index,
+            },
+            _watcher: watcher,
+            _batcher: batcher,
+        }
+    }
+
+    /// A command must not hold the lock of the workspace while it works, so
+    /// a slow listing of the vault does not hold up the other commands.
+    #[test]
+    fn a_command_does_not_hold_the_workspace_lock() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = Vault::open(dir.path()).unwrap();
+        vault.write("note.md", "# Note").unwrap();
+        let state = AppState {
+            workspace: Mutex::new(Some(workspace(&vault))),
+        };
+
+        commands::with_ws(&state, |ws| {
+            // The lock is free while the command works.
+            let guard = state.workspace.lock().unwrap();
+            assert!(guard.is_some());
+            drop(guard);
+            ws.vault.read("note.md").map(|_| ()).map_err(|e| e.to_string())
+        })
+        .unwrap();
+    }
+
+    /// Without a vault the commands fail with a clear message.
+    #[test]
+    fn a_command_without_a_vault_fails() {
+        let state = AppState::default();
+        let result = commands::with_ws(&state, |_| Ok(()));
+        assert_eq!(result.unwrap_err(), "No vault is open");
+    }
 }

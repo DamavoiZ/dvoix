@@ -87,6 +87,40 @@ matters.
 Renaming a folder re-indexed the whole vault. Now only the notes of that
 folder get their new path; the rest of the vault stays as it is.
 
+### Reacting to changes in the vault
+
+Every change the watcher reported was written to the index on its own, in its
+own transaction. A `git checkout` or a sync tool writes hundreds of files at
+once, and every one of them cost a transaction with a flush to the disk.
+
+The changes are now collected until the vault is quiet for a moment and are
+then written in one go:
+
+| 100 changed notes (20 000 notes in the vault) | Before | After |
+| --- | --- | --- |
+| every change on its own | 23.45 ms | — |
+| all of them in one batch | — | 15.72 ms |
+
+A note that dvoix wrote itself is not read a second time: the index knows the
+moment of change and the size of the note and sees that they did not change.
+
+### Listing the vault
+
+The listing of the vault walked the files and asked the file system for the
+information of every entry a second time, and it sorted the entries with a
+key that was built again for every comparison.
+
+| 20 100 entries | Before | After |
+| --- | --- | --- |
+| list the vault | 45.26 ms | 37.40 ms |
+| open a vault that did not change | 53.35 ms | 44.33 ms |
+
+### The lock of the workspace
+
+Every command held the lock of the workspace while it worked, so a slow
+listing of the vault held up reading a file. The lock is now only held to
+get the vault; the work happens outside of it.
+
 ## The attempts
 
 ### Kept: the search row takes the rowid of its note

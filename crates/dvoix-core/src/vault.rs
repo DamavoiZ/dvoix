@@ -18,6 +18,33 @@ pub const TRASH_DIR: &str = ".trash";
 /// freeze on all of them. What lies beyond is simply not listed.
 pub const MAX_HIDDEN_ENTRIES: usize = 10_000;
 
+/// The entry of a path with the metadata that is already known about it.
+fn entry_of(rel: &str, meta: &fs::Metadata) -> VaultEntry {
+    let name = rel.rsplit('/').next().unwrap_or(rel);
+    let extension = if meta.is_dir() {
+        String::new()
+    } else {
+        Path::new(rel)
+            .extension()
+            .map(|e| e.to_string_lossy().to_lowercase())
+            .unwrap_or_default()
+    };
+    let modified = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    VaultEntry {
+        path: rel.to_string(),
+        name: name.to_string(),
+        extension,
+        is_dir: meta.is_dir(),
+        size: if meta.is_dir() { 0 } else { meta.len() },
+        modified,
+    }
+}
+
 /// Which hidden entries `Vault::list_hidden` returns. Set by the
 /// "Hidden files" plugin from its settings.
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -94,14 +121,17 @@ impl Vault {
     /// Turns an absolute path back into a vault-relative, `/`-separated one.
     pub fn relative(&self, abs: &Path) -> Option<String> {
         let rel = abs.strip_prefix(&self.root).ok()?;
-        let parts: Vec<_> = rel
-            .components()
-            .map(|c| c.as_os_str().to_string_lossy())
-            .collect();
-        if parts.is_empty() {
+        let mut out = String::with_capacity(rel.as_os_str().len());
+        for part in rel.components() {
+            if !out.is_empty() {
+                out.push('/');
+            }
+            out.push_str(&part.as_os_str().to_string_lossy());
+        }
+        if out.is_empty() {
             return None;
         }
-        Some(parts.join("/"))
+        Some(out)
     }
 
     /// True for paths dvoix should never show or index (hidden folders like
@@ -122,14 +152,18 @@ impl Vault {
                 Ok(e) => e,
                 Err(_) => continue,
             };
-            if let Some(rel) = self.relative(entry.path())
-                && let Ok(e) = self.entry_for(&rel, entry.path())
-            {
-                entries.push(e);
-            }
+            // The metadata of the walk is used, so nothing has to be asked
+            // from the file system a second time.
+            let Some(rel) = self.relative(entry.path()) else {
+                continue;
+            };
+            let Ok(meta) = entry.metadata() else {
+                continue;
+            };
+            entries.push(entry_of(&rel, &meta));
         }
         // Plain path order; the UI builds the tree and decides how to group it.
-        entries.sort_by_key(|e| e.path.to_lowercase());
+        entries.sort_by_cached_key(|e| e.path.to_lowercase());
         Ok(entries)
     }
 
@@ -154,13 +188,15 @@ impl Vault {
             if !entry.file_type().is_file() {
                 continue;
             }
-            if let Some(path) = self.relative(entry.path())
-                && let Ok(e) = self.entry_for(&path, entry.path())
-            {
-                entries.push(e);
-            }
+            let Some(path) = self.relative(entry.path()) else {
+                continue;
+            };
+            let Ok(meta) = entry.metadata() else {
+                continue;
+            };
+            entries.push(entry_of(&path, &meta));
         }
-        entries.sort_by_key(|e| e.path.to_lowercase());
+        entries.sort_by_cached_key(|e| e.path.to_lowercase());
         Ok(entries)
     }
 
@@ -196,14 +232,15 @@ impl Vault {
             if !entry.file_type().is_dir() && !in_hidden_dir && !filter.include_files {
                 continue;
             }
-            if let Ok(e) = self.entry_for(&rel, entry.path()) {
-                entries.push(e);
-            }
+            let Ok(meta) = entry.metadata() else {
+                continue;
+            };
+            entries.push(entry_of(&rel, &meta));
             if entries.len() >= MAX_HIDDEN_ENTRIES {
                 break;
             }
         }
-        entries.sort_by_key(|e| e.path.to_lowercase());
+        entries.sort_by_cached_key(|e| e.path.to_lowercase());
         Ok(entries)
     }
 
@@ -214,31 +251,7 @@ impl Vault {
 
     fn entry_for(&self, rel: &str, abs: &Path) -> Result<VaultEntry> {
         let meta = fs::metadata(abs)?;
-        let name = abs
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_default();
-        let extension = if meta.is_dir() {
-            String::new()
-        } else {
-            abs.extension()
-                .map(|e| e.to_string_lossy().to_lowercase())
-                .unwrap_or_default()
-        };
-        let modified = meta
-            .modified()
-            .ok()
-            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-            .map(|d| d.as_millis() as u64)
-            .unwrap_or(0);
-        Ok(VaultEntry {
-            path: rel.to_string(),
-            name,
-            extension,
-            is_dir: meta.is_dir(),
-            size: if meta.is_dir() { 0 } else { meta.len() },
-            modified,
-        })
+        Ok(entry_of(rel, &meta))
     }
 
     pub fn entry(&self, rel: &str) -> Result<VaultEntry> {
