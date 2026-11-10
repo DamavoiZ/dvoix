@@ -11,7 +11,7 @@ Every function of dvoix hooks into the app through the `PluginContext`. The API 
 ## Plugin store (`src/lib/plugins/store/`)
 
 - `store.svelte.ts` loads store plugins from `.dvoix/plugins/<id>/` (`main.js` as an ES module via a blob URL) and manages `.dvoix/store.json`. The manager knows them through `plugins.loadExtra`/`unloadExtra`, not through `corePlugins`.
-- `api.ts` is the API for store plugins: the `PluginContext`, but with `mount(el, props)` instead of Svelte components, SVG text as icon, IDs prefixed with `<plugin-id>:`, and permissions (`vault:read`, `vault:write`, `editor`). If the `PluginContext` is extended, update it here and in `docs/plugins/README.md`.
+- `api.ts` is the API for store plugins: the `PluginContext`, but with `mount(el, props)` instead of Svelte components, SVG text as icon, IDs prefixed with `<plugin-id>:`, and permissions (`vault:read`, `vault:write`, `editor`, `process`). If the `PluginContext` is extended, update it here and in `docs/plugins/README.md`.
 - New permission: add it to `PERMISSIONS` in `crates/dvoix-core/src/store.rs`, to the type `PluginPermission` in `src/lib/api.ts`, to `PERMISSION_LABELS` and to the docs.
 - Downloads only through `src-tauri/src/http.rs` (https, GitHub only), URLs only from `store::release_url`/`latest_manifest_url`.
 - Permissions are not a sandbox. Never pretend they are one, neither in the UI nor in the docs.

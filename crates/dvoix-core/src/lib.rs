@@ -10,6 +10,7 @@ pub mod error;
 pub mod git;
 pub mod index;
 pub mod markdown;
+pub mod process;
 pub mod project;
 pub mod store;
 pub mod tasks;

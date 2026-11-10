@@ -68,6 +68,7 @@ pub fn open_vault(app: AppHandle, state: State<AppState>, path: String) -> CmdRe
         name: ws.handle.vault.name(),
         path: ws.handle.vault.root().to_string_lossy().into_owned(),
     };
+    state.processes.kill_all();
     // The old vault is dropped outside the lock, so its watcher can finish.
     let old = state.workspace.lock().map_err(err)?.replace(ws);
     drop(old);
@@ -80,6 +81,7 @@ pub fn open_vault(app: AppHandle, state: State<AppState>, path: String) -> CmdRe
 
 #[tauri::command(async)]
 pub fn close_vault(app: AppHandle, state: State<AppState>) -> CmdResult<()> {
+    state.processes.kill_all();
     // The workspace is dropped outside the lock, so its watcher can finish.
     let old = state.workspace.lock().map_err(err)?.take();
     drop(old);
@@ -514,4 +516,32 @@ mod tests {
         assert!(percent_decode("%zz").is_err());
         assert!(percent_decode("%4").is_err());
     }
+}
+
+/// Starts a program for a store plugin with the `process` permission, in the
+/// vault folder. Output and exit arrive through `on_event`.
+#[tauri::command(async)]
+pub fn process_spawn(
+    state: State<AppState>,
+    command: String,
+    args: Vec<String>,
+    stdin: Option<String>,
+    env: Option<std::collections::HashMap<String, String>>,
+    on_event: tauri::ipc::Channel<crate::process::ProcessEvent>,
+) -> CmdResult<u32> {
+    let processes = std::sync::Arc::clone(&state.processes);
+    with_ws(&state, |ws| {
+        let spec = crate::process::SpawnSpec {
+            command,
+            args,
+            stdin,
+            env: env.unwrap_or_default(),
+        };
+        processes.spawn(ws.vault.root(), spec, on_event)
+    })
+}
+
+#[tauri::command(async)]
+pub fn process_kill(state: State<AppState>, id: u32) {
+    state.processes.kill(id);
 }
