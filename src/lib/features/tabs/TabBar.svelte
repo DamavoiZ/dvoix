@@ -4,9 +4,10 @@
   import { File, Plus, X } from "@lucide/svelte";
   import { fileTypeFor } from "../../filetypes";
   import { contextMenu } from "../../components/contextMenuState.svelte";
-  import { TAB_DRAG } from "../../drag";
   import { plugins } from "../../plugins/manager.svelte";
   import { vault, type Tab } from "../../vault.svelte";
+
+  const TAB_DRAG = "application/x-dvoix-tab";
 
   let dragId = $state<number | null>(null);
   /** Insert position while dragging (index in the tab list). */

@@ -76,7 +76,7 @@ src/lib/plugins/         plugin API (types.ts), management (manager.svelte.ts), 
 src/lib/plugins/core/    one folder per core plugin (can be turned off), list in core/index.ts
 src/lib/plugins/store/   plugin store: load/install store plugins, their API (api.ts)
 docs/plugins/            guide and example for store plugins, example plugin list
-src/lib/components/      app frame: ribbon, side panel, right sidebar, file pane, settings, context menu
+src/lib/components/      app frame: ribbon, side panel, file pane, settings, context menu
 ```
 
 ## Commands

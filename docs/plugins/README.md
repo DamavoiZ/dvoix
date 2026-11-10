@@ -69,8 +69,7 @@ Views are `mount(el, props)` functions: they draw into an empty element and opti
 
 | Call | What for |
 | --- | --- |
-| `addPanel({ id, label, icon, mount })` | panel in the sidebar, with an icon in the icon bar; with `side: "right"` it stands in the right sidebar |
-| `addRightSidebar({ id, mount, toggle })` | the right edge of the window, e.g. a sidebar with panels of the right side; `toggle` is an optional button in the title row that shows and hides the sidebar |
+| `addPanel({ id, label, icon, mount })` | panel in the sidebar, with an icon in the icon bar |
 | `addRibbonAction({ id, label, icon, action })` | button in the icon bar |
 | `addCommand({ id, name, hotkeys, run })` | command with an optional keyboard shortcut |
 | `addFileFooter({ id, mount })` | something below the open file; `props.path` is the file |

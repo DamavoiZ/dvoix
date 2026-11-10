@@ -2,8 +2,6 @@
   import { onMount } from "svelte";
   import Ribbon from "./lib/components/Ribbon.svelte";
   import SidePanel from "./lib/components/SidePanel.svelte";
-  import RightSidebar from "./lib/components/RightSidebar.svelte";
-  import RightSidebarToggle from "./lib/components/RightSidebarToggle.svelte";
   import ContextMenu from "./lib/components/ContextMenu.svelte";
   import FilePane from "./lib/components/FilePane.svelte";
   import Welcome from "./lib/components/Welcome.svelte";
@@ -63,17 +61,6 @@
     <Ribbon />
     <SidePanel />
     <FilePane />
-    <!-- The window buttons stay in the top right corner of the window, even
-         when a sidebar stands on the right edge below them. -->
-    <div class="flex shrink-0 flex-col">
-      <div class="flex h-9 shrink-0 items-center justify-end border-b border-zinc-800 bg-zinc-900/60" use:dragRegion>
-        <RightSidebarToggle />
-        <WindowControls />
-      </div>
-      <div class="flex min-h-0 flex-1">
-        <RightSidebar />
-      </div>
-    </div>
   </div>
   <ContextMenu />
   {#each plugins.overlays as overlay (overlay.pluginId + overlay.id)}
