@@ -26,11 +26,13 @@ pub struct AppState {
 }
 
 impl Workspace {
-    /// Opens a vault, rebuilds its index and starts watching it.
+    /// Opens a vault, brings its index in line with the files and starts
+    /// watching it.
     pub fn open(app: &AppHandle, path: &str) -> dvoix_core::Result<Self> {
         let vault = Vault::open(path)?;
         let mut index = Index::for_vault(&vault)?;
-        index.rebuild(&vault)?;
+        // Only the notes that changed since the last time are read again.
+        index.sync(&vault)?;
         let index = Arc::new(Mutex::new(index));
 
         let watcher = {

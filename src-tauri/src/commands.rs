@@ -184,10 +184,12 @@ pub fn rename_entry(state: State<AppState>, from: String, to: String) -> CmdResu
     with_ws(&state, |ws| {
         let entry = ws.vault.rename(&from, &to).map_err(err)?;
         let mut index = ws.index.lock().map_err(err)?;
-        index.remove(&from).map_err(err)?;
         if entry.is_dir {
-            index.rebuild(&ws.vault).map_err(err)?;
+            // Only the notes of the folder get their new path; the rest of
+            // the vault stays as it is.
+            index.move_folder(&ws.vault, &from, &to).map_err(err)?;
         } else {
+            index.remove(&from).map_err(err)?;
             index.update(&ws.vault, &to).map_err(err)?;
         }
         Ok(entry)

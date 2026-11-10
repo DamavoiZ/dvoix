@@ -76,6 +76,17 @@ fn main() {
     println!("{indexed} notes indexed\n");
     row("full rebuild", elapsed);
 
+    // What opening a vault costs when nothing changed since the last time.
+    let (elapsed, changed) = time(|| index.sync(&vault).expect("the index is in line"));
+    row(&format!("sync ({} notes read again)", changed), elapsed);
+
+    // The same, but one note changed while the app was closed.
+    vault
+        .write("folder0/note-0.md", &note_with_body(body))
+        .expect("the note is written");
+    let (elapsed, changed) = time(|| index.sync(&vault).expect("the index is in line"));
+    row(&format!("sync ({} notes read again)", changed), elapsed);
+
     // The change of one note: what happens on every save.
     let (elapsed, ()) = time(|| {
         index

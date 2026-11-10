@@ -6,6 +6,7 @@
 //! touching the rest.)
 
 use std::borrow::Cow;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use rusqlite::{Connection, params};
@@ -18,7 +19,7 @@ use crate::tasks::{self, Task};
 use crate::vault::{Vault, VaultEntry};
 
 /// Bump this when the schema changes; an outdated index is rebuilt.
-const SCHEMA_VERSION: i64 = 3;
+const SCHEMA_VERSION: i64 = 4;
 
 pub struct Index {
     conn: Connection,
@@ -153,7 +154,8 @@ impl Index {
                  path TEXT PRIMARY KEY,
                  title TEXT NOT NULL,
                  frontmatter TEXT NOT NULL,
-                 modified INTEGER NOT NULL
+                 modified INTEGER NOT NULL,
+                 size INTEGER NOT NULL
              );
              CREATE INDEX IF NOT EXISTS notes_nocase ON notes(path COLLATE NOCASE);
              CREATE TABLE IF NOT EXISTS tags (
@@ -206,6 +208,83 @@ impl Index {
         Ok(count)
     }
 
+    /// Brings the index in line with the files of the vault, without reading
+    /// the notes that did not change. A note is read again when its moment of
+    /// change or its size differs from what the index knows; a note whose
+    /// file is gone is taken out of the index.
+    ///
+    /// Returns how many notes were read again.
+    pub fn sync(&mut self, vault: &Vault) -> Result<usize> {
+        let files = vault.files()?;
+        let tx = self.conn.transaction()?;
+
+        // What the index knows about every note.
+        let known: HashMap<String, (i64, i64)> = {
+            let mut stmt = tx.prepare("SELECT path, modified, size FROM notes")?;
+            let rows = stmt.query_map([], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, i64>(1)?,
+                    r.get::<_, i64>(2)?,
+                ))
+            })?;
+            let mut map = HashMap::new();
+            for row in rows {
+                let (path, modified, size) = row?;
+                map.insert(path, (modified, size));
+            }
+            map
+        };
+
+        let mut seen: HashSet<&str> = HashSet::new();
+        let mut count = 0;
+        for entry in files.iter().filter(|e| is_indexable(&e.path)) {
+            seen.insert(entry.path.as_str());
+            let state = (entry.modified as i64, entry.size as i64);
+            if known.get(&entry.path) == Some(&state) {
+                continue; // the note did not change
+            }
+            let Ok(content) = vault.read(&entry.path) else {
+                continue;
+            };
+            let parsed = markdown::parse(&content, stem(&entry.path));
+            delete_note(&tx, &entry.path)?;
+            write_note(&tx, entry, &parsed, &tasks::extract(&content))?;
+            count += 1;
+        }
+
+        // Notes whose file is gone.
+        for path in known.keys() {
+            if !seen.contains(path.as_str()) {
+                delete_note(&tx, path)?;
+            }
+        }
+
+        tx.commit()?;
+        Ok(count)
+    }
+
+    /// Moves the notes of a folder to its new name, after the folder was
+    /// renamed on disk. Their content does not change, only their paths, so
+    /// only the paths have to be written again.
+    pub fn move_folder(&mut self, vault: &Vault, from: &str, to: &str) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        remove_prefix(&tx, &format!("{from}/"))?;
+        for entry in vault
+            .files_below(to)?
+            .iter()
+            .filter(|e| is_indexable(&e.path))
+        {
+            let Ok(content) = vault.read(&entry.path) else {
+                continue;
+            };
+            let parsed = markdown::parse(&content, stem(&entry.path));
+            write_note(&tx, entry, &parsed, &tasks::extract(&content))?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     /// Re-indexes a single file after it changed on disk.
     pub fn update(&mut self, vault: &Vault, rel: &str) -> Result<()> {
         if !is_indexable(rel) {
@@ -229,17 +308,7 @@ impl Index {
     pub fn remove(&mut self, rel: &str) -> Result<()> {
         let tx = self.conn.transaction()?;
         delete_note(&tx, rel)?;
-        let prefix = format!("{rel}/%");
-        // The FTS rows go first: their rowids come from the notes below the
-        // folder, which are deleted right after.
-        tx.execute(
-            "DELETE FROM notes_fts WHERE rowid IN (SELECT rowid FROM notes WHERE path LIKE ?1)",
-            [&prefix],
-        )?;
-        tx.execute("DELETE FROM notes WHERE path LIKE ?1", [&prefix])?;
-        tx.execute("DELETE FROM tags WHERE path LIKE ?1", [&prefix])?;
-        tx.execute("DELETE FROM links WHERE source LIKE ?1", [&prefix])?;
-        tx.execute("DELETE FROM tasks WHERE path LIKE ?1", [&prefix])?;
+        remove_prefix(&tx, &format!("{rel}/"))?;
         tx.commit()?;
         Ok(())
     }
@@ -450,6 +519,46 @@ impl Index {
     fn conn(&self) -> &Connection {
         &self.conn
     }
+
+    /// Everything the index holds, as text, so two indexes can be compared.
+    #[cfg(test)]
+    fn dump(&self) -> String {
+        let mut out = String::new();
+        for (sql, title) in [
+            ("SELECT path, title, frontmatter FROM notes ORDER BY path", "notes"),
+            ("SELECT path, tag FROM tags ORDER BY path, tag", "tags"),
+            ("SELECT source, target FROM links ORDER BY source, target", "links"),
+            (
+                "SELECT path, line, done, text, due, priority, tags, indent FROM tasks
+                 ORDER BY path, line",
+                "tasks",
+            ),
+            (
+                "SELECT notes_fts.path, title, body FROM notes_fts ORDER BY path",
+                "search",
+            ),
+        ] {
+            let mut stmt = self.conn.prepare(sql).unwrap();
+            let mut rows = stmt.query([]).unwrap();
+            out.push_str(title);
+            out.push('\n');
+            while let Some(row) = rows.next().unwrap() {
+                for i in 0..row.as_ref().column_count() {
+                    let value = match row.get_ref(i).unwrap() {
+                        rusqlite::types::ValueRef::Text(t) => String::from_utf8_lossy(t).into_owned(),
+                        rusqlite::types::ValueRef::Integer(i) => i.to_string(),
+                        rusqlite::types::ValueRef::Real(f) => f.to_string(),
+                        rusqlite::types::ValueRef::Null => String::new(),
+                        rusqlite::types::ValueRef::Blob(b) => b.len().to_string(),
+                    };
+                    out.push_str(&value);
+                    out.push('\t');
+                }
+                out.push('\n');
+            }
+        }
+        out
+    }
 }
 
 fn row_to_summary(r: &rusqlite::Row) -> rusqlite::Result<NoteSummary> {
@@ -459,6 +568,22 @@ fn row_to_summary(r: &rusqlite::Row) -> rusqlite::Result<NoteSummary> {
         title: r.get(1)?,
         frontmatter: serde_json::from_str(&fm).unwrap_or(serde_json::Value::Null),
     })
+}
+
+/// Removes every note below `prefix` from the index.
+fn remove_prefix(tx: &rusqlite::Transaction, prefix: &str) -> rusqlite::Result<()> {
+    let pattern = format!("{prefix}%");
+    // The search rows go first: their rowids come from the notes below the
+    // folder, which are deleted right after.
+    tx.execute(
+        "DELETE FROM notes_fts WHERE rowid IN (SELECT rowid FROM notes WHERE path LIKE ?1)",
+        [&pattern],
+    )?;
+    tx.execute("DELETE FROM notes WHERE path LIKE ?1", [&pattern])?;
+    tx.execute("DELETE FROM tags WHERE path LIKE ?1", [&pattern])?;
+    tx.execute("DELETE FROM links WHERE source LIKE ?1", [&pattern])?;
+    tx.execute("DELETE FROM tasks WHERE path LIKE ?1", [&pattern])?;
+    Ok(())
 }
 
 fn delete_note(tx: &rusqlite::Transaction, rel: &str) -> rusqlite::Result<()> {
@@ -485,12 +610,13 @@ fn write_note(
     tasks: &[Task],
 ) -> rusqlite::Result<()> {
     tx.execute(
-        "INSERT INTO notes (path, title, frontmatter, modified) VALUES (?1, ?2, ?3, ?4)",
+        "INSERT INTO notes (path, title, frontmatter, modified, size) VALUES (?1, ?2, ?3, ?4, ?5)",
         params![
             entry.path,
             note.title,
             note.frontmatter.to_string(),
-            entry.modified as i64
+            entry.modified as i64,
+            entry.size as i64
         ],
     )?;
     // The FTS row carries the rowid of the note, so both can be deleted and
@@ -877,5 +1003,91 @@ mod tests {
         assert_eq!(index.counts().unwrap(), (2, 2));
         assert!(index.search("old text", 10).unwrap().is_empty());
         assert_eq!(index.search("schedule", 10).unwrap().len(), 1);
+    }
+
+    /// The index of a vault that was opened before must say the same as one
+    /// that was built from scratch.
+    #[test]
+    fn the_sync_leaves_the_same_index_as_a_full_rebuild() {
+        let (_dir, vault) = sample_vault();
+        vault.write("projects/gamma.md", "# Gamma\nA #project note.").unwrap();
+        vault.write("notes/deep/delta.md", "# Delta\nMore text.").unwrap();
+        vault.write("inbox.md", "- [ ] A task").unwrap();
+
+        let mut synced = Index::for_vault(&vault).unwrap();
+        synced.rebuild(&vault).unwrap();
+        let expected = synced.dump();
+
+        // The same vault, but the index is built by the sync.
+        let mut again = Index::for_vault(&vault).unwrap();
+        again.sync(&vault).unwrap();
+        assert_eq!(again.dump(), expected);
+
+        // And once more, now that the index knows the vault.
+        let mut third = Index::for_vault(&vault).unwrap();
+        third.sync(&vault).unwrap();
+        assert_eq!(third.dump(), expected);
+    }
+
+    /// A sync must read only the notes that changed.
+    #[test]
+    fn a_sync_reads_only_the_notes_that_changed() {
+        let (_dir, vault) = sample_vault();
+        vault.write("projects/gamma.md", "# Gamma\nA #project note.").unwrap();
+
+        let mut index = Index::for_vault(&vault).unwrap();
+        index.sync(&vault).unwrap();
+
+        // Nothing changed, so nothing is read again.
+        assert_eq!(index.sync(&vault).unwrap(), 0);
+
+        // A new note is read.
+        vault.write("new.md", "# New\nA new note.").unwrap();
+        assert_eq!(index.sync(&vault).unwrap(), 1);
+
+        // A note that was removed is taken out of the index.
+        vault.trash("new.md").unwrap();
+        assert_eq!(index.sync(&vault).unwrap(), 0);
+        assert_eq!(index.counts().unwrap(), (3, 3));
+        assert!(index.search("new note", 10).unwrap().is_empty());
+    }
+
+    /// A note that was changed on disk while the app was closed must be
+    /// found again with its new text.
+    #[test]
+    fn a_sync_picks_up_a_note_that_changed_while_the_app_was_closed() {
+        let (_dir, vault) = sample_vault();
+        let mut index = Index::for_vault(&vault).unwrap();
+        index.sync(&vault).unwrap();
+        assert_eq!(index.search("schedule", 10).unwrap().len(), 1);
+
+        // The file changes behind the back of the index.
+        vault.write("beta.md", "# Beta\nA timetable now.").unwrap();
+        assert_eq!(index.sync(&vault).unwrap(), 1);
+
+        assert!(index.search("schedule", 10).unwrap().is_empty());
+        assert_eq!(index.search("timetable", 10).unwrap().len(), 1);
+        assert_eq!(index.counts().unwrap(), (2, 2));
+    }
+
+    /// A folder that was renamed keeps its notes, with their new path.
+    #[test]
+    fn a_renamed_folder_keeps_its_notes() {
+        let (_dir, vault) = sample_vault();
+        vault.write("projects/gamma.md", "# Gamma\nA #project note.").unwrap();
+        let mut index = Index::for_vault(&vault).unwrap();
+        index.rebuild(&vault).unwrap();
+        assert_eq!(index.counts().unwrap(), (3, 3));
+
+        vault.rename("projects", "work").unwrap();
+        index.move_folder(&vault, "projects", "work").unwrap();
+
+        assert_eq!(index.counts().unwrap(), (3, 3));
+        let notes = index.notes_with_tag("project").unwrap();
+        assert!(notes.iter().any(|n| n.path == "work/alpha.md"));
+        assert!(notes.iter().any(|n| n.path == "work/gamma.md"));
+        assert!(!notes.iter().any(|n| n.path.starts_with("projects/")));
+        // The link of alpha to beta still works.
+        assert_eq!(index.backlinks("beta.md").unwrap().len(), 1);
     }
 }

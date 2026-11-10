@@ -133,6 +133,37 @@ impl Vault {
         Ok(entries)
     }
 
+    /// Only the files below the folder `rel`, sorted by path. The folder
+    /// itself is not in the list. Nothing if `rel` is not a folder of the
+    /// vault, so a caller does not have to check.
+    pub fn files_below(&self, rel: &str) -> Result<Vec<VaultEntry>> {
+        let dir = self.resolve(rel)?;
+        if !dir.is_dir() {
+            return Ok(Vec::new());
+        }
+        let mut entries = Vec::new();
+        let walker = WalkDir::new(&dir)
+            .min_depth(1)
+            .into_iter()
+            .filter_entry(|e| !e.file_name().to_string_lossy().starts_with('.'));
+        for entry in walker {
+            let entry = match entry {
+                Ok(e) => e,
+                Err(_) => continue,
+            };
+            if !entry.file_type().is_file() {
+                continue;
+            }
+            if let Some(path) = self.relative(entry.path())
+                && let Ok(e) = self.entry_for(&path, entry.path())
+            {
+                entries.push(e);
+            }
+        }
+        entries.sort_by_key(|e| e.path.to_lowercase());
+        Ok(entries)
+    }
+
     /// The hidden entries that `list` leaves out: dot-folders with everything
     /// in them and (with `include_files`) dot-files, sorted by path. Only for
     /// showing them; they are never indexed. Temp files of `write` are never
@@ -419,6 +450,29 @@ mod tests {
         assert_eq!(vault.read_bytes("assets/image.png").unwrap(), png);
         assert!(vault.create_bytes("assets/image.png", &png).is_err());
         assert!(vault.create_bytes("../escape.png", &png).is_err());
+    }
+
+    #[test]
+    fn lists_the_files_below_a_folder() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = Vault::open(dir.path()).unwrap();
+        vault.write("work/one.md", "1").unwrap();
+        vault.write("work/deep/two.md", "2").unwrap();
+        vault.write("other/three.md", "3").unwrap();
+        vault.write("top.md", "4").unwrap();
+
+        let paths: Vec<_> = vault
+            .files_below("work")
+            .unwrap()
+            .iter()
+            .map(|e| e.path.clone())
+            .collect();
+        assert_eq!(paths, vec!["work/deep/two.md", "work/one.md"]);
+
+        // A folder that does not exist gives nothing, not an error.
+        assert!(vault.files_below("nothing").unwrap().is_empty());
+        // A file is not a folder.
+        assert!(vault.files_below("top.md").unwrap().is_empty());
     }
 
     #[test]

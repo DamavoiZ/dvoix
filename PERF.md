@@ -49,6 +49,44 @@ table, so its cost grew with the text of the entire vault.
 The gain grows with the vault, because the old cost grew with it and the new
 cost does not.
 
+### Opening a vault
+
+The index is a cache of the files, so it can be kept between two runs of the
+app. It was thrown away and built from scratch every time a vault was opened,
+which meant reading and parsing every note of the vault on every start.
+
+Now the index remembers the moment of change and the size of every note. A
+note is read again only when one of the two differs. A full rebuild stays
+available as the way out.
+
+20 000 notes of 2 kB:
+
+| | Before | After |
+| --- | --- | --- |
+| open a vault that did not change | 1213 ms | 55 ms |
+| open a vault with one changed note | 1213 ms | 55 ms |
+
+80 000 notes of 2 kB:
+
+| | Before | After |
+| --- | --- | --- |
+| open a vault that did not change | 5169 ms | 222 ms |
+| open a vault with one changed note | 5169 ms | 242 ms |
+
+The rest of the 222 ms is the walk over the files of the vault, which the
+index needs to know what is there. The notes themselves are no longer read.
+
+A note whose moment of change and size are both the same as the index knows
+is taken as unchanged. A note that was written in the same millisecond as the
+last index build and has the same size as before would therefore be missed.
+That is rare, and the full rebuild is still there for the cases where it
+matters.
+
+### Renaming a folder
+
+Renaming a folder re-indexed the whole vault. Now only the notes of that
+folder get their new path; the rest of the vault stays as it is.
+
 ## The attempts
 
 ### Kept: the search row takes the rowid of its note
