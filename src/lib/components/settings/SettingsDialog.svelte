@@ -178,8 +178,8 @@
         {:else if page === "plugins"}
           <p class="py-3 text-xs text-zinc-500">
             Optional functions that come with dvoix. Turned-off plugins disappear from the sidebar, menus and keyboard
-            shortcuts, your files stay unchanged. Basic functions such as the file explorer, search, tags, backlinks, tabs and
-            views are always on.
+            shortcuts, your files stay unchanged. Basic functions such as the file explorer, search, tags, backlinks, checkboxes,
+            tabs and views are always on.
           </p>
           {#each plugins.all as p (p.manifest.id)}
             {@const id = p.manifest.id}
