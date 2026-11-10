@@ -89,7 +89,7 @@ Without the store: put the three files into `<vault>/.dvoix/plugins/<id>/`, reop
 
 ## Getting into the store
 
-The list of plugins is in `registry.json` in [`DamavoiZ/dvoix-plugins`](https://github.com/DamavoiZ/dvoix-plugins) (example: [`registry.example.json`](registry.example.json)):
+The list of plugins is in `registry.json` in [`dvoi-dev/dvoix-plugins`](https://github.com/dvoi-dev/dvoix-plugins) (example: [`registry.example.json`](registry.example.json)):
 
 ```json
 {
@@ -100,11 +100,11 @@ The list of plugins is in `registry.json` in [`DamavoiZ/dvoix-plugins`](https://
       "name": "Hello World",
       "author": "damavoi",
       "description": "One sentence about what the plugin does.",
-      "repo": "DamavoiZ/dvoix-plugin-hello",
+      "repo": "dvoi-dev/dvoix-plugin-hello",
       "channel": "official"
     }
   ]
 }
 ```
 
-A community plugin is added via pull request with `"channel": "community"`. `"official"` only applies to repositories of `DamavoiZ`; for all others the app shows the plugin as a community plugin, even if the list says something else.
+A community plugin is added via pull request with `"channel": "community"`. `"official"` only applies to repositories of `dvoi-dev`; for all others the app shows the plugin as a community plugin, even if the list says something else.

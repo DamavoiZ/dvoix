@@ -5,7 +5,7 @@
 // styles.css); what is on and where it came from is in `.dvoix/store.json`:
 //
 //   { "allowCommunity": false,
-//     "plugins": { "kanban": { "enabled": true, "repo": "DamavoiZ/dvoix-kanban", "channel": "official" } } }
+//     "plugins": { "kanban": { "enabled": true, "repo": "dvoi-dev/dvoix-kanban", "channel": "official" } } }
 //
 // Official plugins can be installed right away. Community plugins only once
 // `allowCommunity` is switched on; switching it off again unloads them.
