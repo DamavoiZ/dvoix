@@ -94,6 +94,8 @@ pub fn run() {
             commands::write_file,
             commands::render_markdown,
             commands::create_file,
+            commands::read_binary,
+            commands::create_binary,
             commands::create_folder,
             commands::rename_entry,
             commands::trash_entry,

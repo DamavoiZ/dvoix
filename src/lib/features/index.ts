@@ -11,6 +11,7 @@ import { tagsFeature } from "./tags";
 import { backlinksFeature } from "./backlinks";
 import { linkSuggestFeature } from "./link-suggest";
 import { checkboxesFeature } from "./checkboxes";
+import { attachmentsFeature } from "./attachments";
 import { quickSwitcherFeature } from "./quick-switcher";
 import { tabsFeature } from "./tabs";
 import { editorModesFeature } from "./editor-modes";
@@ -22,6 +23,7 @@ export const coreFeatures: Plugin[] = [
   backlinksFeature,
   linkSuggestFeature,
   checkboxesFeature,
+  attachmentsFeature,
   quickSwitcherFeature,
   tabsFeature,
   editorModesFeature,

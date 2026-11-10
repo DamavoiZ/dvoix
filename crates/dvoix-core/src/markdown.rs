@@ -261,10 +261,17 @@ fn flush_text(events: &mut Vec<Event>, buffer: &mut String) {
         if inner.contains('\n') {
             break;
         }
-        if !rest[..start].is_empty() {
-            events.push(Event::Text(CowStr::from(rest[..start].to_string())));
+        // `![[file]]` embeds the file: the `!` is part of the link, not text.
+        let embed = rest[..start].ends_with('!');
+        let before = if embed {
+            &rest[..start - 1]
+        } else {
+            &rest[..start]
+        };
+        if !before.is_empty() {
+            events.push(Event::Text(CowStr::from(before.to_string())));
         }
-        events.push(Event::Html(CowStr::from(wikilink_html(inner))));
+        events.push(Event::Html(CowStr::from(wikilink_html(inner, embed))));
         rest = &after[end + 2..];
     }
     if !rest.is_empty() {
@@ -275,7 +282,10 @@ fn flush_text(events: &mut Vec<Event>, buffer: &mut String) {
 
 /// The HTML of a `[[wikilink]]`: the target is in `data-wikilink`, the text is
 /// the alias or the target itself.
-fn wikilink_html(inner: &str) -> String {
+///
+/// An embed (`![[image.png]]`) gets `data-embed` as well; the reading view
+/// shows images in its place and keeps the link for every other file.
+fn wikilink_html(inner: &str, embed: bool) -> String {
     let (target, alias) = match inner.split_once('|') {
         Some((target, alias)) => (target, Some(alias)),
         None => (inner, None),
@@ -286,11 +296,16 @@ fn wikilink_html(inner: &str) -> String {
         Some(alias) if !alias.trim().is_empty() => alias.trim(),
         _ => target,
     };
-    format!(
-        "<a class=\"wikilink\" href=\"#\" data-wikilink=\"{}\">{}</a>",
-        escape_html(target),
-        escape_html(label)
-    )
+    let target = escape_html(target);
+    let label = escape_html(label);
+    if embed {
+        // In `![[image.png|300]]` the part after the pipe is the width.
+        format!(
+            "<a class=\"wikilink embed\" href=\"#\" data-wikilink=\"{target}\" data-embed=\"{target}\">{label}</a>"
+        )
+    } else {
+        format!("<a class=\"wikilink\" href=\"#\" data-wikilink=\"{target}\">{label}</a>")
+    }
 }
 
 /// Escapes text that is shown as text (raw HTML from a note, link targets).
@@ -425,6 +440,16 @@ mod tests {
         let html = render_body("See [[Beta]] and [[Gamma|the Gamma]].");
         assert!(html.contains(r##"<a class="wikilink" href="#" data-wikilink="Beta">Beta</a>"##));
         assert!(html.contains(r#"data-wikilink="Gamma">the Gamma</a>"#));
+    }
+
+    #[test]
+    fn renders_embeds_with_their_target() {
+        let html = render_body("Look: ![[Pasted image 1.png]] and [[Beta]]");
+        assert!(html.contains(
+            r##"Look: <a class="wikilink embed" href="#" data-wikilink="Pasted image 1.png" data-embed="Pasted image 1.png">Pasted image 1.png</a>"##
+        ));
+        assert!(html.contains(r#"data-wikilink="Beta">Beta</a>"#));
+        assert!(!html.contains('!'));
     }
 
     #[test]

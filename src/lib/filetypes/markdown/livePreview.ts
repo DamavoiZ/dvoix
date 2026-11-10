@@ -12,6 +12,7 @@ import {
   type DecorationSet,
   type ViewUpdate,
 } from "@codemirror/view";
+import { embedImage, isImage, parseEmbed } from "../../attachments";
 import { parseFrontmatter } from "./frontmatter";
 import { PropertiesWidget } from "./propertiesWidget.svelte";
 import { TableWidget, focusTable } from "./tableWidget";
@@ -58,6 +59,28 @@ class RuleWidget extends WidgetType {
   }
 }
 
+/** An embedded image (`![[photo.png]]`), shown in place of its source. */
+class ImageWidget extends WidgetType {
+  constructor(
+    readonly target: string,
+    readonly width?: number,
+  ) {
+    super();
+  }
+  eq(other: ImageWidget) {
+    return other.target === this.target && other.width === this.width;
+  }
+  toDOM() {
+    return embedImage(this.target, this.width);
+  }
+}
+
+/** An embed that is drawn as an image. */
+interface Embed extends Hide {
+  target: string;
+  width?: number;
+}
+
 /** The lines the cursor is on: their syntax stays visible. */
 function activeLines(state: EditorState): Set<number> {
   const lines = new Set<number>();
@@ -85,7 +108,7 @@ function visibleLines(view: EditorView): Range[] {
 }
 
 /** Hides the brackets of a wikilink and shows its name (or its alias). */
-function collectWikilinks(state: EditorState, range: Range, hides: Hide[]): void {
+function collectWikilinks(state: EditorState, range: Range, hides: Hide[], images: Embed[]): void {
   const tree = syntaxTree(state);
   // A wikilink never spans lines, so searching whole lines finds every one on screen.
   const text = state.doc.sliceString(range.from, range.to);
@@ -95,6 +118,15 @@ function collectWikilinks(state: EditorState, range: Range, hides: Hide[]): void
     // A wikilink inside code is code, not a link.
     if (tree.resolveInner(start).name === "InlineCode") continue;
     const inner = match[0].slice(2, -2);
+    // `![[photo.png]]` shows the image; other embeds stay links.
+    if (start > range.from && state.doc.sliceString(start - 1, start) === "!") {
+      const embed = parseEmbed(inner);
+      if (isImage(embed.target)) {
+        images.push({ from: start - 1, to: end, priority: 3, ...embed });
+        hides.push({ from: start - 1, to: end, priority: 3 });
+        continue;
+      }
+    }
     const pipe = inner.indexOf("|");
     const label = pipe >= 0 ? inner.slice(pipe + 1) : inner;
     const offset = pipe >= 0 ? pipe + 1 : 0;
@@ -245,9 +277,10 @@ function buildDecorations(view: EditorView): DecorationSet {
   const rules: Hide[] = [];
   const lineClasses: { from: number; class: string }[] = [];
   const marks: { from: number; to: number; class: string }[] = [];
+  const images: Embed[] = [];
 
   for (const range of visibleLines(view)) {
-    collectWikilinks(state, range, hides);
+    collectWikilinks(state, range, hides, images);
     collectSyntax(state, range, hides, bullets, rules, lineClasses, marks);
   }
 
@@ -266,7 +299,9 @@ function buildDecorations(view: EditorView): DecorationSet {
   for (const h of accepted) {
     // The line of the cursor keeps its syntax.
     if (active.has(state.doc.lineAt(h.from).number)) continue;
-    replaces.push({ from: h.from, to: h.to, deco: Decoration.replace({}) });
+    const image = images.find((i) => i.from === h.from && i.to === h.to);
+    const widget = image ? new ImageWidget(image.target, image.width) : undefined;
+    replaces.push({ from: h.from, to: h.to, deco: Decoration.replace(widget ? { widget } : {}) });
   }
   for (const b of bullets) {
     if (active.has(state.doc.lineAt(b.from).number)) continue;
