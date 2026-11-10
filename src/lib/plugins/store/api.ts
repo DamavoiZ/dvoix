@@ -54,7 +54,7 @@ export interface DvoixPluginApi {
   addRibbonAction(spec: { id: string; label: string; icon?: string; order?: number; action: () => void }): Dispose;
   addCommand(spec: CommandSpec): Dispose;
   /** The right edge of the window, e.g. a sidebar with panels of the right side. */
-  addRightSidebar(spec: { id: string; mount: MountFn; toggle?: MountFn }): Dispose;
+  addRightSidebar(spec: { id: string; order?: number; mount: MountFn; toggle?: MountFn }): Dispose;
   addFileFooter(spec: { id: string; order?: number; mount: MountFn<{ path: string }> }): Dispose;
   addPaneHeader(spec: { id: string; order?: number; mount: MountFn }): Dispose;
   addOverlay(spec: { id: string; mount: MountFn }): Dispose;
@@ -124,6 +124,7 @@ export function createApi(ctx: PluginContext, manifest: StoreManifest): DvoixPlu
     addRightSidebar: (s) =>
       ctx.addRightSidebar({
         id: own(s.id),
+        order: s.order,
         component: mountComponent(s.mount),
         toggle: s.toggle ? mountComponent(s.toggle) : undefined,
       }),

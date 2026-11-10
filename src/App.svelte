@@ -59,19 +59,31 @@
 {#if !ready}
   <div class="h-full" use:dragRegion></div>
 {:else if vault.info}
-  <div class="flex h-full">
-    <Ribbon />
-    <SidePanel />
-    <FilePane />
-    <!-- The window buttons stay in the top right corner of the window, even
-         when a sidebar stands on the right edge below them. -->
-    <div class="flex shrink-0 flex-col">
-      <div class="flex h-9 shrink-0 items-center justify-end border-b border-zinc-800 bg-zinc-900/60" use:dragRegion>
-        <RightSidebarToggle />
-        <WindowControls />
-      </div>
-      <div class="flex min-h-0 flex-1">
-        <RightSidebar />
+  <div class="flex h-full flex-col">
+    <div class="flex min-h-0 flex-1">
+      <Ribbon />
+      <SidePanel />
+      <!-- The top row of the main area and the right sidebar is the title bar:
+           the tab bar takes the space on the left, the sidebar toggle and the
+           window buttons stay in the top right corner above the sidebar. -->
+      <div class="flex min-w-0 flex-1 flex-col">
+        <div class="flex shrink-0 items-start" use:dragRegion>
+          <div class="flex min-w-0 flex-1 flex-col">
+            {#each plugins.paneHeaders as header (header.pluginId + header.id)}
+              <header.component />
+            {:else}
+              <div class="h-9 border-b border-zinc-800 bg-zinc-900/60"></div>
+            {/each}
+          </div>
+          <div class="flex h-9 shrink-0 items-center border-b border-zinc-800 bg-zinc-900/60">
+            <RightSidebarToggle />
+            <WindowControls />
+          </div>
+        </div>
+        <div class="flex min-h-0 flex-1">
+          <FilePane />
+          <RightSidebar />
+        </div>
       </div>
     </div>
   </div>

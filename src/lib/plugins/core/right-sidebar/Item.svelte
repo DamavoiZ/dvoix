@@ -42,10 +42,8 @@
     const from = value.items.findIndex((i) => itemKey(i) === dragging);
     const to = value.items.findIndex((i) => itemKey(i) === itemKey(item));
     if (from < 0 || to < 0 || from === to) return;
-    // The panel that is dragged takes the place of this one, so the target
-    // moves one to the left when the dragged panel came from before it.
     const next = value.items.filter((_, i) => i !== from);
-    next.splice(to > from ? to - 1 : to, 0, value.items[from]);
+    next.splice(to, 0, value.items[from]);
     value.items = next;
     rightSidebarSettings.save();
   }
