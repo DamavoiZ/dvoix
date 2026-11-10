@@ -29,6 +29,24 @@ export interface FileViewProps {
   onopen: (path: string) => void;
 }
 
+export interface ProcessSpec {
+  /** Program name (looked up on PATH, with PATHEXT on Windows) or a path. */
+  command: string;
+  args?: string[];
+  /** Written to stdin, which is then closed. Without it stdin is empty. */
+  stdin?: string | null;
+  /** Extra environment variables on top of the app's. */
+  env?: Record<string, string>;
+  onStdout?(chunk: string): void;
+  onStderr?(chunk: string): void;
+  /** Exit code, null when the program was killed. */
+  onExit?(code: number | null): void;
+}
+
+export interface ProcessHandle {
+  kill(): void;
+}
+
 /** The object a store plugin's `onload` receives. */
 export interface DvoixPluginApi {
   readonly manifest: StoreManifest;
@@ -64,6 +82,12 @@ export interface DvoixPluginApi {
     write(path: string, content: string): Promise<void>;
     openFile(path: string): Promise<void>;
   };
+  /** Needs `process`. Runs a program in the vault folder, see `ProcessSpec`. */
+  process: { spawn(spec: ProcessSpec): ProcessHandle };
+  workspace: {
+    /** Vault-relative path of the file in the active tab, null for views and empty tabs. */
+    activeFile(): string | null;
+  };
   openView(id: string): Promise<void>;
   /** The app's own CodeMirror, so editor extensions fit the editor. */
   lib: { codemirror: { state: typeof cmState; view: typeof cmView } };
@@ -73,11 +97,18 @@ export const PERMISSION_LABELS: Record<PluginPermission, string> = {
   "vault:read": "Read files in the vault",
   "vault:write": "Change and create files in the vault",
   editor: "Extend the Markdown editor (can see the text of the open note)",
+  process: "Run programs on your computer, started in the vault folder (they can reach any file you can)",
 };
 
 export function createApi(ctx: PluginContext, manifest: StoreManifest): DvoixPluginApi {
   const pid = manifest.id;
   const own = (id: string) => `${pid}:${id}`;
+  const kills = new Set<() => void>();
+  const registerKill = (k: () => void) => {
+    kills.add(k);
+    return () => kills.delete(k);
+  };
+  ctx.register(() => kills.forEach((k) => k()));
   const need = (p: PluginPermission) => {
     if (!manifest.permissions.includes(p)) {
       throw new Error(`The plugin "${manifest.name}" uses the permission "${p}" but does not declare it in its manifest`);
@@ -126,6 +157,46 @@ export function createApi(ctx: PluginContext, manifest: StoreManifest): DvoixPlu
         await (exists ? api.writeFile(path, content) : api.createFile(path, content));
       },
       openFile: (path) => vault.openFile(path),
+    },
+    process: {
+      spawn: (spec) => {
+        need("process");
+        // The program's id arrives asynchronously; a kill before that is
+        // remembered and carried out once it is known.
+        let id: number | null = null;
+        let killed = false;
+        let exited = false;
+        const kill = () => {
+          killed = true;
+          if (id != null && !exited) void api.processKill(id);
+        };
+        api
+          .processSpawn(spec.command, spec.args ?? [], spec.stdin ?? null, spec.env ?? null, (e) => {
+            if (e.event === "stdout") spec.onStdout?.(e.data);
+            else if (e.event === "stderr") spec.onStderr?.(e.data);
+            else {
+              exited = true;
+              unregister();
+              spec.onExit?.(e.data);
+            }
+          })
+          .then((pid) => {
+            id = pid;
+            if (killed) kill();
+          })
+          .catch((err) => {
+            exited = true;
+            unregister();
+            spec.onStderr?.(String(err));
+            spec.onExit?.(null);
+          });
+        // Programs of a plugin end when it is switched off.
+        const unregister = registerKill(kill);
+        return { kill };
+      },
+    },
+    workspace: {
+      activeFile: () => vault.activeTab?.path ?? null,
     },
     openView: (id) => vault.openViewTab(own(id)),
     lib: { codemirror: { state: cmState, view: cmView } },

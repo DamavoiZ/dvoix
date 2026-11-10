@@ -125,7 +125,7 @@ Besides the built-in core plugins there are plugins you install only when needed
 
 The plugin list is a `registry.json` in the repository [`dvoi-dev/dvoix-plugins`](https://github.com/dvoi-dev/dvoix-plugins); the plugins themselves come from the GitHub releases of their own repositories. Downloads only happen over https from GitHub. The app only shows "official" for repositories of `dvoi-dev`, regardless of what the list says.
 
-Each plugin states in its manifest what it needs (`vault:read`, `vault:write`, `editor`). This is shown in the store before installing, and the API refuses anything that is not declared. It is not a sandbox: like in Obsidian, plugins run inside the app and could bypass the API. That is why official and community plugins are kept apart.
+Each plugin states in its manifest what it needs (`vault:read`, `vault:write`, `editor`, `process` for starting programs in the vault folder, e.g. AI agent tools). This is shown in the store before installing, and the API refuses anything that is not declared. It is not a sandbox: like in Obsidian, plugins run inside the app and could bypass the API. That is why official and community plugins are kept apart.
 
 How to write a plugin for the store is described in [`docs/plugins/README.md`](docs/plugins/README.md), with an example plugin in `docs/plugins/hello/`.
 

@@ -1,5 +1,5 @@
 // Typed wrappers around the Rust commands in `src-tauri/src/commands.rs`.
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 export interface VaultInfo {
@@ -151,7 +151,13 @@ export interface RenderedNote {
 }
 
 /** What a store plugin may use of the API (see `dvoix_core::store::PERMISSIONS`). */
-export type PluginPermission = "vault:read" | "vault:write" | "editor";
+export type PluginPermission = "vault:read" | "vault:write" | "editor" | "process";
+
+/** Output of a program started for a plugin (see `src-tauri/src/process.rs`). */
+export type ProcessEvent =
+  | { event: "stdout"; data: string }
+  | { event: "stderr"; data: string }
+  | { event: "exit"; data: number | null };
 
 /** The `manifest.json` of a store plugin (see `dvoix_core::store::PluginManifest`). */
 export interface StoreManifest {
@@ -185,6 +191,19 @@ export const api = {
   lastVault: () => invoke<string | null>("last_vault"),
   openVault: (path: string) => invoke<VaultInfo>("open_vault", { path }),
   closeVault: () => invoke<void>("close_vault"),
+  /** Starts a program in the vault folder; returns its id for `processKill`. */
+  processSpawn: (
+    command: string,
+    args: string[],
+    stdin: string | null,
+    env: Record<string, string> | null,
+    onEvent: (e: ProcessEvent) => void,
+  ) => {
+    const channel = new Channel<ProcessEvent>();
+    channel.onmessage = onEvent;
+    return invoke<number>("process_spawn", { command, args, stdin, env, onEvent: channel });
+  },
+  processKill: (id: number) => invoke<void>("process_kill", { id }),
   listEntries: () => invoke<VaultEntry[]>("list_entries"),
   listHiddenEntries: (filter: HiddenFilter) => invoke<VaultEntry[]>("list_hidden_entries", { filter }),
   readFile: (path: string) => invoke<string>("read_file", { path }),
