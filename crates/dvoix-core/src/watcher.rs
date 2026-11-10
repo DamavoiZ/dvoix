@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
 use std::sync::Arc;
 use std::thread::JoinHandle;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use notify::event::{ModifyKind, RenameMode};
 use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
@@ -40,6 +40,11 @@ pub struct VaultChange {
 
 /// How long a batch waits for more changes before it is handed over.
 pub const BATCH_QUIET_MS: u64 = 250;
+
+/// The longest a batch is held back. A sync tool that writes without pause
+/// would otherwise keep the batch open forever, and neither the index nor
+/// the app would ever see the changes.
+pub const BATCH_MAX_MS: u64 = 1_000;
 
 /// Hidden places whose changes are never reported: `.git` churns through
 /// hundreds of object files on every commit and `.dvoix` is written by dvoix
@@ -159,9 +164,13 @@ where
             continue;
         }
         // Keep collecting while changes keep coming, so a burst becomes
-        // one batch.
-        while let Ok(change) = receiver.recv_timeout(quiet) {
-            batch.push(change);
+        // one batch, but hand it over after `BATCH_MAX_MS` at the latest.
+        let deadline = Instant::now() + Duration::from_millis(BATCH_MAX_MS);
+        while let Some(left) = deadline.checked_duration_since(Instant::now()) {
+            match receiver.recv_timeout(quiet.min(left)) {
+                Ok(change) => batch.push(change),
+                Err(_) => break,
+            }
         }
         on_batch(std::mem::take(&mut batch));
     }
@@ -287,5 +296,32 @@ mod tests {
         assert_eq!(batch.len(), 5);
         assert_eq!(batch[0].path, "note-0.md");
         assert_eq!(batch[4].path, "note-4.md");
+    }
+
+    /// Changes that never pause still reach the app, in batches.
+    #[test]
+    fn a_steady_stream_of_changes_is_handed_over_in_time() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let batcher = ChangeBatcher::start(move |changes| {
+            let _ = tx.send(changes);
+        })
+        .unwrap();
+        let sender = batcher.sender();
+        let start = Instant::now();
+        // A change every 50 ms for three seconds, so the vault is never quiet.
+        let feeder = std::thread::spawn(move || {
+            while start.elapsed() < Duration::from_secs(3) {
+                sender.send(VaultChange {
+                    kind: ChangeKind::Modified,
+                    path: "note.md".into(),
+                    hidden: false,
+                    entry: None,
+                });
+                std::thread::sleep(Duration::from_millis(50));
+            }
+        });
+        let first = rx.recv_timeout(Duration::from_secs(2)).expect("no batch while changes kept coming");
+        assert!(!first.is_empty());
+        feeder.join().unwrap();
     }
 }

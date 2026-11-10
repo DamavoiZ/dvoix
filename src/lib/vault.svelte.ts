@@ -189,7 +189,9 @@ class VaultStore {
    */
   private onChange(change: VaultChange) {
     this.note(this.changes.files, change.path);
-    if (isNote(change.path)) this.note(this.changes.notes, change.path);
+    // A folder can hold notes: when it comes, goes or is renamed, the panels
+    // of notes change too, although the watcher names only the folder.
+    if (isNote(change.path) || this.isFolder(change)) this.note(this.changes.notes, change.path);
     if (change.kind === "modified" && this.patchEntry(change)) return;
     // A file was added or removed: the vault has to be listed again.
     this.scheduleRefresh(change.path);
@@ -209,6 +211,12 @@ class VaultStore {
     found.modified = entry.modified;
     this.entriesVersion++;
     return true;
+  }
+
+  /** True when the change is about a folder, also one that is already gone. */
+  private isFolder(change: VaultChange): boolean {
+    if (change.entry) return change.entry.isDir;
+    return this.entries.some((e) => e.isDir && e.path === change.path);
   }
 
   /** Notes a change in a group: the counter moves and the path is remembered. */
