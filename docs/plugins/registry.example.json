@@ -6,7 +6,7 @@
       "name": "Hello World",
       "author": "damavoi",
       "description": "Example plugin: shows a panel and a command and counts the notes in the vault.",
-      "repo": "DamavoiZ/dvoix-plugin-hello",
+      "repo": "dvoi-dev/dvoix-plugin-hello",
       "channel": "official"
     },
     {

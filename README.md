@@ -120,7 +120,7 @@ Besides the built-in core plugins there are plugins you install only when needed
 - **Official plugins** are maintained by dvoix itself. They can always be installed.
 - **Community plugins** are written by others. They only work once "Allow community plugins" is on, and a warning appears before that. Turning the switch off again unloads them immediately.
 
-The plugin list is a `registry.json` in the repository [`DamavoiZ/dvoix-plugins`](https://github.com/DamavoiZ/dvoix-plugins); the plugins themselves come from the GitHub releases of their own repositories. Downloads only happen over https from GitHub. The app only shows "official" for repositories of `DamavoiZ`, regardless of what the list says.
+The plugin list is a `registry.json` in the repository [`dvoi-dev/dvoix-plugins`](https://github.com/dvoi-dev/dvoix-plugins); the plugins themselves come from the GitHub releases of their own repositories. Downloads only happen over https from GitHub. The app only shows "official" for repositories of `dvoi-dev`, regardless of what the list says.
 
 Each plugin states in its manifest what it needs (`vault:read`, `vault:write`, `editor`). This is shown in the store before installing, and the API refuses anything that is not declared. It is not a sandbox: like in Obsidian, plugins run inside the app and could bypass the API. That is why official and community plugins are kept apart.
 

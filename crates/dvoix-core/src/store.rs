@@ -18,12 +18,12 @@ use crate::{Error, Result, Vault};
 
 /// Where the app reads the plugin list from.
 pub const REGISTRY_URL: &str =
-    "https://raw.githubusercontent.com/DamavoiZ/dvoix-plugins/main/registry.json";
+    "https://raw.githubusercontent.com/dvoi-dev/dvoix-plugins/main/registry.json";
 
-/// Only plugins in repositories of this GitHub account can be official. A
+/// Only plugins in repositories of this GitHub organization can be official. A
 /// registry entry that says `official` for any other repository is shown as
 /// community plugin, so a mistake in the list can't hand out the label.
-pub const OFFICIAL_OWNER: &str = "DamavoiZ";
+pub const OFFICIAL_OWNER: &str = "dvoi-dev";
 
 pub const MANIFEST_FILE: &str = "manifest.json";
 pub const MAIN_FILE: &str = "main.js";
@@ -318,8 +318,8 @@ mod tests {
         assert!(!valid_id("../x"));
         assert!(!valid_id(""));
         assert!(!valid_id("-x"));
-        assert!(valid_repo("DamavoiZ/dvoix-kanban"));
-        assert!(!valid_repo("DamavoiZ"));
+        assert!(valid_repo("dvoi-dev/dvoix-kanban"));
+        assert!(!valid_repo("dvoi-dev"));
         assert!(!valid_repo("a/b/c"));
         assert!(!valid_repo("../b"));
         assert!(!valid_repo("a/b?x=1"));
@@ -334,7 +334,7 @@ mod tests {
         let text = r#"{
           "version": 1,
           "plugins": [
-            {"id":"kanban","name":"Kanban","author":"damavoi","description":"Boards.","repo":"DamavoiZ/dvoix-kanban","channel":"official"},
+            {"id":"kanban","name":"Kanban","author":"damavoi","description":"Boards.","repo":"dvoi-dev/dvoix-kanban","channel":"official"},
             {"id":"fake","name":"Fake","author":"x","description":"x","repo":"someone/fake","channel":"official"},
             {"id":"kanban","name":"Twice","author":"x","description":"x","repo":"x/y","channel":"community"},
             {"id":"Bad Id","name":"x","author":"x","description":"x","repo":"x/y","channel":"community"},
@@ -371,8 +371,8 @@ mod tests {
     #[test]
     fn urls_only_come_from_checked_parts() {
         assert_eq!(
-            release_url("DamavoiZ/dvoix-kanban", "1.2.0", MAIN_FILE).unwrap(),
-            "https://github.com/DamavoiZ/dvoix-kanban/releases/download/1.2.0/main.js"
+            release_url("dvoi-dev/dvoix-kanban", "1.2.0", MAIN_FILE).unwrap(),
+            "https://github.com/dvoi-dev/dvoix-kanban/releases/download/1.2.0/main.js"
         );
         assert!(release_url("a/b/../c", "1.0.0", MAIN_FILE).is_err());
         assert!(release_url("a/b", "../1", MAIN_FILE).is_err());

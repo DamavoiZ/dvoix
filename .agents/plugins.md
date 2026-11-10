@@ -5,7 +5,7 @@ Every feature of dvoix is a plugin. The API is in `src/lib/plugins/types.ts`, th
 ## Core plugin or store plugin?
 
 - **Core plugin** (`src/lib/plugins/core/`): basic functions almost everyone needs and that are closely tied to the app (explorer, search, tasks, projects, tabs, Git, …). Shipped with the app; can be turned off.
-- **Store plugin**: everything extra that not everyone wants (e.g. kanban, tracking). Its own repository with releases, an entry in `registry.json` of `DamavoiZ/dvoix-plugins`. Guide in `docs/plugins/README.md`.
+- **Store plugin**: everything extra that not everyone wants (e.g. kanban, tracking). Its own repository with releases, an entry in `registry.json` of `dvoi-dev/dvoix-plugins`. Guide in `docs/plugins/README.md`.
 
 ## Plugin store (`src/lib/plugins/store/`)
 
