@@ -8,12 +8,13 @@ A desktop app for notes, project management, tracking, and whatever comes later.
 
 - Pick a vault folder; the one you opened last is loaded again at startup
 - Sidebar like Obsidian: a narrow icon bar on the far left (Files, Search, Tags, Tasks, Projects), next to it the panel, resizable by dragging and collapsible by clicking the active icon
+- Right sidebar: a narrow icon bar on the far right with the outline of the open note and other panels next to it, resizable by dragging its edge. The button in the title row, next to the window buttons, shows and hides it (Ctrl/Cmd + ] does the same). A note is docked into it by dragging its tab from the tab bar into the column, and the panels are rearranged by dragging their header
 - Custom title bar on Windows and Linux: no bright system frame; the tab bar and the top row of the sidebar move the window (double-click maximizes); minimize, maximize and close sit on the right next to the tabs. Narrow, dark scrollbars everywhere in the app
 - The file explorer sorts naturally: `2 - Notes` comes before `10 - Archive`
 - File explorer with a folder tree: expand and collapse folders (remembered), right-click menu to create, rename and delete (deleted items go to `.trash/` in the vault), drag and drop files into folders
 - Tabs: clicking in the file explorer opens in the active tab, Ctrl/Cmd + click or middle click opens in a new one; drag tabs to reorder, close them with middle click or ×. Open tabs are remembered per vault
 - Quick switcher (Ctrl/Cmd + O) with fuzzy search over all files: `mtg plan` finds `Projects/Meeting-Planning`. Enter opens, Ctrl + Enter opens in a new tab, and if the note does not exist it is created
-- Keyboard shortcuts: Ctrl + T new tab, Ctrl + W close tab, Ctrl + Tab / Ctrl + Shift + Tab (or Ctrl + Page Down/Up) switch tabs, Ctrl + Enter commit changes, Ctrl + Shift + H open history
+- Keyboard shortcuts: Ctrl + T new tab, Ctrl + W close tab, Ctrl + Tab / Ctrl + Shift + Tab (or Ctrl + Page Down/Up) switch tabs, Ctrl + ] show/hide the right sidebar, Ctrl + Enter commit changes, Ctrl + Shift + H open history
 - Markdown editor (CodeMirror 6) with YAML frontmatter, `[[wikilinks]]` (Ctrl/Cmd + click opens or creates the note) and `#tags`
 - Properties (frontmatter) that you can edit like in Obsidian, in both the reading and the editing view: values by type (text, number, date, yes/no as a checkbox, lists and tags as chips, `[[links]]` clickable), rename keys, add and remove entries. Only the affected YAML line changes; comments and formatting stay. Values that span several lines (`|`, nested) are read-only and are edited in the source view. When the cursor is in the frontmatter, the editing view shows the YAML
 - Tables like in Obsidian: in the editing view you type directly into the cells; the cell with the cursor shows its Markdown. Tab / Shift + Tab jumps to the next / previous cell, Enter to the cell below (in the last row a new one is created), the arrow keys move between cells and out of the table, Esc leaves it. Right-click inserts or deletes rows and columns; the "+" on the right and at the bottom appends a column or row. A typed `|` is saved as `\|` so it does not split the cell. To select several cells: drag over them with the mouse, Shift + click, Shift + arrow keys, or Ctrl/Cmd + A in an empty cell; whole rows and columns via the handles on the left and top (they appear on hover). Selected cells can be cleared (Del), copied, cut and pasted (including blocks from Excel or Google Sheets; the table grows when needed), made bold or italic (Ctrl/Cmd + B / I), and aligned via the right-click menu. Rows and columns are moved by dragging their handle; selected cells by dragging them to another place (the cells there swap places). Only what actually changes changes in the file
@@ -27,7 +28,7 @@ A desktop app for notes, project management, tracking, and whatever comes later.
 - Tasks: ordinary Markdown checkboxes in any note, optionally with a due date and priority. In the editor they are always clickable; the task overview in the sidebar collects all tasks of the vault (grouped by due date or by note)
 - Projects: notes with `type: project` in the frontmatter, with status, due date and progress from their checkboxes, in a dedicated project list
 - Graph view (Ctrl/Cmd + G or the network icon in the icon bar) in its own tab: notes as dots, connected by links, by their folders (folders as their own nodes) and/or by shared tags (tags as nodes or as direct lines). Adjustable: filters (`projects #idea -archive`), single notes, attachments and missing notes on/off, colors by folder or tag, size by number of connections, arrows, line width, the zoom level from which titles appear, and the layout forces. Click opens the note in a new tab; hovering highlights the neighbors
-- Basic functions are always on: file explorer, search, tags, backlinks, link suggestions, clickable checkboxes, quick switcher, tabs and views. Optional functions are core plugins that can each be turned off in the settings (gear icon at the bottom of the icon bar, or Ctrl/Cmd + ,): tasks, projects, canvas, graph, Git and hidden files (folders such as `.obsidian`, off at first)
+- Basic functions are always on: file explorer, search, tags, backlinks, link suggestions, clickable checkboxes, quick switcher, tabs and views. Optional functions are core plugins that can each be turned off in the settings (gear icon at the bottom of the icon bar, or Ctrl/Cmd + ,): tasks, projects, canvas, graph, Git, the right sidebar and hidden files (folders such as `.obsidian`, off at first)
 - Plugin store in the settings: search, install, update and remove additional plugins. Official plugins work immediately; community plugins only after a separate switch with a warning (see "Plugin store" below)
 - Settings: editor (line length, line numbers, spellcheck), appearance (font sizes), a list of all keyboard shortcuts, and separate options per feature or plugin
 - All settings of a vault live inside the vault under `.dvoix/` (see below), so they move along when you copy or sync the folder
@@ -71,7 +72,7 @@ src/                    Svelte frontend
   lib/plugins/core/     the core plugins (can be turned off), one folder each
   lib/plugins/store/    plugin store: load and install plugins, their API (api.ts)
 docs/plugins/           guide for store plugins, example plugin, example plugin list
-  lib/components/       app frame: ribbon, side panel, file view, settings
+  lib/components/       app frame: ribbon, side panel, right sidebar, file view, settings
 ```
 
 ## The `.dvoix/` folder
@@ -98,7 +99,8 @@ Every function hooks into the app through a small API, the same for core feature
 
 | Call | What for |
 | --- | --- |
-| `ctx.addPanel(...)` | panel in the sidebar, with an icon in the icon bar |
+| `ctx.addPanel(...)` | panel in the sidebar, with an icon in the icon bar; with `side: "right"` it stands in the right sidebar |
+| `ctx.addRightSidebar(...)` | the right edge of the window, e.g. a sidebar with panels of the right side; with a toggle it gets a button in the title row |
 | `ctx.addRibbonAction(...)` | button in the icon bar that runs something |
 | `ctx.addCommand(...)` | command with an optional keyboard shortcut |
 | `ctx.registerFileType(...)` | new file type with its own view |
@@ -115,6 +117,16 @@ Every function hooks into the app through a small API, the same for core feature
 The "Hidden files" plugin is off at first. When on, it shows folders and files whose names start with a dot (e.g. `.obsidian`, `.trash`, `.gitignore`), slightly faded, in the file explorer. There you can open, edit, rename and delete them like anything else. They never appear in search, tags, backlinks, the graph or the quick switcher, and notes inside them are not indexed.
 
 Settings (in `.dvoix/plugins/hidden-files/data.json`): show yes/no (also toggleable with the command "Show/hide hidden files"), whether single dot files appear too, whether the app's own `.dvoix` folder appears (off), and which names stay hidden anyway (default: `.git`). At most 10,000 hidden entries are listed per vault. The file watcher does not report changes in `.git` and `.dvoix`, so that a commit does not flood the app with events; their contents in the explorer are reloaded the next time you toggle the setting or create or delete a file.
+
+### Right sidebar
+
+The "Right sidebar" plugin adds a second sidebar on the right edge of the window, like Obsidian. A narrow icon bar on the far right holds an icon per panel, and the column next to it holds the panels themselves. The plugin is on by default and can be turned off under Settings → Core plugins.
+
+- The **outline** of the open note stands in it by default: its headings as a tree, one click jumps to the heading in the note (in the editor and in the reading view)
+- A **note is docked** into the column by dragging its tab from the tab bar to the right edge. The docked note is shown as it is read; a wikilink in it opens the target in the main area
+- The **panels are rearranged** by dragging their header, and removed with the × in it
+- The column is **resized** by dragging its left edge (double-click sets the standard width) and **hidden** with the button in the title row next to the window buttons (Ctrl/Cmd + ] does the same). A hidden sidebar is gone completely, the button stays
+- Which panels are in it, how wide it is and whether it is hidden are remembered per vault in `.dvoix/plugins/right-sidebar/data.json`
 
 ### Plugin store
 

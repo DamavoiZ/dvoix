@@ -32,9 +32,11 @@ export interface FileViewProps {
 /** The object a store plugin's `onload` receives. */
 export interface DvoixPluginApi {
   readonly manifest: StoreManifest;
-  addPanel(spec: { id: string; label: string; icon?: string; header?: boolean; order?: number; mount: MountFn }): Dispose;
+  addPanel(spec: { id: string; label: string; icon?: string; header?: boolean; order?: number; side?: "left" | "right"; mount: MountFn }): Dispose;
   addRibbonAction(spec: { id: string; label: string; icon?: string; order?: number; action: () => void }): Dispose;
   addCommand(spec: CommandSpec): Dispose;
+  /** The right edge of the window, e.g. a sidebar with panels of the right side. */
+  addRightSidebar(spec: { id: string; mount: MountFn; toggle?: MountFn }): Dispose;
   addFileFooter(spec: { id: string; order?: number; mount: MountFn<{ path: string }> }): Dispose;
   addPaneHeader(spec: { id: string; order?: number; mount: MountFn }): Dispose;
   addOverlay(spec: { id: string; mount: MountFn }): Dispose;
@@ -86,7 +88,14 @@ export function createApi(ctx: PluginContext, manifest: StoreManifest): DvoixPlu
 
   return {
     manifest,
-    addPanel: (s) => ctx.addPanel({ ...s, id: own(s.id), icon: iconComponent(s.icon), component: mountComponent(s.mount) }),
+    addPanel: (s) =>
+      ctx.addPanel({ ...s, id: own(s.id), icon: iconComponent(s.icon), component: mountComponent(s.mount) }),
+    addRightSidebar: (s) =>
+      ctx.addRightSidebar({
+        id: own(s.id),
+        component: mountComponent(s.mount),
+        toggle: s.toggle ? mountComponent(s.toggle) : undefined,
+      }),
     addRibbonAction: (s) => ctx.addRibbonAction({ ...s, id: own(s.id), icon: iconComponent(s.icon) }),
     addCommand: (s) => ctx.addCommand(s),
     addFileFooter: (s) => ctx.addFileFooter({ id: own(s.id), order: s.order, component: mountComponent(s.mount) }),

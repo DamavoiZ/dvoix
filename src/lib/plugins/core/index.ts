@@ -9,6 +9,7 @@ import { projectsPlugin } from "./projects";
 import { canvasPlugin } from "./canvas";
 import { graphPlugin } from "./graph";
 import { gitPlugin } from "./git";
+import { rightSidebarPlugin } from "./right-sidebar";
 
 export const corePlugins: Plugin[] = [
   hiddenFilesPlugin,
@@ -17,4 +18,5 @@ export const corePlugins: Plugin[] = [
   canvasPlugin,
   graphPlugin,
   gitPlugin,
+  rightSidebarPlugin,
 ];

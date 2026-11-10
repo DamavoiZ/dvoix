@@ -1,9 +1,9 @@
 <script lang="ts">
   // The open file: headers from features and plugins (tab bar), the file type's view,
-  // footers from features and plugins (backlinks). A tab can also show a plugin view instead. The top row doubles as the title bar:
-  // empty space there moves the window, the window buttons sit on the right.
+  // footers from features and plugins (backlinks). A tab can also show a plugin view instead.
+  // The top row doubles as the title bar: empty space there moves the window, the
+  // window buttons sit at the right of the window (see `App.svelte`).
   import { fileTypeFor } from "../filetypes";
-  import WindowControls from "./WindowControls.svelte";
   import { plugins } from "../plugins";
   import { vault } from "../vault.svelte";
   import { dragRegion } from "../window.svelte";
@@ -24,7 +24,6 @@
         <div class="h-9 border-b border-zinc-800 bg-zinc-900/60"></div>
       {/each}
     </div>
-    <div class="h-9 border-b border-zinc-800 bg-zinc-900/60"><WindowControls /></div>
   </div>
   {#if view}
     <div class="min-h-0 flex-1">
