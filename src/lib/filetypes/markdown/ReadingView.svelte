@@ -6,11 +6,19 @@
   import type { FileViewProps } from "../types";
   import Properties from "./Properties.svelte";
   import { applyChange } from "./frontmatter";
+  import { highlightCodeBlocks } from "./codeHighlight";
 
   let { path, content, onchange, onopen }: FileViewProps = $props();
 
   let rendered = $state<RenderedNote | null>(null);
   let failed = $state(false);
+  let prose = $state<HTMLElement | null>(null);
+
+  // Code blocks are colored after the HTML is in place; `{@html}` replaces
+  // them on every render, so this runs again for each new HTML.
+  $effect(() => {
+    if (prose && rendered) void highlightCodeBlocks(prose);
+  });
 
   $effect(() => {
     const text = content;
@@ -56,7 +64,7 @@
     <div class="reading-inner">
       <!-- Edits change only the lines of the property, the note is saved like any other edit. -->
       <Properties source={content} apply={(change) => onchange(applyChange(content, change))} {onopen} />
-      <div class="prose">
+      <div class="prose" bind:this={prose}>
         <!-- The HTML is built in the Rust core; raw HTML from a note is escaped there. -->
         {@html rendered.html}
       </div>
@@ -106,13 +114,35 @@
     margin: 0 0 1em;
     padding-left: 1.5em;
   }
+  /* Tailwind's reset removes the markers of lists, so they are set again. */
+  .reading :global(.prose ul) {
+    list-style: disc;
+  }
+  .reading :global(.prose ol) {
+    list-style: decimal;
+  }
+  .reading :global(.prose ul ul) {
+    list-style: circle;
+  }
+  .reading :global(.prose ul ul ul) {
+    list-style: square;
+  }
   .reading :global(.prose li) {
     margin: 0.2em 0;
   }
+  .reading :global(.prose li::marker) {
+    color: var(--color-zinc-500);
+  }
+  .reading :global(.prose li > ul),
+  .reading :global(.prose li > ol) {
+    margin: 0.2em 0 0;
+  }
+  /* A task has its checkbox instead of a bullet; the box sits where the bullet would be. */
+  .reading :global(.prose li:has(> input[type="checkbox"])) {
+    list-style: none;
+  }
   .reading :global(.prose li > input[type="checkbox"]) {
-    margin-right: 0.45em;
-    accent-color: var(--color-violet-500);
-    vertical-align: -0.1em;
+    margin: 0 0.45em 0 -1.4em;
   }
   .reading :global(.prose a) {
     color: var(--color-violet-300);
@@ -144,6 +174,7 @@
     background: var(--color-zinc-800);
   }
   .reading :global(.prose pre) {
+    position: relative;
     margin: 0 0 1em;
     padding: 0.9rem 1rem;
     border-radius: 0.5rem;
@@ -151,11 +182,23 @@
     border: 1px solid var(--color-zinc-800);
     overflow-x: auto;
   }
+  /* The language of the block, set by `highlightCodeBlocks`. */
+  .reading :global(.prose pre[data-language]::before) {
+    content: attr(data-language);
+    position: absolute;
+    top: 0.4rem;
+    right: 0.7rem;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--color-zinc-500);
+    text-transform: lowercase;
+  }
   .reading :global(.prose pre code) {
     padding: 0;
     background: none;
     font-size: 0.85em;
     line-height: 1.6;
+    color: var(--color-zinc-200);
   }
   .reading :global(.prose table) {
     width: 100%;
