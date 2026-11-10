@@ -7,12 +7,14 @@
   import { ui } from "../../ui.svelte";
   import { vault } from "../../vault.svelte";
   import { explorerSettings } from "./settings";
+  import { cleanFolder, folderOf } from "../../attachments";
 
-  /** New items go into the folder of the open file, like in Obsidian (or the root, see settings). */
+  /** New items go into the folder of the open file, like in Obsidian (or the root or a fixed folder, see settings). */
   function currentFolder(): string {
-    if (explorerSettings.value.newFileLocation === "root") return "";
-    const p = vault.openPath;
-    return p && p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "";
+    const { newFileLocation, newFileFolder } = explorerSettings.value;
+    if (newFileLocation === "root") return "";
+    if (newFileLocation === "folder") return cleanFolder(newFileFolder);
+    return folderOf(vault.openPath);
   }
 
   const btn = "flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200";

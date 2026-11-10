@@ -7,6 +7,7 @@
   import Properties from "./Properties.svelte";
   import { applyChange } from "./frontmatter";
   import { highlightCodeBlocks } from "./codeHighlight";
+  import { embedImage, isImage, parseEmbed } from "../../attachments";
 
   let { path, content, onchange, onopen }: FileViewProps = $props();
 
@@ -18,6 +19,16 @@
   // them on every render, so this runs again for each new HTML.
   $effect(() => {
     if (prose && rendered) void highlightCodeBlocks(prose);
+  });
+
+  // `![[photo.png]]` comes from the core as a link with `data-embed`; images
+  // are shown in its place, other files stay links.
+  $effect(() => {
+    if (!prose || !rendered) return;
+    for (const link of prose.querySelectorAll<HTMLElement>("a[data-embed]")) {
+      const { target, width } = parseEmbed(link.dataset.embed ?? "");
+      if (isImage(target)) link.replaceWith(embedImage(target, width ?? (Number(link.textContent) || undefined)));
+    }
   });
 
   $effect(() => {

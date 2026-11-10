@@ -115,6 +115,58 @@ pub fn create_file(state: State<AppState>, path: String, content: String) -> Cmd
     })
 }
 
+/// Reads a file as raw bytes (images in notes). The bytes go to the frontend
+/// as an `ArrayBuffer`, not as a JSON array of numbers.
+#[tauri::command(async)]
+pub fn read_binary(state: State<AppState>, path: String) -> CmdResult<tauri::ipc::Response> {
+    with_ws(&state, |ws| {
+        ws.vault
+            .read_bytes(&path)
+            .map(tauri::ipc::Response::new)
+            .map_err(err)
+    })
+}
+
+/// Creates an attachment (a pasted or dropped file). The bytes are the raw
+/// request body; the vault path comes URI-encoded in the `path` header,
+/// because a header can only carry ASCII.
+#[tauri::command(async)]
+pub fn create_binary(
+    state: State<AppState>,
+    request: tauri::ipc::Request,
+) -> CmdResult<VaultEntry> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("Expected the file as raw bytes".into());
+    };
+    let path = request
+        .headers()
+        .get("path")
+        .and_then(|v| v.to_str().ok())
+        .ok_or("Missing path")?;
+    let path = percent_decode(path)?;
+    with_ws(&state, |ws| {
+        ws.vault.create_bytes(&path, bytes).map_err(err)
+    })
+}
+
+/// Decodes `encodeURIComponent` output.
+fn percent_decode(text: &str) -> CmdResult<String> {
+    let bytes = text.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' {
+            let hex = text.get(i + 1..i + 3).ok_or("Bad path encoding")?;
+            out.push(u8::from_str_radix(hex, 16).map_err(err)?);
+            i += 3;
+        } else {
+            out.push(bytes[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8(out).map_err(err)
+}
+
 /// Renders a note as HTML for the reading view. It only depends on the text of
 /// the note, so it needs no vault.
 #[tauri::command(async)]
@@ -433,4 +485,19 @@ pub fn store_uninstall(state: State<AppState>, id: String) -> CmdResult<()> {
 #[tauri::command(async)]
 pub fn store_installed(state: State<AppState>) -> CmdResult<Vec<InstalledPlugin>> {
     with_ws(&state, |ws| store::installed(&ws.vault).map_err(err))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::percent_decode;
+
+    #[test]
+    fn decodes_uri_components() {
+        assert_eq!(
+            percent_decode("9%20-%20System%2Fbild%C3%A4.png").unwrap(),
+            "9 - System/bildä.png"
+        );
+        assert!(percent_decode("%zz").is_err());
+        assert!(percent_decode("%4").is_err());
+    }
 }

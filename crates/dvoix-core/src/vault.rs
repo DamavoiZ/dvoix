@@ -221,6 +221,16 @@ impl Vault {
     /// Writes atomically: content goes to a temp file first which is then
     /// renamed over the target, so a crash never leaves a half-written note.
     pub fn write(&self, rel: &str, content: &str) -> Result<VaultEntry> {
+        self.write_bytes(rel, content.as_bytes())
+    }
+
+    /// Reads any file as bytes (images and other attachments).
+    pub fn read_bytes(&self, rel: &str) -> Result<Vec<u8>> {
+        Ok(fs::read(self.resolve(rel)?)?)
+    }
+
+    /// Writes bytes atomically, the same way as `write`.
+    pub fn write_bytes(&self, rel: &str, content: &[u8]) -> Result<VaultEntry> {
         let path = self.resolve(rel)?;
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
@@ -233,6 +243,14 @@ impl Vault {
         fs::write(&tmp, content)?;
         fs::rename(&tmp, &path)?;
         self.entry(rel)
+    }
+
+    /// Creates a new binary file (an attachment) and fails if it already exists.
+    pub fn create_bytes(&self, rel: &str, content: &[u8]) -> Result<VaultEntry> {
+        if self.resolve(rel)?.exists() {
+            return Err(Error::AlreadyExists(rel.to_string()));
+        }
+        self.write_bytes(rel, content)
     }
 
     /// Creates a new file and fails if it already exists.
@@ -390,6 +408,17 @@ mod tests {
         vault.trash("projects/inbox.md").unwrap();
         assert!(vault.read("projects/inbox.md").is_err());
         assert!(dir.path().join(TRASH_DIR).join("inbox.md").exists());
+    }
+
+    #[test]
+    fn binary_files_round_trip() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = Vault::open(dir.path()).unwrap();
+        let png = [0x89, b'P', b'N', b'G', 0, 0xff, 0x10];
+        vault.create_bytes("assets/image.png", &png).unwrap();
+        assert_eq!(vault.read_bytes("assets/image.png").unwrap(), png);
+        assert!(vault.create_bytes("assets/image.png", &png).is_err());
+        assert!(vault.create_bytes("../escape.png", &png).is_err());
     }
 
     #[test]

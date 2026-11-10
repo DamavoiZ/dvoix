@@ -185,6 +185,11 @@ export const api = {
   writeFile: (path: string, content: string) => invoke<VaultEntry>("write_file", { path, content }),
   renderMarkdown: (content: string) => invoke<RenderedNote>("render_markdown", { content }),
   createFile: (path: string, content: string) => invoke<VaultEntry>("create_file", { path, content }),
+  /** Reads any file as bytes (images and other attachments). */
+  readBinary: (path: string) => invoke<ArrayBuffer>("read_binary", { path }),
+  /** Creates a binary file; fails if it exists. The bytes travel as the raw request body. */
+  createBinary: (path: string, bytes: Uint8Array) =>
+    invoke<VaultEntry>("create_binary", bytes, { headers: { path: encodeURIComponent(path) } }),
   createFolder: (path: string) => invoke<VaultEntry>("create_folder", { path }),
   renameEntry: (from: string, to: string) => invoke<VaultEntry>("rename_entry", { from, to }),
   trashEntry: (path: string) => invoke<void>("trash_entry", { path }),
