@@ -2,10 +2,10 @@
   // File explorer: the folder tree of the vault. Its buttons sit in the panel header (FileExplorerActions).
   import TreeItem from "./TreeItem.svelte";
   import { buildTree, mergeEntries } from "./tree";
-  import { contextMenu } from "../../../components/contextMenuState.svelte";
+  import { contextMenu } from "../../components/contextMenuState.svelte";
   import { DRAG_TYPE, createItems } from "./fileMenu";
-  import { vault } from "../../../vault.svelte";
-  import { plugins } from "../../manager.svelte";
+  import { vault } from "../../vault.svelte";
+  import { plugins } from "../../plugins/manager.svelte";
 
   // Other plugins can add entries only the explorer shows (hidden folders).
   const tree = $derived(buildTree(mergeEntries(vault.entries, plugins.explorerEntries)));

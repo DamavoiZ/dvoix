@@ -1,9 +1,9 @@
 import { Search } from "@lucide/svelte";
-import type { Plugin } from "../../types";
-import { ui } from "../../../ui.svelte";
+import type { Plugin } from "../../plugins/types";
+import { ui } from "../../ui.svelte";
 import SearchPanel from "./SearchPanel.svelte";
 
-export const searchPlugin: Plugin = {
+export const searchFeature: Plugin = {
   manifest: {
     id: "search",
     name: "Search",

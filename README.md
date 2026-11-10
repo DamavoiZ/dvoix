@@ -25,9 +25,9 @@ A desktop app for notes, project management, tracking, and whatever comes later.
 - Tasks: ordinary Markdown checkboxes in any note, optionally with a due date and priority. In the editor they are clickable; the task overview in the sidebar collects all tasks of the vault (grouped by due date or by note)
 - Projects: notes with `type: project` in the frontmatter, with status, due date and progress from their checkboxes, in a dedicated project list
 - Graph view (Ctrl/Cmd + G or the network icon in the icon bar) in its own tab: notes as dots, connected by links, by their folders (folders as their own nodes) and/or by shared tags (tags as nodes or as direct lines). Adjustable: filters (`projects #idea -archive`), single notes, attachments and missing notes on/off, colors by folder or tag, size by number of connections, arrows, line width, the zoom level from which titles appear, and the layout forces. Click opens the note in a new tab; hovering highlights the neighbors
-- Everything is a plugin, like in Obsidian: file explorer, search, tags, backlinks, link suggestions, tasks, projects, canvas, graph, quick switcher, tabs, views and hidden files (folders such as `.obsidian`, off at first) can each be turned off in the settings (gear icon at the bottom of the icon bar, or Ctrl/Cmd + ,)
+- Basic functions are always on: file explorer, search, tags, backlinks, link suggestions, quick switcher, tabs and views. Optional functions are core plugins that can each be turned off in the settings (gear icon at the bottom of the icon bar, or Ctrl/Cmd + ,): tasks, projects, canvas, graph, Git and hidden files (folders such as `.obsidian`, off at first)
 - Plugin store in the settings: search, install, update and remove additional plugins. Official plugins work immediately; community plugins only after a separate switch with a warning (see "Plugin store" below)
-- Settings: editor (line length, line numbers, spellcheck), appearance (font sizes), and separate options per plugin
+- Settings: editor (line length, line numbers, spellcheck), appearance (font sizes), a list of all keyboard shortcuts, and separate options per feature or plugin
 - All settings of a vault live inside the vault under `.dvoix/` (see below), so they move along when you copy or sync the folder
 - Git: the vault is versioned with the system's `git` program. A panel in the sidebar shows what changed (staged, changed, untracked); you can stage single files, discard changes, commit (Ctrl/Cmd + Enter), switch and create branches, and push and pull. A separate tab shows the history with the files per commit and the diff
 - First custom file type: `.canvas` in the open [JSON Canvas format](https://jsoncanvas.org) (move cards, double-click creates a card)
@@ -65,7 +65,8 @@ src/                    Svelte frontend
   lib/window.svelte.ts  custom title bar: moving the window, window buttons
   lib/filetypes/        file type registry and the built-in Markdown editor
   lib/plugins/          plugin API (types.ts) and plugin management (manager.svelte.ts)
-  lib/plugins/core/     the core plugins, one folder each
+  lib/features/         the core features (always on), one folder each
+  lib/plugins/core/     the core plugins (can be turned off), one folder each
   lib/plugins/store/    plugin store: load and install plugins, their API (api.ts)
 docs/plugins/           guide for store plugins, example plugin, example plugin list
   lib/components/       app frame: ribbon, side panel, file view, settings
@@ -91,7 +92,7 @@ If a file is missing, the default values apply. You can delete `index.sqlite` at
 
 ## Plugins
 
-Every feature is a plugin with a manifest that hooks into the app through a small API. Everything it registers is removed automatically when it is turned off. A plugin can:
+Every function hooks into the app through a small API, the same for core features (`src/lib/features/`, always on) and plugins (`src/lib/plugins/core/` and the store, can be turned off). Everything a plugin registers is removed automatically when it is turned off. Through the API you can:
 
 | Call | What for |
 | --- | --- |
@@ -128,7 +129,7 @@ How to write a plugin for the store is described in [`docs/plugins/README.md`](d
 
 ## Adding a new feature
 
-A new feature is a new plugin. Example: a Kanban board as `.board`:
+A new optional function is a new plugin; only basic note and editor functions that every vault needs become a core feature in `src/lib/features/` (same structure, listed in `src/lib/features/index.ts`, no on/off switch). Extras that not everyone wants go to the plugin store instead (see `docs/plugins/README.md`). Example of a core plugin: a Kanban board as `.board`:
 
 1. Create the folder `src/lib/plugins/core/board/` with a `BoardView.svelte`. It receives `content` (the file content as text) and calls `onchange(newContent)` when something changes. The app takes care of saving.
 2. Next to it, `index.ts`:

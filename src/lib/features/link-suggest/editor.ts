@@ -9,9 +9,9 @@ import {
 import { syntaxTree } from "@codemirror/language";
 import { EditorState, type Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import { fileTypeFor } from "../../../filetypes";
-import { fuzzyMatch } from "../../../fuzzy";
-import { vault } from "../../../vault.svelte";
+import { fileTypeFor } from "../../filetypes";
+import { fuzzyMatch } from "../../fuzzy";
+import { vault } from "../../vault.svelte";
 
 const LIMIT = 50;
 

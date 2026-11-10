@@ -1,8 +1,8 @@
 import { Link } from "@lucide/svelte";
-import type { Plugin } from "../../types";
+import type { Plugin } from "../../plugins/types";
 import Backlinks from "./Backlinks.svelte";
 
-export const backlinksPlugin: Plugin = {
+export const backlinksFeature: Plugin = {
   manifest: {
     id: "backlinks",
     name: "Backlinks",

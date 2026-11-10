@@ -2,7 +2,8 @@
 
 dvoix has two kinds of plugins:
 
-- **Core plugins** are built into the app (file explorer, search, tasks, Git, …) and can be turned off in the settings under "Core plugins". They live in `src/lib/plugins/core/`.
+- **Core features** are built into the app and always on (file explorer, search, tags, backlinks, tabs, …). They live in `src/lib/features/`.
+- **Core plugins** are built into the app (tasks, projects, graph, Git, …) and can be turned off in the settings under "Core plugins". They live in `src/lib/plugins/core/`.
 - **Store plugins** are installed when needed via **Settings → Plugin store**. They then live in the vault under `.dvoix/plugins/<id>/`. There are **official** plugins (maintained by dvoix, always installable) and **community plugins** (by others, only after the switch "Allow community plugins").
 
 This page describes store plugins. A complete example is in [`hello/`](hello/).
@@ -33,7 +34,7 @@ The **tag of the release is the version** from `manifest.json`, without a `v` in
 }
 ```
 
-- `id`: lowercase, `a-z0-9-`, never change it. It is the folder name in `.dvoix/plugins/<id>/` and must match the `id` in the plugin directory. IDs of core plugins (`tasks`, `git`, …) are reserved.
+- `id`: lowercase, `a-z0-9-`, never change it. It is the folder name in `.dvoix/plugins/<id>/` and must match the `id` in the plugin directory. IDs of core features and core plugins (`tabs`, `tasks`, `git`, …) are reserved.
 - `version`: `Major.Minor.Patch`, numbers only.
 - `minAppVersion`: the oldest dvoix version the plugin runs on (optional).
 - `permissions`: what the plugin needs from the API:

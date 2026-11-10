@@ -1,8 +1,8 @@
 import { Hash } from "@lucide/svelte";
-import type { Plugin } from "../../types";
+import type { Plugin } from "../../plugins/types";
 import TagsPanel from "./TagsPanel.svelte";
 
-export const tagsPlugin: Plugin = {
+export const tagsFeature: Plugin = {
   manifest: {
     id: "tags",
     name: "Tags",

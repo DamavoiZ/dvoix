@@ -1,8 +1,8 @@
 <script lang="ts">
   // "Linked from": notes that link to the open note.
-  import { api, type NoteSummary } from "../../../api";
-  import { fileTypeFor } from "../../../filetypes";
-  import { vault } from "../../../vault.svelte";
+  import { api, type NoteSummary } from "../../api";
+  import { fileTypeFor } from "../../filetypes";
+  import { vault } from "../../vault.svelte";
 
   let { path }: { path: string } = $props();
 

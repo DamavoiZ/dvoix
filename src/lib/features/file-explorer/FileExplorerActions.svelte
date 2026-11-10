@@ -3,9 +3,9 @@
   // sit in the panel header so the explorer needs no second toolbar row.
   import { ChevronsDownUp, FolderPlus } from "@lucide/svelte";
   import { newFolder } from "./fileMenu";
-  import { creatableFileTypes } from "../../../filetypes";
-  import { ui } from "../../../ui.svelte";
-  import { vault } from "../../../vault.svelte";
+  import { creatableFileTypes } from "../../filetypes";
+  import { ui } from "../../ui.svelte";
+  import { vault } from "../../vault.svelte";
   import { explorerSettings } from "./settings";
 
   /** New items go into the folder of the open file, like in Obsidian (or the root, see settings). */

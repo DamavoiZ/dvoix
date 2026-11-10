@@ -1,6 +1,6 @@
 <script lang="ts">
-  // The open file: headers from plugins (tab bar), the file type's view,
-  // footers from plugins (backlinks). A tab can also show a plugin view instead. The top row doubles as the title bar:
+  // The open file: headers from features and plugins (tab bar), the file type's view,
+  // footers from features and plugins (backlinks). A tab can also show a plugin view instead. The top row doubles as the title bar:
   // empty space there moves the window, the window buttons sit on the right.
   import { fileTypeFor } from "../filetypes";
   import WindowControls from "./WindowControls.svelte";
