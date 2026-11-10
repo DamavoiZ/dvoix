@@ -1,6 +1,6 @@
 // App state for the open vault and the open file, shared by all components.
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { api, onVaultChanged, type VaultEntry, type VaultInfo } from "./api";
+import { api, onVaultChanged, type VaultChange, type VaultEntry, type VaultInfo } from "./api";
 import { creatableFileTypes, type FileType } from "./filetypes";
 import { flushConfig } from "./config";
 import { plugins } from "./plugins/manager.svelte";
@@ -29,6 +29,22 @@ export interface OpenOptions {
 /** How a view tab is stored in `workspace.json`; `//` never occurs in a vault path. */
 const VIEW_PREFIX = "dvoix://view/";
 
+/**
+ * A group of changes in the vault. The number moves with every change of the
+ * group, so a panel that reads it refreshes only when it has to.
+ */
+export interface ChangeGroup {
+  /** Moves with every change of this group. */
+  number: number;
+  /** The path of the last change of this group. */
+  path: string;
+}
+
+/** True for a note: only notes are indexed, so only they change the panels of notes. */
+function isNote(path: string): boolean {
+  return path.toLowerCase().endsWith(".md");
+}
+
 let nextTabId = 1;
 const newTabObj = (path: string | null, view?: string): Tab => ({ id: nextTabId++, path, view });
 
@@ -46,8 +62,36 @@ class VaultStore {
   content = $state("");
   dirty = $state(false);
   error = $state<string | null>(null);
-  /** Bumped on every change on disk so panels (backlinks, tags) can refresh. */
-  revision = $state(0);
+  /**
+   * What changed in the vault. Every group has a counter that moves only for
+   * the changes that can change what it shows, so a panel refreshes only when
+   * it has to: the panels of notes read `notes`, the panels of the repository
+   * read `files`.
+   */
+  changes = $state<{ notes: ChangeGroup; structure: ChangeGroup; files: ChangeGroup }>({
+    /** A note changed: its text, its tags, its tasks and its links. */
+    notes: { number: 0, path: "" },
+    /** A file or folder was added, removed or moved: the tree of the vault changes. */
+    structure: { number: 0, path: "" },
+    /** Any file changed. */
+    files: { number: 0, path: "" },
+  });
+  /** Moves when the list of the vault changes, so that caches know they are stale. */
+  entriesVersion = $state(0);
+
+  /** The files of the vault by their path, for the lookups of links. */
+  private fileByPath = $derived.by(() => {
+    const map = new Map<string, VaultEntry>();
+    for (const entry of this.entries) if (!entry.isDir) map.set(entry.path.toLowerCase(), entry);
+    return map;
+  });
+
+  /** The files of the vault by their name, for the lookups of links. */
+  private fileByName = $derived.by(() => {
+    const map = new Map<string, VaultEntry>();
+    for (const entry of this.entries) if (!entry.isDir && !map.has(entry.name.toLowerCase())) map.set(entry.name.toLowerCase(), entry);
+    return map;
+  });
 
   private saveTimer: ReturnType<typeof setTimeout> | undefined;
   private refreshTimer: ReturnType<typeof setTimeout> | undefined;
@@ -64,7 +108,7 @@ class VaultStore {
     });
     this.unlisten = await onVaultChanged((change) => {
       // Hidden files are not part of `entries` (only the hidden-files plugin lists them).
-      if (!change.hidden) this.scheduleRefresh();
+      if (!change.hidden) this.onChange(change);
       if (change.kind === "removed") void this.closeIfGone(change.path);
       else if (change.path === this.openPath && !this.dirty) void this.reloadOpenFile();
     });
@@ -119,20 +163,66 @@ class VaultStore {
     settings.reset();
     this.info = null;
     this.entries = [];
+    this.entriesVersion++;
     this.openPath = null;
     this.openView = null;
     this.tabs = [];
     this.recent = [];
   }
 
-  async refresh() {
+  async refresh(changed = "") {
     this.entries = await api.listEntries();
-    this.revision++;
+    this.entriesVersion++;
+    // The list of the vault was replaced, so the tree of the vault changed.
+    this.note(this.changes.structure, changed);
   }
 
-  private scheduleRefresh() {
+  private scheduleRefresh(changed = "") {
     clearTimeout(this.refreshTimer);
-    this.refreshTimer = setTimeout(() => void this.refresh(), 150);
+    this.refreshTimer = setTimeout(() => void this.refresh(changed), 150);
+  }
+
+  /**
+   * A file changed on disk. Only the content of a file changed in most cases,
+   * and then its entry is corrected in place: the vault is not listed again
+   * and the tree of the vault is not built again.
+   */
+  private onChange(change: VaultChange) {
+    this.note(this.changes.files, change.path);
+    // A folder can hold notes: when it comes, goes or is renamed, the panels
+    // of notes change too, although the watcher names only the folder.
+    if (isNote(change.path) || this.isFolder(change)) this.note(this.changes.notes, change.path);
+    if (change.kind === "modified" && this.patchEntry(change)) return;
+    // A file was added or removed: the vault has to be listed again.
+    this.scheduleRefresh(change.path);
+  }
+
+  /**
+   * Writes the new size and time of a changed file into its entry, so the
+   * list of the vault stays right without listing the whole vault again.
+   * False when the file is not in the list, then the vault has to be listed.
+   */
+  private patchEntry(change: VaultChange): boolean {
+    const entry = change.entry;
+    if (!entry) return false;
+    const found = this.entries.find((e) => e.path === entry.path && !e.isDir);
+    if (!found) return false;
+    found.size = entry.size;
+    found.modified = entry.modified;
+    this.entriesVersion++;
+    return true;
+  }
+
+  /** True when the change is about a folder, also one that is already gone. */
+  private isFolder(change: VaultChange): boolean {
+    if (change.entry) return change.entry.isDir;
+    return this.entries.some((e) => e.isDir && e.path === change.path);
+  }
+
+  /** Notes a change in a group: the counter moves and the path is remembered. */
+  private note(group: ChangeGroup, path: string) {
+    group.number++;
+    group.path = path;
   }
 
   // ---------------------------------------------------------------- tabs
@@ -349,15 +439,12 @@ class VaultStore {
   }
 
   resolveLink(target: string): string | undefined {
-    const files = this.entries.filter((e) => !e.isDir);
+    // The path of the file, then its name. The maps are built once per change
+    // of the list of the vault, so this is a lookup and not a walk.
     const t = target.toLowerCase();
-    const exact = files.find((f) => f.path.toLowerCase() === t || f.path.toLowerCase() === `${t}.md`);
+    const exact = this.fileByPath.get(t) ?? this.fileByPath.get(`${t}.md`);
     if (exact) return exact.path;
-    const byName = files.find((f) => {
-      const name = f.name.toLowerCase();
-      return name === t || name === `${t}.md`;
-    });
-    return byName?.path;
+    return (this.fileByName.get(t) ?? this.fileByName.get(`${t}.md`))?.path;
   }
 
   /** Called by file-type views on every edit; saves shortly after typing stops. */
@@ -406,7 +493,7 @@ class VaultStore {
     try {
       await this.flush();
       await api.createFile(path, content);
-      await this.refresh();
+      await this.refresh(path);
       await this.openFile(path, opts);
     } catch (e) {
       this.error = String(e);
@@ -421,7 +508,7 @@ class VaultStore {
     try {
       await api.createFolder(`${prefix}${name}`);
       if (parent) ui.reveal(`${prefix}${name}`);
-      await this.refresh();
+      await this.refresh(`${prefix}${name}`);
       return `${prefix}${name}`;
     } catch (e) {
       this.error = String(e);
@@ -453,7 +540,7 @@ class VaultStore {
       this.recent = this.recent.map(remap);
       this.saveTabs();
       if (to.includes("/")) ui.reveal(to);
-      await this.refresh();
+      await this.refresh(to);
     } catch (e) {
       this.error = String(e);
     }
@@ -469,7 +556,7 @@ class VaultStore {
       }
       await api.trashEntry(path);
       await this.closeTabs((p) => p === path || p.startsWith(`${path}/`));
-      await this.refresh();
+      await this.refresh(path);
     } catch (e) {
       this.error = String(e);
     }

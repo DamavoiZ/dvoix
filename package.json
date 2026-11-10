@@ -12,7 +12,9 @@
     "preview": "vite preview",
     "precheck": "node scripts/check-deps.mjs",
     "check": "svelte-check --tsconfig ./tsconfig.json",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "bench:editor": "node scripts/bench-editor.mjs",
+    "bench:panels": "node scripts/bench-panels.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.4",

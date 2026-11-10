@@ -12,40 +12,75 @@ import { EditorView } from "@codemirror/view";
 import { fileTypeFor } from "../../filetypes";
 import { fuzzyMatch } from "../../fuzzy";
 import { vault } from "../../vault.svelte";
+import type { VaultEntry } from "../../api";
 
 const LIMIT = 50;
 
 /** Code is not markdown: no link suggestions in there. */
 const CODE = new Set(["InlineCode", "FencedCode", "CodeBlock", "CodeText"]);
 
+/** A file a wikilink can point to. */
+interface Target {
+  path: string;
+  /** What is shown and searched: the path, notes without ".md". */
+  label: string;
+  /** What goes between the brackets. */
+  link: string;
+  isNote: boolean;
+}
+
+/** The name of a file, without its folder. */
+function nameOf(path: string, isNote: boolean): string {
+  const slash = path.lastIndexOf("/");
+  const name = slash >= 0 ? path.slice(slash + 1) : path;
+  return isNote ? name.replace(/\.md$/i, "") : name;
+}
+
+/**
+ * The targets of the vault, built once per change of the list of the vault.
+ * Building them for every suggestion walks over all the files of the vault.
+ */
+let targets: { version: number; recent: string[]; map: Map<string, Target> } | null = null;
+
+/** The files a wikilink can point to, in the order they are offered. */
+function linkTargets(): Map<string, Target> {
+  const version = vault.entriesVersion;
+  const recent = vault.recent;
+  if (!targets || targets.version !== version || targets.recent !== recent) {
+    targets = { version, recent, map: buildTargets(vault.entries, recent) };
+  }
+  return targets.map;
+}
+
 /**
  * What goes between the brackets: the bare name, like in Obsidian, unless
  * another file has the same name. Then the path makes it unique, because
  * `vault.resolveLink` takes the first file with a matching name.
  */
-function linkTexts(): { path: string; label: string; link: string; isNote: boolean }[] {
-  const files = vault.entries.filter((e) => !e.isDir);
+function buildTargets(entries: VaultEntry[], recent: string[]): Map<string, Target> {
   const count = new Map<string, number>();
-  const nameOf = (path: string, isNote: boolean) => {
-    const name = path.split("/").pop() ?? path;
-    return isNote ? name.replace(/\.md$/i, "") : name;
-  };
-  const items = files.map((f) => {
-    const isNote = fileTypeFor(f.path)?.id === "markdown";
-    const label = isNote ? f.path.replace(/\.md$/i, "") : f.path;
-    const name = nameOf(f.path, isNote).toLowerCase();
-    count.set(name, (count.get(name) ?? 0) + 1);
-    return { path: f.path, label, name, isNote, modified: f.modified };
-  });
-  const rank = new Map(vault.recent.map((p, i) => [p, i]));
+  const items: { target: Target; name: string; key: string; rank: number; modified: number }[] = [];
+  for (const entry of entries) {
+    if (entry.isDir) continue;
+    const isNote = fileTypeFor(entry.path)?.id === "markdown";
+    const label = isNote ? entry.path.replace(/\.md$/i, "") : entry.path;
+    const name = nameOf(entry.path, isNote);
+    const key = name.toLowerCase();
+    count.set(key, (count.get(key) ?? 0) + 1);
+    items.push({ target: { path: entry.path, label, link: "", isNote }, name, key, rank: 0, modified: entry.modified });
+  }
+  const rank = new Map(recent.map((p, i) => [p, i]));
+  // The rank is put into the item, so the sort does not look it up again for
+  // every comparison.
+  for (const item of items) item.rank = rank.get(item.target.path) ?? 1e6;
   // Recently opened first, then newest changes, like the quick switcher.
-  items.sort((a, b) => (rank.get(a.path) ?? 1e6) - (rank.get(b.path) ?? 1e6) || b.modified - a.modified);
-  return items.map((i) => ({
-    path: i.path,
-    label: i.label,
-    isNote: i.isNote,
-    link: count.get(i.name)! > 1 ? i.label : nameOf(i.path, i.isNote),
-  }));
+  items.sort((a, b) => a.rank - b.rank || b.modified - a.modified);
+  const map = new Map<string, Target>();
+  for (const item of items) {
+    item.target.link = count.get(item.key)! > 1 ? item.target.label : item.name;
+    map.set(item.target.path, item.target);
+  }
+  return map;
 }
 
 function wikilinkCompletions(context: CompletionContext): CompletionResult | null {
@@ -61,7 +96,7 @@ function wikilinkCompletions(context: CompletionContext): CompletionResult | nul
   const closed = context.state.sliceDoc(context.pos, context.pos + 2) === "]]";
 
   const scored: { option: Completion; score: number }[] = [];
-  for (const item of linkTexts()) {
+  for (const item of linkTargets().values()) {
     const match = fuzzyMatch(query, item.label);
     if (!match) continue;
     const slash = item.label.lastIndexOf("/");

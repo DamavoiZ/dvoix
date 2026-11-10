@@ -30,7 +30,7 @@
 
   $effect(() => {
     // A change on disk makes a new commit, the history grows.
-    void vault.revision;
+    void vault.changes.files.number;
     void load();
   });
 

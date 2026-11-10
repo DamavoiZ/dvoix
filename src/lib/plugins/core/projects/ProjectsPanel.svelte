@@ -12,7 +12,7 @@
   let show = $state<Show>("running");
 
   $effect(() => {
-    void vault.revision;
+    void vault.changes.notes.number;
     api
       .projects()
       .then((p) => (projects = p))
@@ -21,7 +21,7 @@
   });
 
   const now = $derived.by(() => {
-    void vault.revision;
+    void vault.changes.files.number;
     return today();
   });
 

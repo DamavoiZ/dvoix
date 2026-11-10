@@ -23,7 +23,7 @@
 
   // A change on disk changes the state of the repository.
   $effect(() => {
-    void vault.revision;
+    void vault.changes.files.number;
     void gitState.refresh();
   });
 

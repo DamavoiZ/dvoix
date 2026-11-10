@@ -22,7 +22,7 @@ pub use markdown::{ParsedNote, RenderedNote};
 pub use project::{ProjectMeta, ProjectStatus};
 pub use tasks::{Priority, Task};
 pub use vault::{HiddenFilter, Vault, VaultEntry};
-pub use watcher::{ChangeKind, VaultChange, VaultWatcher};
+pub use watcher::{ChangeBatcher, ChangeKind, ChangeSender, VaultChange, VaultWatcher};
 
 /// Name of the hidden folder inside a vault where dvoix keeps caches and settings.
 pub const APP_DIR: &str = ".dvoix";
