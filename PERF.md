@@ -15,10 +15,16 @@ cargo run --release --example index_bench -- 20000 2000
 
 # 80 000 notes: the case where the old costs really showed.
 cargo run --release --example index_bench -- 80000 2000
+
+# The editor: the live preview and the check of the note.
+node scripts/bench-editor.mjs
 ```
 
 The note size matters. The old delete of a search row walked the whole search
 table, so its cost grew with the text of the entire vault.
+
+The numbers of the editor move a little from run to run; the tables below
+are the values of a run that was repeated three times.
 
 ## The results
 
@@ -121,6 +127,56 @@ Every command held the lock of the workspace while it worked, so a slow
 listing of the vault held up reading a file. The lock is now only held to
 get the vault; the work happens outside of it.
 
+### The editor
+
+The editor had three costs that were paid on every keystroke.
+
+**The note was put into the editor again.** After every change the editor
+looked at the whole note to see whether it had to be replaced. The check
+copied the note twice: once to turn it into the text the editor keeps, and
+once to compare it with the text of the editor. The editor now knows the
+text it produced itself and skips the check.
+
+| Note | Before | After |
+| --- | --- | --- |
+| 20 000 characters | 0.009 ms | 0.0000 ms |
+| 100 000 characters | 0.043 ms | 0.0000 ms |
+
+The new check compares the text of the editor with the text of the note.
+Both are the same string, so the answer is known without looking at it.
+
+**The live preview was built again.** The live preview walks the syntax tree
+of the whole note to find the properties and the tables, and it did that
+again for every change of the cursor. The blocks are now kept, so a change
+of the cursor only redraws them. A change of the text walks the tree again,
+but a block whose text did not change keeps its widget.
+
+| Note | Cursor move before | Cursor move after |
+| --- | --- | --- |
+| 5 tables (363 characters) | 0.021 ms | 0.004 ms |
+| 50 tables (3 013 characters) | 0.025 ms | 0.004 ms |
+| 200 tables (11 963 characters) | 0.023 ms | 0.002 ms |
+
+A keystroke gets a little cheaper as well, because the widget of a table
+that did not change is not built again:
+
+| Note | Before | After |
+| --- | --- | --- |
+| 5 tables | 0.082 ms | 0.051 ms |
+| 50 tables | 0.065 ms | 0.065 ms |
+| 200 tables | 0.060 ms | 0.058 ms |
+
+**The reading view was rendered again.** Every change of a property sent the
+whole note to the backend and put the answer into the page again, even
+though the text of the note had not changed. The reading view now watches
+the text of the note and leaves the properties to the properties. The
+backend renders a note of 3 140 characters in 0.044 ms, but the round trip
+through the backend and the replacement of the HTML in the page are what
+the change avoids.
+
+The line endings of a note were also looked for in the whole text on every
+keystroke. They are decided once per note now.
+
 ## The attempts
 
 ### Kept: the search row takes the rowid of its note
@@ -203,6 +259,13 @@ reads every task anyway, so the index does not help. Not used.
 against 0.012 ms), but it needs the byte after the folder name and it changes
 the meaning of the query from "case-insensitively like" to "in this range". The
 `NOCASE` index keeps the meaning of the old query, so it was kept.
+
+### Rejected: a map of the live preview blocks, keyed by their text
+
+The blocks of the live preview were first looked up by their text in a map,
+so a block that moved would keep its widget. The map costs more than it
+saves: the blocks are matched by their place in the document, which needs no
+lookup at all, and the map made a keystroke slower. Not used.
 
 ## Still open
 

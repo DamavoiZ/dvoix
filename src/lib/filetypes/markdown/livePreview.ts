@@ -362,11 +362,13 @@ const livePreviewPlugin = ViewPlugin.fromClass(
  * replacement over several lines has to come from a state field, CodeMirror
  * does not take it from a view plugin. Only top-level tables are drawn: a
  * table inside a list or quote keeps its source.
+ *
+ * The blocks are kept, so a change of the cursor does not have to walk the
+ * whole document again, and a block whose text did not change keeps its
+ * widget (and with it the state of the editing).
  */
-function buildBlocks(state: EditorState): DecorationSet {
-  const builder = new RangeSetBuilder<Decoration>();
-  const sel = state.selection.main;
-  const outside = (from: number, to: number) => sel.to < from || sel.from > to;
+function collectBlocks(state: EditorState, previous: Block[]): Block[] {
+  const found: FoundBlock[] = [];
   syntaxTree(state).iterate({
     enter(node) {
       if (node.name === "Document") return true;
@@ -374,35 +376,90 @@ function buildBlocks(state: EditorState): DecorationSet {
         // `parseFrontmatter` only takes what it can edit line by line; anything else stays YAML.
         const source = state.doc.sliceString(0, node.to);
         const fm = parseFrontmatter(source);
-        if (fm && outside(0, fm.to)) {
-          builder.add(0, fm.to, Decoration.replace({ widget: new PropertiesWidget(source.slice(0, fm.to)), block: true }));
+        if (fm) {
+          const text = source.slice(0, fm.to);
+          found.push({ from: 0, to: fm.to, kind: "frontmatter", source: text });
         }
       }
       if (node.name === "Table") {
         const from = state.doc.lineAt(node.from).from;
         // `to - 1`: should the node end after its line break, the next line is not part of it.
         const to = state.doc.lineAt(Math.max(node.from, node.to - 1)).to;
-        // The editor's cursor touching the table, even at its edge, shows the source.
-        if (outside(from, to)) {
-          const widget = new TableWidget(state.doc.sliceString(from, to));
-          builder.add(from, to, Decoration.replace({ widget, block: true }));
-        }
+        const text = state.doc.sliceString(from, to);
+        found.push({ from, to, kind: "table", source: text });
       }
       return false;
     },
   });
+  // A block whose text did not change keeps its widget, and with it the
+  // state of the editing.
+  return found.map((block, i) => {
+    const before = previous[i];
+    const widget =
+      before && before.kind === block.kind && before.source === block.source
+        ? before.widget
+        : block.kind === "frontmatter"
+          ? new PropertiesWidget(block.source)
+          : new TableWidget(block.source);
+    return { ...block, widget };
+  });
+}
+
+/**
+ * The decorations for the blocks. A block is not drawn while the editor's
+ * cursor is touching it, even at its edge: then its source shows.
+ */
+function drawBlocks(all: Block[], state: EditorState): DecorationSet {
+  const builder = new RangeSetBuilder<Decoration>();
+  const sel = state.selection.main;
+  for (const block of all) {
+    if (sel.to < block.from || sel.from > block.to) {
+      builder.add(block.from, block.to, Decoration.replace({ widget: block.widget, block: true }));
+    }
+  }
   return builder.finish();
 }
 
-const blocks = StateField.define<DecorationSet>({
-  create: buildBlocks,
-  update(decorations, tr) {
-    if (tr.docChanged || tr.selection || syntaxTree(tr.startState) !== syntaxTree(tr.state)) {
-      return buildBlocks(tr.state);
-    }
-    return decorations;
+/** A block of the document that is drawn as a widget: the properties or a table. */
+interface Block {
+  from: number;
+  to: number;
+  /** What kind of block it is: the properties or a table. */
+  kind: "frontmatter" | "table";
+  /** The text the block shows. */
+  source: string;
+  /** The widget that draws the block. */
+  widget: WidgetType;
+}
+
+/** A block that was found in the document; its widget comes later. */
+type FoundBlock = Omit<Block, "widget">;
+
+/** The blocks of the document and the decorations that draw them. */
+interface Blocks {
+  /** Every block of the document, in the order they appear. */
+  all: Block[];
+  /** The blocks that are drawn right now. */
+  decorations: DecorationSet;
+}
+
+const blocks = StateField.define<Blocks>({
+  create: (state) => {
+    const all = collectBlocks(state, []);
+    return { all, decorations: drawBlocks(all, state) };
   },
-  provide: (field) => EditorView.decorations.from(field),
+  update(value, tr) {
+    if (tr.docChanged || syntaxTree(tr.startState) !== syntaxTree(tr.state)) {
+      const all = collectBlocks(tr.state, value.all);
+      return { all, decorations: drawBlocks(all, tr.state) };
+    }
+    if (tr.selection) {
+      // The blocks themselves did not change; only which ones are drawn.
+      return { all: value.all, decorations: drawBlocks(value.all, tr.state) };
+    }
+    return value;
+  },
+  provide: (field) => EditorView.decorations.compute([field], (state) => state.field(field).decorations),
 });
 
 /**
@@ -418,7 +475,7 @@ function enterBlock(forward: boolean) {
     if (!range.empty || state.selection.ranges.length > 1) return false;
     const target = view.moveVertically(range, forward);
     let block: { from: number; to: number; table: boolean } | null = null;
-    state.field(blocks).between(Math.min(range.head, target.head), Math.max(range.head, target.head), (from, to, deco) => {
+    state.field(blocks).decorations.between(Math.min(range.head, target.head), Math.max(range.head, target.head), (from, to, deco) => {
       if (forward ? from <= range.head : to >= range.head) return;
       // Down takes the first block on the way, up the last one.
       block = { from, to, table: deco.spec.widget instanceof TableWidget };

@@ -5,7 +5,7 @@
   import { api, type RenderedNote } from "../../api";
   import type { FileViewProps } from "../types";
   import Properties from "./Properties.svelte";
-  import { applyChange } from "./frontmatter";
+  import { applyChange, parseFrontmatter } from "./frontmatter";
   import { highlightCodeBlocks } from "./codeHighlight";
   import { embedImage, isImage, parseEmbed } from "../../attachments";
 
@@ -14,6 +14,10 @@
   let rendered = $state<RenderedNote | null>(null);
   let failed = $state(false);
   let prose = $state<HTMLElement | null>(null);
+  /** The text of the note without the properties, as it was shown last. */
+  let lastBody = $state<string | undefined>();
+  /** The render that is running, so an older one does not overwrite a newer. */
+  let running: { stale: boolean } | undefined;
 
   // Code blocks are colored after the HTML is in place; `{@html}` replaces
   // them on every render, so this runs again for each new HTML.
@@ -33,20 +37,30 @@
 
   $effect(() => {
     const text = content;
-    let stale = false;
+    const body = bodyOf(text);
+    // Only the properties changed: the text of the note stays as it is, so
+    // it is not rendered again.
+    if (body === lastBody) return;
+    lastBody = body;
+    if (running) running.stale = true;
+    const run = { stale: false };
+    running = run;
     failed = false;
     void api.renderMarkdown(text).then(
       (r) => {
-        if (!stale) rendered = r;
+        if (!run.stale) rendered = r;
       },
       () => {
-        if (!stale) failed = true;
+        if (!run.stale) failed = true;
       },
     );
-    return () => {
-      stale = true;
-    };
   });
+
+  /** The part of the note that is shown as text; the properties are shown by themselves. */
+  function bodyOf(text: string): string {
+    const fm = parseFrontmatter(text);
+    return fm ? text.slice(fm.to + fm.eol.length) : text;
+  }
 
   /** Wikilinks and links to other notes open in the app, everything else stays. */
   function handleClick(event: MouseEvent) {

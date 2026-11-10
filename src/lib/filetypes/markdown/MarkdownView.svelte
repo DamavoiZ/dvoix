@@ -14,6 +14,10 @@
 
   let host: HTMLDivElement | undefined = $state();
   let view: EditorView | undefined = $state();
+  /** The text the editor last produced, so it is not put into it again. */
+  let editorText = $state<string | undefined>();
+  /** Whether the file uses Windows line endings; decided once per note. */
+  let crlf = false;
 
   /** How the note is shown: reading view, live preview or markdown source. */
   const mode = $derived(settings.app.viewMode);
@@ -36,10 +40,15 @@
     }
     if (!host || view) return;
     const doc = untrack(() => content);
+    crlf = doc.includes("\r\n");
     view = createMarkdownEditor({
       parent: host,
       doc,
-      onchange: (doc) => onchange(withLineEndings(doc)),
+      onchange: (doc) => {
+        const text = withLineEndings(doc);
+        editorText = text;
+        onchange(text);
+      },
       onlink: (target) => onopen(target),
       extensions,
     });
@@ -60,8 +69,12 @@
   });
 
   // The file was reloaded from disk (external edit): show the new content.
+  // The text the editor itself produced is skipped, so a keystroke does not
+  // copy the whole note twice.
   $effect(() => {
-    if (view) setDoc(view, content);
+    const text = content;
+    if (!view || text === editorText) return;
+    setDoc(view, text);
   });
 
   // Another panel (e.g. tasks) asked to show a line of this file.
@@ -74,7 +87,7 @@
 
   /** Gives an edited note back the line endings of the file, so only the edited lines change on disk. */
   function withLineEndings(doc: string): string {
-    return content.includes("\r\n") ? doc.replace(/\n/g, "\r\n") : doc;
+    return crlf ? doc.replace(/\n/g, "\r\n") : doc;
   }
 
   function showRequestedLine() {
