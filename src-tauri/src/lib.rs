@@ -124,7 +124,8 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            commands::last_vault,            commands::open_vault,
+            commands::last_vault,
+            commands::open_vault,
             commands::close_vault,
             commands::list_entries,
             commands::list_hidden_entries,
@@ -212,7 +213,10 @@ mod tests {
             let guard = state.workspace.lock().unwrap();
             assert!(guard.is_some());
             drop(guard);
-            ws.vault.read("note.md").map(|_| ()).map_err(|e| e.to_string())
+            ws.vault
+                .read("note.md")
+                .map(|_| ())
+                .map_err(|e| e.to_string())
         })
         .unwrap();
     }

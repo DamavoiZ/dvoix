@@ -74,7 +74,10 @@ fn main() {
     let mut index = Index::for_vault(&vault).expect("the index opens");
 
     let (elapsed, entries) = time(|| vault.list().expect("the vault is listed"));
-    row(&format!("list the vault ({} entries)", entries.len()), elapsed);
+    row(
+        &format!("list the vault ({} entries)", entries.len()),
+        elapsed,
+    );
 
     let (elapsed, indexed) = time(|| index.rebuild(&vault).expect("the index builds"));
     println!("{indexed} notes indexed\n");
@@ -132,7 +135,11 @@ fn main() {
 
     let (elapsed, graph) = time(|| index.graph().expect("the graph is read"));
     row(
-        &format!("graph ({} notes, {} links)", graph.notes.len(), graph.links.len()),
+        &format!(
+            "graph ({} notes, {} links)",
+            graph.notes.len(),
+            graph.links.len()
+        ),
         elapsed,
     );
 

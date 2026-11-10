@@ -2,9 +2,9 @@
 //! sync tool, git) show up in the app right away.
 
 use std::path::Path;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
-use std::sync::Arc;
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
@@ -320,7 +320,9 @@ mod tests {
                 std::thread::sleep(Duration::from_millis(50));
             }
         });
-        let first = rx.recv_timeout(Duration::from_secs(2)).expect("no batch while changes kept coming");
+        let first = rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("no batch while changes kept coming");
         assert!(!first.is_empty());
         feeder.join().unwrap();
     }
