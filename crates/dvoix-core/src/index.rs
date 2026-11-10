@@ -5,6 +5,7 @@
 //! (If search ever outgrows FTS5, `tantivy` can replace that part without
 //! touching the rest.)
 
+use std::borrow::Cow;
 use std::path::Path;
 
 use rusqlite::{Connection, params};
@@ -17,7 +18,7 @@ use crate::tasks::{self, Task};
 use crate::vault::{Vault, VaultEntry};
 
 /// Bump this when the schema changes; an outdated index is rebuilt.
-const SCHEMA_VERSION: i64 = 2;
+const SCHEMA_VERSION: i64 = 3;
 
 pub struct Index {
     conn: Connection,
@@ -102,7 +103,14 @@ pub struct TagCount {
 pub fn is_indexable(path: &str) -> bool {
     // Hidden folders stay out even when a note in them is opened and saved
     // (the "Hidden files" plugin can show them).
-    !Vault::is_ignored(path) && path.to_lowercase().ends_with(".md")
+    if Vault::is_ignored(path) {
+        return false;
+    }
+    // Only the extension is compared, so the whole path is not lower-cased.
+    let Some((_, ext)) = path.rsplit_once('.') else {
+        return false;
+    };
+    ext.eq_ignore_ascii_case("md")
 }
 
 impl Index {
@@ -147,18 +155,21 @@ impl Index {
                  frontmatter TEXT NOT NULL,
                  modified INTEGER NOT NULL
              );
+             CREATE INDEX IF NOT EXISTS notes_nocase ON notes(path COLLATE NOCASE);
              CREATE TABLE IF NOT EXISTS tags (
                  path TEXT NOT NULL,
                  tag TEXT NOT NULL
              );
              CREATE INDEX IF NOT EXISTS tags_tag ON tags(tag);
              CREATE INDEX IF NOT EXISTS tags_path ON tags(path);
+             CREATE INDEX IF NOT EXISTS tags_nocase ON tags(path COLLATE NOCASE);
              CREATE TABLE IF NOT EXISTS links (
                  source TEXT NOT NULL,
                  target TEXT NOT NULL
              );
              CREATE INDEX IF NOT EXISTS links_target ON links(target);
              CREATE INDEX IF NOT EXISTS links_source ON links(source);
+             CREATE INDEX IF NOT EXISTS links_nocase ON links(source COLLATE NOCASE);
              CREATE TABLE IF NOT EXISTS tasks (
                  path TEXT NOT NULL,
                  line INTEGER NOT NULL,
@@ -170,6 +181,7 @@ impl Index {
                  indent INTEGER NOT NULL
              );
              CREATE INDEX IF NOT EXISTS tasks_path ON tasks(path);
+             CREATE INDEX IF NOT EXISTS tasks_nocase ON tasks(path COLLATE NOCASE);
              CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(path UNINDEXED, title, body);
              PRAGMA user_version = {SCHEMA_VERSION};"
         ))?;
@@ -218,10 +230,15 @@ impl Index {
         let tx = self.conn.transaction()?;
         delete_note(&tx, rel)?;
         let prefix = format!("{rel}/%");
+        // The FTS rows go first: their rowids come from the notes below the
+        // folder, which are deleted right after.
+        tx.execute(
+            "DELETE FROM notes_fts WHERE rowid IN (SELECT rowid FROM notes WHERE path LIKE ?1)",
+            [&prefix],
+        )?;
         tx.execute("DELETE FROM notes WHERE path LIKE ?1", [&prefix])?;
         tx.execute("DELETE FROM tags WHERE path LIKE ?1", [&prefix])?;
         tx.execute("DELETE FROM links WHERE source LIKE ?1", [&prefix])?;
-        tx.execute("DELETE FROM notes_fts WHERE path LIKE ?1", [&prefix])?;
         tx.execute("DELETE FROM tasks WHERE path LIKE ?1", [&prefix])?;
         tx.commit()?;
         Ok(())
@@ -414,6 +431,25 @@ impl Index {
             .collect::<std::result::Result<_, _>>()?;
         Ok(notes)
     }
+
+    /// The number of notes and the number of search rows, so the tests can
+    /// see whether the two tables stay in step.
+    #[cfg(test)]
+    fn counts(&self) -> Result<(i64, i64)> {
+        let notes = self
+            .conn
+            .query_row("SELECT count(*) FROM notes", [], |r| r.get(0))?;
+        let fts = self
+            .conn
+            .query_row("SELECT count(*) FROM notes_fts", [], |r| r.get(0))?;
+        Ok((notes, fts))
+    }
+
+    /// The database connection, for the tests that look at the query plan.
+    #[cfg(test)]
+    fn conn(&self) -> &Connection {
+        &self.conn
+    }
 }
 
 fn row_to_summary(r: &rusqlite::Row) -> rusqlite::Result<NoteSummary> {
@@ -426,10 +462,18 @@ fn row_to_summary(r: &rusqlite::Row) -> rusqlite::Result<NoteSummary> {
 }
 
 fn delete_note(tx: &rusqlite::Transaction, rel: &str) -> rusqlite::Result<()> {
+    // `path` is UNINDEXED in the FTS table, so a delete by path would scan
+    // the whole table. The rowid of the note is looked up first and used to
+    // delete the FTS row directly.
+    let rowid: Option<i64> = tx
+        .query_row("SELECT rowid FROM notes WHERE path = ?1", [rel], |r| r.get(0))
+        .ok();
+    if let Some(rowid) = rowid {
+        tx.execute("DELETE FROM notes_fts WHERE rowid = ?1", [rowid])?;
+    }
     tx.execute("DELETE FROM notes WHERE path = ?1", [rel])?;
     tx.execute("DELETE FROM tags WHERE path = ?1", [rel])?;
     tx.execute("DELETE FROM links WHERE source = ?1", [rel])?;
-    tx.execute("DELETE FROM notes_fts WHERE path = ?1", [rel])?;
     tx.execute("DELETE FROM tasks WHERE path = ?1", [rel])?;
     Ok(())
 }
@@ -449,6 +493,9 @@ fn write_note(
             entry.modified as i64
         ],
     )?;
+    // The FTS row carries the rowid of the note, so both can be deleted and
+    // found again without a scan (see `delete_note`).
+    let rowid = tx.last_insert_rowid();
     for tag in &note.tags {
         tx.execute(
             "INSERT INTO tags (path, tag) VALUES (?1, ?2)",
@@ -456,14 +503,18 @@ fn write_note(
         )?;
     }
     for link in &note.links {
+        // Link targets are stored lower-cased, so backlinks find them whatever
+        // case they were written in. Most are already lower-case; then no
+        // copy is needed.
+        let lower = lower_case(link);
         tx.execute(
             "INSERT INTO links (source, target) VALUES (?1, ?2)",
-            params![entry.path, link.to_lowercase()],
+            params![entry.path, lower.as_ref()],
         )?;
     }
     tx.execute(
-        "INSERT INTO notes_fts (path, title, body) VALUES (?1, ?2, ?3)",
-        params![entry.path, note.title, note.text],
+        "INSERT INTO notes_fts (rowid, path, title, body) VALUES (?1, ?2, ?3, ?4)",
+        params![rowid, entry.path, note.title, note.text],
     )?;
     for t in tasks {
         tx.execute(
@@ -487,6 +538,17 @@ fn write_note(
 pub fn stem(rel: &str) -> &str {
     let name = rel.rsplit('/').next().unwrap_or(rel);
     name.rsplit_once('.').map(|(s, _)| s).unwrap_or(name)
+}
+
+/// The lower-case form of `text`, without a copy when it is already
+/// lower-case ASCII. Non-ASCII text is always copied, because `to_lowercase`
+/// knows more characters than ASCII does.
+fn lower_case(text: &str) -> Cow<'_, str> {
+    if text.is_ascii() && !text.bytes().any(|b| b.is_ascii_uppercase()) {
+        Cow::Borrowed(text)
+    } else {
+        Cow::Owned(text.to_lowercase())
+    }
 }
 
 /// Turns user input into a safe FTS5 query: every word becomes a quoted
@@ -643,5 +705,177 @@ mod tests {
 
         index.remove("projects").unwrap();
         assert!(index.backlinks("beta.md").unwrap().is_empty());
+    }
+
+    /// A note that was deleted must not be found by the search any more.
+    #[test]
+    fn a_deleted_note_leaves_no_search_hit() {
+        let (_dir, vault) = sample_vault();
+        let mut index = Index::for_vault(&vault).unwrap();
+        index.rebuild(&vault).unwrap();
+        assert_eq!(index.search("schedule", 10).unwrap().len(), 1);
+
+        index.remove("beta.md").unwrap();
+        assert!(index.search("schedule", 10).unwrap().is_empty());
+        assert_eq!(index.counts().unwrap(), (1, 1));
+    }
+
+    /// A note that was changed must be found by its new text only.
+    #[test]
+    fn a_changed_note_is_found_only_by_its_new_text() {
+        let (_dir, vault) = sample_vault();
+        let mut index = Index::for_vault(&vault).unwrap();
+        index.rebuild(&vault).unwrap();
+        assert_eq!(index.search("schedule", 10).unwrap().len(), 1);
+
+        vault
+            .write("beta.md", "# Beta\nA #project with a timetable.")
+            .unwrap();
+        index.update(&vault, "beta.md").unwrap();
+
+        assert!(index.search("schedule", 10).unwrap().is_empty());
+        let hits = index.search("timetable", 10).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].path, "beta.md");
+        assert_eq!(index.counts().unwrap(), (2, 2));
+    }
+
+    /// Removing a folder takes every note below it out of the index, the
+    /// search index included.
+    #[test]
+    fn removing_a_folder_takes_all_of_its_notes_out() {
+        let (_dir, vault) = sample_vault();
+        vault.write("projects/gamma.md", "# Gamma\nA schedule.").unwrap();
+        vault
+            .write("projects/deep/delta.md", "# Delta\nAnother schedule.")
+            .unwrap();
+        let mut index = Index::for_vault(&vault).unwrap();
+        index.rebuild(&vault).unwrap();
+        assert_eq!(index.counts().unwrap(), (4, 4));
+
+        index.remove("projects").unwrap();
+
+        // Only `beta.md` is left; it still has its own schedule.
+        assert_eq!(index.counts().unwrap(), (1, 1));
+        let hits = index.search("schedule", 10).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].path, "beta.md");
+        assert_eq!(index.notes_with_tag("project").unwrap().len(), 1);
+        assert!(index.backlinks("beta.md").unwrap().is_empty());
+    }
+
+    /// The search table and the notes table must stay in step: every note
+    /// has exactly one search row and no search row is left over.
+    #[test]
+    fn the_search_table_stays_in_step_with_the_notes() {
+        let (_dir, vault) = sample_vault();
+        vault.write("projects/gamma.md", "# Gamma\nA schedule.").unwrap();
+        let mut index = Index::for_vault(&vault).unwrap();
+        index.rebuild(&vault).unwrap();
+
+        vault.write("beta.md", "# Beta\nChanged text.").unwrap();
+        index.update(&vault, "beta.md").unwrap();
+        index.remove("projects").unwrap();
+        vault.write("new.md", "# New\nA new note.").unwrap();
+        index.update(&vault, "new.md").unwrap();
+
+        assert_eq!(index.counts().unwrap(), (2, 2));
+        assert_eq!(index.conn().query_row("PRAGMA integrity_check", [], |r| r.get::<_, String>(0)).unwrap(), "ok");
+    }
+
+    /// The delete of a search row must not walk the whole table: it looks the
+    /// rowid up and deletes that row. A full scan shows up in the plan as
+    /// `INDEX 0:`, the lookup by rowid as `INDEX 0:=`.
+    #[test]
+    fn the_search_delete_uses_the_rowid() {
+        let (_dir, vault) = sample_vault();
+        let mut index = Index::for_vault(&vault).unwrap();
+        index.rebuild(&vault).unwrap();
+
+        let mut by_rowid = index
+            .conn()
+            .prepare("EXPLAIN QUERY PLAN DELETE FROM notes_fts WHERE rowid = ?1")
+            .unwrap();
+        let fast: String = by_rowid.query_row([1i64], |r| r.get(3)).unwrap();
+        assert!(
+            fast.contains("INDEX 0:="),
+            "the search delete still walks the table: {fast}"
+        );
+
+        let mut by_path = index
+            .conn()
+            .prepare("EXPLAIN QUERY PLAN DELETE FROM notes_fts WHERE path = ?1")
+            .unwrap();
+        let slow: String = by_path.query_row(["x.md"], |r| r.get(3)).unwrap();
+        assert!(
+            !slow.contains("INDEX 0:="),
+            "the rowid lookup is not faster than the path lookup: {slow}"
+        );
+    }
+
+    /// The prefix delete of a folder must not scan the whole table either.
+    #[test]
+    fn the_folder_delete_uses_the_path_index() {
+        let (_dir, vault) = sample_vault();
+        let mut index = Index::for_vault(&vault).unwrap();
+        index.rebuild(&vault).unwrap();
+
+        for table in ["notes", "tags", "links", "tasks"] {
+            let column = if table == "links" { "source" } else { "path" };
+            let sql = format!("EXPLAIN QUERY PLAN DELETE FROM {table} WHERE {column} LIKE ?1");
+            let mut plan = index.conn().prepare(&sql).unwrap();
+            let detail: String = plan.query_row(["x/%"], |r| r.get(3)).unwrap();
+            assert!(
+                !detail.contains(&format!("SCAN {table}")),
+                "the delete on {table} still scans the table: {detail}"
+            );
+        }
+    }
+
+    /// Only markdown files belong in the index.
+    #[test]
+    fn only_markdown_files_are_indexable() {
+        assert!(is_indexable("note.md"));
+        assert!(is_indexable("folder/note.MD"));
+        assert!(is_indexable("folder.with.dots/note.md"));
+        assert!(!is_indexable("note.txt"));
+        assert!(!is_indexable("note.markdown"));
+        assert!(!is_indexable("folder/note.md.txt"));
+        assert!(!is_indexable("folder/no-extension"));
+        assert!(!is_indexable(".hidden/note.md"));
+    }
+
+    /// An index of an older version is thrown away and built again, because
+    /// the search rows of the old version have no rowid of their note.
+    #[test]
+    fn an_index_of_an_older_version_is_built_again() {
+        let (_dir, vault) = sample_vault();
+        let path = vault.app_dir().join("index.sqlite");
+
+        // An index as the version before the rowid of the note was used.
+        {
+            let old = Connection::open(&path).unwrap();
+            old.execute_batch(
+                "CREATE TABLE notes (path TEXT PRIMARY KEY, title TEXT NOT NULL,
+                                     frontmatter TEXT NOT NULL, modified INTEGER NOT NULL);
+                 CREATE VIRTUAL TABLE notes_fts USING fts5(path UNINDEXED, title, body);
+                 INSERT INTO notes VALUES ('old.md', 'Old', '{}', 1);
+                 INSERT INTO notes_fts (path, title, body) VALUES ('old.md', 'Old', 'old text');
+                 PRAGMA user_version = 2;",
+            )
+            .unwrap();
+        }
+
+        let mut index = Index::open(&path).unwrap();
+        assert_eq!(
+            index.conn().query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0)).unwrap(),
+            SCHEMA_VERSION
+        );
+
+        // The old note is gone and the vault is indexed from scratch.
+        index.rebuild(&vault).unwrap();
+        assert_eq!(index.counts().unwrap(), (2, 2));
+        assert!(index.search("old text", 10).unwrap().is_empty());
+        assert_eq!(index.search("schedule", 10).unwrap().len(), 1);
     }
 }
