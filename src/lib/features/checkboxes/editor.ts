@@ -37,7 +37,9 @@ function buildDecorations(view: EditorView): DecorationSet {
         const checked = view.state.doc.sliceString(node.from + 1, node.to - 1).trim() !== "";
         builder.add(node.from, node.to, Decoration.replace({ widget: new CheckboxWidget(checked) }));
         const line = view.state.doc.lineAt(node.from);
-        if (checked && node.to < line.to) builder.add(node.to, line.to, Decoration.mark({ class: "cm-task-done" }));
+        // The space after the box is not struck through.
+        const start = view.state.doc.sliceString(node.to, node.to + 1) === " " ? node.to + 1 : node.to;
+        if (checked && start < line.to) builder.add(start, line.to, Decoration.mark({ class: "cm-task-done" }));
       },
     });
   }
@@ -78,14 +80,8 @@ const checkboxClicks = EditorView.domEventHandlers({
 });
 
 const theme = EditorView.theme({
-  ".cm-task-checkbox": {
-    width: "0.95em",
-    height: "0.95em",
-    margin: "0 0.15em",
-    verticalAlign: "-0.1em",
-    accentColor: "#8b5cf6",
-    cursor: "pointer",
-  },
+  // The box itself is drawn by the checkbox rule in `src/app.css`.
+  ".cm-task-checkbox": { margin: "0 0.35em 0 0.1em" },
   ".cm-task-done": { color: "#71717a", textDecoration: "line-through" },
 });
 

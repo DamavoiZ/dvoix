@@ -15,7 +15,7 @@ import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import type { MarkdownConfig } from "@lezer/markdown";
 import { languages } from "@codemirror/language-data";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
-import { tags as t } from "@lezer/highlight";
+import { classHighlighter, styleTags, tags as t } from "@lezer/highlight";
 import { livePreview } from "./livePreview";
 import { parseFrontmatter } from "./frontmatter";
 import { openLink } from "./propertiesWidget.svelte";
@@ -46,6 +46,14 @@ const frontmatter: MarkdownConfig = {
       },
     },
   ],
+};
+
+/**
+ * Code blocks get the colors of their language, not the color of inline code:
+ * the text of a block without a (known) language stays plain.
+ */
+const plainCodeBlocks: MarkdownConfig = {
+  props: [styleTags({ "FencedCode/CodeText CodeBlock/CodeText": t.content })],
 };
 
 /** Highlights [[wikilinks]] so they look clickable. */
@@ -98,9 +106,6 @@ const highlight = HighlightStyle.define([
   { tag: t.monospace, fontFamily: "var(--font-mono)", color: "#fbbf24" },
   { tag: t.quote, color: "#a1a1aa", fontStyle: "italic" },
   { tag: [t.processingInstruction, t.meta, t.contentSeparator], color: "#71717a" },
-  { tag: t.keyword, color: "#f472b6" },
-  { tag: t.string, color: "#86efac" },
-  { tag: t.comment, color: "#71717a" },
 ]);
 
 const theme = EditorView.theme(
@@ -161,8 +166,11 @@ export function createMarkdownEditor({ parent, doc, onchange, onlink, extensions
         highlightActiveLine(),
         EditorView.lineWrapping,
         keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
-        markdown({ base: markdownLanguage, codeLanguages: languages, extensions: [frontmatter] }),
+        markdown({ base: markdownLanguage, codeLanguages: languages, extensions: [frontmatter, plainCodeBlocks] }),
         syntaxHighlighting(highlight),
+        // The code inside fenced blocks: `tok-*` classes, colored in `src/app.css`
+        // and shared with the reading view (`codeHighlight.ts`).
+        syntaxHighlighting(classHighlighter),
         theme,
         wikilinks,
         openLink.of(onlink),

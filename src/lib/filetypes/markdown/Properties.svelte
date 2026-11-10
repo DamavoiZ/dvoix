@@ -176,7 +176,7 @@
           {#if prop.kind === "boolean"}
             <input
               type="checkbox"
-              class="checkbox mx-1.5 my-1"
+              class="mx-1.5 my-1"
               checked={prop.value === "true"}
               aria-label={prop.key}
               onchange={() => toggle(prop)}
@@ -333,8 +333,5 @@
     text-decoration: underline;
     text-decoration-color: color-mix(in srgb, var(--color-violet-400) 40%, transparent);
     cursor: pointer;
-  }
-  .checkbox {
-    accent-color: var(--color-violet-500);
   }
 </style>

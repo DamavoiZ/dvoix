@@ -116,6 +116,7 @@ function collectSyntax(
   bullets: Hide[],
   rules: Hide[],
   lineClasses: { from: number; class: string }[],
+  marks: { from: number; to: number; class: string }[],
 ): void {
   /** Hides a marker and the space behind it. */
   const hide = (from: number, to: number, withSpace = false) => {
@@ -150,14 +151,25 @@ function collectSyntax(
           hide(from, to);
           break;
         case "CodeInfo":
-          hide(from, to);
+          // The language stays as a small label on the first line of the block.
+          marks.push({ from, to, class: "cm-lp-code-info" });
           break;
         case "QuoteMark":
           hide(from, to, true);
           break;
-        case "ListMark":
-          bullets.push({ from, to, priority: 1 });
+        case "ListMark": {
+          const item = node.node.parent;
+          if (item?.parent?.name === "OrderedList") {
+            // A number stays a number, only its color changes.
+            marks.push({ from, to, class: "cm-lp-number" });
+          } else if (item?.getChild("Task")) {
+            // A task shows its checkbox instead of a bullet.
+            hide(from, to, true);
+          } else {
+            bullets.push({ from, to, priority: 1 });
+          }
           break;
+        }
         case "LinkMark":
           hide(from, to);
           break;
@@ -173,7 +185,7 @@ function collectSyntax(
           break;
         case "FencedCode":
         case "CodeBlock":
-          addLineClasses(state, lineClasses, Math.max(from, range.from), Math.min(to, range.to), "cm-lp-code");
+          addCodeLines(state, lineClasses, from, to, range);
           break;
         case "Frontmatter":
           addLineClasses(state, lineClasses, Math.max(from, range.from), Math.min(to, range.to), "cm-lp-frontmatter");
@@ -200,6 +212,30 @@ function addLineClasses(
   }
 }
 
+/**
+ * Marks the lines of a code block, the first and last one extra, so the
+ * block is drawn as one box with rounded corners.
+ */
+function addCodeLines(
+  state: EditorState,
+  lineClasses: { from: number; class: string }[],
+  from: number,
+  to: number,
+  range: Range,
+): void {
+  const first = state.doc.lineAt(from).number;
+  // `to - 1`: a block can end after its line break.
+  const last = state.doc.lineAt(Math.max(from, to - 1)).number;
+  const start = Math.max(first, state.doc.lineAt(range.from).number);
+  const end = Math.min(last, state.doc.lineAt(range.to).number);
+  for (let n = start; n <= end; n++) {
+    let className = "cm-lp-code";
+    if (n === first) className += " cm-lp-code-first";
+    if (n === last) className += " cm-lp-code-last";
+    lineClasses.push({ from: state.doc.line(n).from, class: className });
+  }
+}
+
 /** Builds the decorations of the live preview for the current state. */
 function buildDecorations(view: EditorView): DecorationSet {
   const { state } = view;
@@ -208,10 +244,11 @@ function buildDecorations(view: EditorView): DecorationSet {
   const bullets: Hide[] = [];
   const rules: Hide[] = [];
   const lineClasses: { from: number; class: string }[] = [];
+  const marks: { from: number; to: number; class: string }[] = [];
 
   for (const range of visibleLines(view)) {
     collectWikilinks(state, range, hides);
-    collectSyntax(state, range, hides, bullets, rules, lineClasses);
+    collectSyntax(state, range, hides, bullets, rules, lineClasses, marks);
   }
 
   // Ranges must not overlap. The first one wins, and a longer range comes
@@ -238,6 +275,11 @@ function buildDecorations(view: EditorView): DecorationSet {
   for (const r of rules) {
     if (active.has(state.doc.lineAt(r.from).number)) continue;
     replaces.push({ from: r.from, to: r.to, deco: Decoration.replace({ widget: new RuleWidget() }) });
+  }
+
+  for (const m of marks) {
+    if (active.has(state.doc.lineAt(m.from).number)) continue;
+    replaces.push({ from: m.from, to: m.to, deco: Decoration.mark({ class: m.class }) });
   }
 
   const lines: { from: number; to: number; deco: Decoration }[] = [];

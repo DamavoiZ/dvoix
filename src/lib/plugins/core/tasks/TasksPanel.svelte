@@ -141,7 +141,7 @@
           >
             <input
               type="checkbox"
-              class="mt-1 shrink-0 cursor-pointer accent-violet-500"
+              class="mt-1 shrink-0"
               checked={task.done}
               aria-label={task.done ? "Mark as open" : "Mark as done"}
               onclick={(e) => {

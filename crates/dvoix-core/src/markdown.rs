@@ -215,12 +215,21 @@ pub fn render_body(body: &str) -> String {
     // pulldown-cmark splits text at `[`, `#` and friends, so a wikilink can be
     // spread over several text events. They are collected before scanning.
     let mut buffer = String::new();
+    // Inside a code block `[[x]]` is code, not a link, and the reading view
+    // highlights the block from its plain text.
+    let mut in_code = false;
 
     for event in Parser::new_ext(body, options) {
         match event {
+            Event::Text(text) if in_code => events.push(Event::Text(text)),
             Event::Text(text) => buffer.push_str(&text),
             other => {
                 flush_text(&mut events, &mut buffer);
+                match &other {
+                    Event::Start(Tag::CodeBlock(_)) => in_code = true,
+                    Event::End(TagEnd::CodeBlock) => in_code = false,
+                    _ => {}
+                }
                 match other {
                     // Raw HTML from a note is shown as text. `push_html` escapes
                     // it, so nothing from a note can run in the app.
@@ -429,6 +438,14 @@ mod tests {
     fn does_not_link_wikilinks_in_code() {
         let html = render_body("`[[Beta]]`");
         assert!(!html.contains("wikilink"));
+    }
+
+    #[test]
+    fn keeps_code_blocks_as_plain_text_with_their_language() {
+        let html = render_body("```rust\nlet a = \"[[Beta]]\";\n```\n");
+        assert!(html.contains(r#"<code class="language-rust">"#));
+        assert!(!html.contains("wikilink"));
+        assert!(html.contains("[[Beta]]"));
     }
 
     #[test]
