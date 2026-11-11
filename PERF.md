@@ -355,9 +355,12 @@ and after this round:
 
 **Renaming a folder only moves paths.** The rename deleted the old rows and
 read, parsed and indexed every note of the folder again, although only the
-paths change. Now the paths are moved with SQL updates. Names with `%` or `_`
-are escaped, and a rename that only changes the case works too. A test
-compares the result with a full rebuild of the same vault.
+paths change. Now the paths are moved with SQL updates; the notes below the
+destination are read only when the index does not know them yet (a rename
+out of a hidden folder), and known notes are skipped by their moment of
+change and size. Names with `%` or `_` are escaped, and a rename that only
+changes the case works too. A test compares the result with a full rebuild
+of the same vault.
 The search table holds no path of its own (see below), so a rename does not
 reach it at all. With 20 000 notes in the index the rename of a folder of 100
 notes costs 3.9 ms; while the table still carried a copy of every path the same
@@ -373,8 +376,9 @@ every task of the note to find one line; only that line is parsed now.
 **The watcher does less per event.** The kind of an event is decided before
 the file is asked for its metadata, removals need no metadata at all, and a
 batch keeps only the last change per path, but a Created survives a
-following Modified (a folder moved into the vault is still new, its notes
-must be indexed). The index reuses the metadata the watcher already
+following Modified and a Removed starts the story over (a folder moved
+into the vault is still new, its notes must be indexed; the index merges a
+raw batch by the same rules). The index reuses the metadata the watcher already
 collected instead of asking the file system again.
 
 **SQLite is tuned for a cache.** `synchronous=NORMAL` (the index can always
