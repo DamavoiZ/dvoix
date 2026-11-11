@@ -325,9 +325,12 @@ backlinks footer lists 50 links and opens the rest behind "and N more".
 table DOM again; now rows whose text did not change keep their DOM (and the
 cell being typed in). Growing a table by a paste re-reads only the changed
 lines instead of the whole table for every added row. Dragging a row or
-column measured every grip on every mouse move (`getBoundingClientRect`
-flushes the layout each time); the positions are measured once per drag, and
-the drop marks are only written when the drop place changes.
+column finds the drop place by measuring the grips on every mouse move, but
+the scan stops at the first grip below the pointer and the drop marks are
+only written when the drop place changes, so the layout stays clean. The
+positions are measured live (and again on mouse up) on purpose: the table
+can scroll during a drag, and a snapshot taken at the drag start would then
+name a row the scrolled distance away from the mouse.
 
 **Opening the vault reads in parallel.** The settings files, `store.json`
 and the app version, and a store plugin's `main.js` and `styles.css` do not
