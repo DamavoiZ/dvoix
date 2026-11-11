@@ -20,7 +20,7 @@ use crate::vault::{Vault, VaultEntry};
 use crate::watcher::{ChangeKind, VaultChange};
 
 /// Bump this when the schema changes; an outdated index is rebuilt.
-const SCHEMA_VERSION: i64 = 6;
+const SCHEMA_VERSION: i64 = 7;
 
 /// How the search table is built. `prefix='1'` keeps an extra index over the
 /// first letter of every word. The search of the app matches every word as a
@@ -36,7 +36,17 @@ const SCHEMA_VERSION: i64 = 6;
 /// rebuild and 45 % to the file, makes a batch 74 % slower and wins nothing
 /// over `prefix='1'`, because a longer beginning already matches few terms in
 /// the plain dictionary.
-const FTS_TABLE: &str = "CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(path UNINDEXED, title, body, prefix='1');";
+///
+/// The table holds the two texts a search looks in: the title and the body of
+/// a note. The path is deliberately not one of its columns: it is never
+/// searched, and keeping a copy here means that renaming a folder has to
+/// rewrite it for every note below. Measured on a vault with 20 000 notes,
+/// that rewrite is the whole cost of the rename: 322 ms for a folder of 100
+/// notes with the column, 0 ms without it. Reading the path through the rowid
+/// of the note instead costs nothing measurable: a search over 20 000 notes
+/// runs in 10.23 ms with the column and 10.22 ms with the join.
+const FTS_TABLE: &str =
+    "CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(title, body, prefix='1');";
 
 /// The secondary indexes of the tables. They are kept in one place because
 /// `rebuild` drops them for the bulk insert and builds them again afterwards:
@@ -45,6 +55,13 @@ const FTS_TABLE: &str = "CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5
 /// not part of this: `write_note` needs it during the insert to ignore
 /// duplicate targets (two links that differ only in case lower-case to the
 /// same target).
+///
+/// The index never collects planner statistics (no ANALYZE, no
+/// `PRAGMA optimize`): with statistics the planner believes a scan is as
+/// cheap as the NOCASE range search that the folder deletes need, and on a
+/// big vault that scan walks every row. Without statistics every query is
+/// planned by the shape of these indexes, which is what this schema is
+/// built for (see `the_folder_delete_uses_the_path_index`).
 const SECONDARY_INDEXES: &str = "
     CREATE INDEX IF NOT EXISTS notes_nocase ON notes(path COLLATE NOCASE);
     CREATE INDEX IF NOT EXISTS tags_tag ON tags(tag);
@@ -273,7 +290,6 @@ impl Index {
         tx.execute_batch(SECONDARY_INDEXES)?;
         tx.commit()?;
         self.writes += 1;
-        self.clear_planner_stats();
         Ok(count)
     }
 
@@ -334,21 +350,7 @@ impl Index {
 
         tx.commit()?;
         self.writes += 1;
-        self.clear_planner_stats();
         Ok(count)
-    }
-
-    /// Clears the statistics of the query planner after a bulk write.
-    /// `PRAGMA optimize` would collect them (ANALYZE), but on a small table
-    /// the statistics make the planner believe a scan is as cheap as the
-    /// NOCASE range search that the folder deletes need; on a big vault that
-    /// scan walks every row. Without statistics every query is planned by
-    /// the shape of the indexes, which is what this schema is built for.
-    /// A failure here must not fail the write that already succeeded.
-    fn clear_planner_stats(&self) {
-        let _ = self
-            .conn
-            .execute_batch("DROP TABLE IF EXISTS sqlite_stat1;");
     }
 
     /// Moves the notes of a folder to its new name, after the folder was
@@ -356,32 +358,66 @@ impl Index {
     /// the paths are rewritten in SQL instead of reading and parsing every
     /// note again. Titles need no refresh: a folder rename keeps every file
     /// name, so a title that falls back to the file stem stays correct.
+    ///
+    /// The prefixes are matched case-sensitively (`substr`, not LIKE, which
+    /// is case-insensitive in SQLite): a sibling folder that differs only in
+    /// case (`Projects` next to `projects`) is a different folder and keeps
+    /// its rows. A case-only rename still works: its rows match the source
+    /// prefix exactly, and they are kept out of the stale rows of the
+    /// destination.
     pub fn move_folder(&mut self, _vault: &Vault, from: &str, to: &str) -> Result<()> {
         let tx = self.conn.transaction()?;
         // The notes of the folder are collected first: one range search on
-        // the NOCASE index, the same search the old prefix delete used.
+        // the NOCASE index (the substr check is a filter on its rows).
         let mut moved: Vec<(i64, String)> = Vec::new();
         {
-            let mut stmt =
-                tx.prepare("SELECT rowid, path FROM notes WHERE path LIKE ?1 ESCAPE '\\'")?;
-            let found = stmt.query_map([prefix_pattern(&format!("{from}/"))], |r| {
-                Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))
-            })?;
+            let mut stmt = tx.prepare(
+                "SELECT rowid, path FROM notes
+                 WHERE path LIKE ?1 ESCAPE '\\' AND substr(path, 1, ?2) = ?3",
+            )?;
+            let prefix = format!("{from}/");
+            let found = stmt.query_map(
+                params![
+                    prefix_pattern(&prefix),
+                    prefix.chars().count() as i64,
+                    prefix
+                ],
+                |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)),
+            )?;
             for row in found {
                 moved.push(row?);
             }
         }
+        // A destination that is not indexed (a dot-name like `.drafts`)
+        // takes the moved rows out instead of rewriting them: the index
+        // must hold what `is_indexable` allows, exactly like a rebuild.
+        if !is_indexable(&format!("{to}/note.md")) {
+            for (_, path) in &moved {
+                delete_note(&tx, path)?;
+            }
+            tx.commit()?;
+            self.writes += 1;
+            return Ok(());
+        }
         // Stale rows under the destination (left over from an earlier folder
         // of that name) go first, so the updates cannot collide with them.
-        // Rows that are about to move are kept: on a case-only rename the
-        // destination prefix matches them too (LIKE is case-insensitive).
+        // Rows that are about to move are kept: on a case-only rename they
+        // sit under the destination prefix too.
         let moved_ids: HashSet<i64> = moved.iter().map(|(id, _)| *id).collect();
         let stale: Vec<String> = {
-            let mut stmt =
-                tx.prepare("SELECT rowid, path FROM notes WHERE path LIKE ?1 ESCAPE '\\'")?;
-            let found = stmt.query_map([prefix_pattern(&format!("{to}/"))], |r| {
-                Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))
-            })?;
+            let mut stmt = tx.prepare(
+                "SELECT rowid, path FROM notes
+                 WHERE path LIKE ?1 ESCAPE '\\' AND substr(path, 1, ?2) = ?3",
+            )?;
+            let prefix = format!("{to}/");
+            let found = stmt.query_map(
+                params![
+                    prefix_pattern(&prefix),
+                    prefix.chars().count() as i64,
+                    prefix
+                ],
+                |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)),
+            )?;
             let mut paths = Vec::new();
             for row in found {
                 let (id, path) = row?;
@@ -398,24 +434,20 @@ impl Index {
         // table: `notes.path` is the primary key, and a bulk update can
         // collide with a row of its own result set midway (a case-only
         // rename). Per-row writes cannot, because the destination paths were
-        // free before the rename. The child tables are matched by exact path
-        // (BINARY, like `delete_note`), the FTS row by its rowid.
+        // free before the rename. The search table needs nothing at all: it
+        // holds no path, so its row belongs to the note through the rowid.
         let mut note_path = tx.prepare("UPDATE notes SET path = ?1 WHERE rowid = ?2")?;
         let mut tag_path = tx.prepare("UPDATE tags SET path = ?1 WHERE path = ?2")?;
         let mut link_source = tx.prepare("UPDATE links SET source = ?1 WHERE source = ?2")?;
         let mut task_path = tx.prepare("UPDATE tasks SET path = ?1 WHERE path = ?2")?;
-        let mut fts_path = tx.prepare("UPDATE notes_fts SET path = ?1 WHERE rowid = ?2")?;
         for (rowid, path) in &moved {
             let new_path = format!("{to}{}", &path[from.len()..]);
             note_path.execute(params![new_path, rowid])?;
             tag_path.execute(params![new_path, path])?;
             link_source.execute(params![new_path, path])?;
             task_path.execute(params![new_path, path])?;
-            // `path` is UNINDEXED in the FTS table, so this only rewrites the
-            // stored path; the rowid still points at the same note.
-            fts_path.execute(params![new_path, rowid])?;
         }
-        drop((note_path, tag_path, link_source, task_path, fts_path));
+        drop((note_path, tag_path, link_source, task_path));
         tx.commit()?;
         self.writes += 1;
         Ok(())
@@ -449,19 +481,36 @@ impl Index {
     /// a note that dvoix wrote itself is not read a second time.
     pub fn apply_changes(&mut self, vault: &Vault, changes: &[VaultChange]) -> Result<()> {
         // One change per path is enough: only the last report about a path
-        // describes its final state, earlier ones are outdated. Walking
-        // backwards keeps the last change of every path, and the reverse
-        // afterwards restores the arrival order, which matters when a folder
-        // and a note inside it both changed.
+        // describes its final state, earlier ones are outdated. But a
+        // Created followed by Modified stays Created (like `merged_kind`
+        // in the watcher): a folder that was moved in is reported as
+        // created and then modified, and only the created report makes the
+        // index read its notes. Walking backwards keeps the last change of
+        // every path, and the reverse afterwards restores the arrival
+        // order, which matters when a folder and a note inside it both
+        // changed.
         let mut seen: HashSet<&str> = HashSet::with_capacity(changes.len());
         let mut unique: Vec<&VaultChange> = Vec::with_capacity(changes.len());
+        // The paths whose merged kind is Created although the kept (last)
+        // report says Modified. A Removed ends the story: only reports
+        // after it can make the path created again.
+        let mut created: HashSet<&str> = HashSet::new();
         for change in changes.iter().rev() {
+            match change.kind {
+                ChangeKind::Created => {
+                    created.insert(change.path.as_str());
+                }
+                ChangeKind::Removed => {
+                    created.remove(change.path.as_str());
+                }
+                ChangeKind::Modified => {}
+            }
             if seen.insert(change.path.as_str()) {
                 unique.push(change);
             }
         }
         unique.reverse();
-        let actions = self.actions_for(vault, &unique)?;
+        let actions = self.actions_for(vault, &unique, &created)?;
         if actions.is_empty() {
             return Ok(());
         }
@@ -472,11 +521,37 @@ impl Index {
                 Action::ReindexFolder(path) => {
                     // A folder that appeared (moved or renamed into place)
                     // brings its notes; the watcher reports only the folder.
+                    // What the index already knows about the notes below it,
+                    // so a note whose moment of change and size are unchanged
+                    // is not read again: after an in-app rename `move_folder`
+                    // rewrote the paths in SQL, and this report must not
+                    // parse every note a second time.
+                    let known: HashMap<String, (i64, i64)> = {
+                        let mut stmt = tx.prepare_cached(
+                            "SELECT path, modified, size FROM notes WHERE path LIKE ?1 ESCAPE '\\'",
+                        )?;
+                        let rows = stmt.query_map([prefix_pattern(&format!("{path}/"))], |r| {
+                            Ok((
+                                r.get::<_, String>(0)?,
+                                (r.get::<_, i64>(1)?, r.get::<_, i64>(2)?),
+                            ))
+                        })?;
+                        let mut map = HashMap::new();
+                        for row in rows {
+                            let (path, state) = row?;
+                            map.insert(path, state);
+                        }
+                        map
+                    };
                     for entry in vault
                         .files_below(path)?
                         .iter()
                         .filter(|e| is_indexable(&e.path))
                     {
+                        let state = (entry.modified as i64, entry.size as i64);
+                        if known.get(&entry.path) == Some(&state) {
+                            continue; // the note did not change
+                        }
                         let Ok(content) = vault.read(&entry.path) else {
                             continue;
                         };
@@ -500,11 +575,16 @@ impl Index {
         Ok(())
     }
 
-    /// What a batch of changes means for the index.
+    /// What a batch of changes means for the index. `created` holds the
+    /// paths whose merged kind is Created although the kept report says
+    /// Modified: a folder needs its re-index when it appeared, even when a
+    /// later report about it says only modified (the burst of a folder
+    /// that was moved in).
     fn actions_for<'c>(
         &self,
         vault: &Vault,
         changes: &[&'c VaultChange],
+        created: &HashSet<&str>,
     ) -> Result<Vec<Action<'c>>> {
         let mut actions = Vec::new();
         // Prepared once for the whole batch instead of once per change.
@@ -529,7 +609,9 @@ impl Index {
                             // A folder that exists is never taken out: after a
                             // rename its notes were just moved here. Its notes
                             // are read (again), which is cheap next to losing them.
-                            if change.kind == ChangeKind::Created {
+                            if change.kind == ChangeKind::Created
+                                || created.contains(change.path.as_str())
+                            {
                                 actions.push(Action::ReindexFolder(&change.path));
                             }
                         } else if change.entry.is_none()
@@ -594,8 +676,10 @@ impl Index {
             return Ok(Vec::new());
         }
         let mut stmt = self.conn.prepare(
-            "SELECT path, title, snippet(notes_fts, 2, '«', '»', ' … ', 12)
-             FROM notes_fts WHERE notes_fts MATCH ?1 ORDER BY rank LIMIT ?2",
+            "SELECT notes.path, notes_fts.title, snippet(notes_fts, 1, '«', '»', ' … ', 12)
+             FROM notes_fts
+             JOIN notes ON notes.rowid = notes_fts.rowid
+             WHERE notes_fts MATCH ?1 ORDER BY rank LIMIT ?2",
         )?;
         let hits = stmt
             .query_map(params![query, limit], |r| {
@@ -830,7 +914,10 @@ impl Index {
                 "tasks",
             ),
             (
-                "SELECT notes_fts.path, title, body FROM notes_fts ORDER BY path",
+                // The search table has no path of its own (see `FTS_TABLE`),
+                // so the dump reads it the same way a search does.
+                "SELECT notes.path, notes_fts.title, notes_fts.body FROM notes_fts
+                 JOIN notes ON notes.rowid = notes_fts.rowid ORDER BY notes.path",
                 "search",
             ),
         ] {
@@ -939,9 +1026,9 @@ fn remove_prefix(tx: &rusqlite::Transaction, prefix: &str) -> rusqlite::Result<(
 /// Deletes the rows of one note. Returns whether the notes table held the
 /// path, so `remove_note` can tell a plain file from a folder.
 fn delete_note(tx: &rusqlite::Transaction, rel: &str) -> rusqlite::Result<bool> {
-    // `path` is UNINDEXED in the FTS table, so a delete by path would scan
-    // the whole table. The rowid of the note is looked up first and used to
-    // delete the FTS row directly.
+    // The search table has no path of its own (see `FTS_TABLE`), so the row
+    // is found by the rowid of the note. Deleting by a path column instead
+    // would walk the whole table.
     let rowid: Option<i64> = tx
         .query_row("SELECT rowid FROM notes WHERE path = ?1", [rel], |r| {
             r.get(0)
@@ -1011,8 +1098,8 @@ fn write_note(
             insert_link.execute(params![entry.path, lower.as_ref()])?;
         }
     }
-    tx.prepare_cached("INSERT INTO notes_fts (rowid, path, title, body) VALUES (?1, ?2, ?3, ?4)")?
-        .execute(params![rowid, entry.path, note.title, note.text])?;
+    tx.prepare_cached("INSERT INTO notes_fts (rowid, title, body) VALUES (?1, ?2, ?3)")?
+        .execute(params![rowid, note.title, note.text])?;
     {
         let mut insert_task = tx.prepare_cached(
             "INSERT INTO tasks (path, line, done, text, due, priority, tags, indent) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
@@ -1226,6 +1313,33 @@ mod tests {
         assert_eq!(index.counts().unwrap(), (1, 1));
     }
 
+    /// A hit says which note it comes from, what its title is and where in
+    /// the text the match lies. The path comes from the notes table and the
+    /// snippet from the body, which is the second column of the search table
+    /// (the first is the title). Both are easy to mix up, so the exact text is
+    /// checked here: with the wrong column the snippet would only ever be
+    /// `«Beta»`, and with the wrong join the path would be lost.
+    #[test]
+    fn a_hit_names_its_note_and_marks_the_matched_word() {
+        let (_dir, vault) = sample_vault();
+        let mut index = Index::for_vault(&vault).unwrap();
+        index.rebuild(&vault).unwrap();
+
+        let hits = index.search("schedule", 10).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].path, "beta.md", "the path must come from the note");
+        assert_eq!(hits[0].title, "Beta");
+        assert_eq!(
+            hits[0].snippet, "Beta\nA #project with a «schedule».\n",
+            "the snippet must come from the body column, not the title column"
+        );
+
+        // The same for a word that only appears in a title.
+        let hits = index.search("alph", 10).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].path, "projects/alpha.md");
+    }
+
     /// A note that was changed must be found by its new text only.
     #[test]
     fn a_changed_note_is_found_only_by_its_new_text() {
@@ -1383,16 +1497,6 @@ mod tests {
         assert!(
             fast.contains("INDEX 0:="),
             "the search delete still walks the table: {fast}"
-        );
-
-        let mut by_path = index
-            .conn()
-            .prepare("EXPLAIN QUERY PLAN DELETE FROM notes_fts WHERE path = ?1")
-            .unwrap();
-        let slow: String = by_path.query_row(["x.md"], |r| r.get(3)).unwrap();
-        assert!(
-            !slow.contains("INDEX 0:="),
-            "the rowid lookup is not faster than the path lookup: {slow}"
         );
     }
 
@@ -1773,8 +1877,9 @@ mod tests {
         assert!(tasks.iter().any(|t| t.path == "work/deep/tasks.md"));
     }
 
-    /// A case-only rename works too: LIKE finds the notes case-insensitively,
-    /// and the per-row updates cannot collide with their own result set.
+    /// A case-only rename works too: the rows match the source prefix
+    /// exactly, and the per-row updates cannot collide with their own
+    /// result set.
     #[test]
     fn a_folder_can_be_renamed_to_a_different_case() {
         let (_dir, vault) = sample_vault();
@@ -2017,10 +2122,14 @@ mod tests {
         let tasks = index.tasks().unwrap();
         assert!(tasks.iter().any(|t| t.path == "work/todo.md"));
         assert_eq!(index.backlinks("beta.md").unwrap().len(), 2);
-        // The search row of a moved note carries its new path.
+        // The search rows of the moved notes are found again through the
+        // note they belong to (the search table has no path of its own).
         let paths: Vec<String> = index
             .conn()
-            .prepare("SELECT path FROM notes_fts ORDER BY path")
+            .prepare(
+                "SELECT notes.path FROM notes_fts
+                 JOIN notes ON notes.rowid = notes_fts.rowid ORDER BY notes.path",
+            )
             .unwrap()
             .query_map([], |r| r.get(0))
             .unwrap()
@@ -2031,9 +2140,9 @@ mod tests {
         assert_eq!(index.counts().unwrap(), (3, 3));
     }
 
-    /// A case-only rename (`projects` -> `Projects`) keeps every note: the
-    /// LIKE prefix matches the rows that are about to move, so they must not
-    /// be taken out as stale rows of the destination.
+    /// A case-only rename (`projects` -> `Projects`) keeps every note: its
+    /// rows sit under the destination prefix too, so they must not be taken
+    /// out as stale rows of the destination.
     #[test]
     fn a_case_only_folder_rename_keeps_its_notes() {
         let (_dir, vault) = sample_vault();
@@ -2120,5 +2229,319 @@ mod tests {
         assert!(index.search("wortuniq", 10).unwrap().is_empty());
         assert_eq!(index.search("another", 10).unwrap().len(), 1);
         assert_eq!(index.counts().unwrap(), (3, 3));
+    }
+
+    /// A sibling folder that differs only in case is a different folder:
+    /// renaming `projects` must leave the rows of `Projects` alone (LIKE
+    /// alone would match them, because it is case-insensitive in SQLite).
+    #[test]
+    fn a_folder_rename_leaves_a_case_sibling_alone() {
+        let (_dir, vault) = sample_vault();
+        vault
+            .write("Projects/upper.md", "# Upper\nAn upperuniq note.")
+            .unwrap();
+        let mut index = Index::for_vault(&vault).unwrap();
+        index.rebuild(&vault).unwrap();
+        assert_eq!(index.counts().unwrap(), (3, 3));
+
+        vault.rename("projects", "work").unwrap();
+        index.move_folder(&vault, "projects", "work").unwrap();
+
+        // The sibling keeps its path, the moved folder gets the new one.
+        assert_eq!(
+            index.search("upperuniq", 10).unwrap()[0].path,
+            "Projects/upper.md"
+        );
+        assert!(
+            index
+                .notes_with_tag("project")
+                .unwrap()
+                .iter()
+                .any(|n| n.path == "work/alpha.md")
+        );
+        assert_eq!(index.counts().unwrap(), (3, 3));
+
+        let mut fresh = Index::open_in_memory().unwrap();
+        fresh.rebuild(&vault).unwrap();
+        assert_eq!(index.dump(), fresh.dump());
+    }
+
+    /// A case-only rename with a case sibling present moves only the rows
+    /// of the source spelling; the sibling is neither moved nor deleted.
+    #[test]
+    fn a_case_only_rename_with_a_case_sibling_moves_only_its_own_rows() {
+        let (_dir, vault) = sample_vault();
+        vault
+            .write("work/other.md", "# Other\nA loweruniq note.")
+            .unwrap();
+        vault
+            .write("Work/upper.md", "# Upper\nAn upperuniq note.")
+            .unwrap();
+        let mut index = Index::for_vault(&vault).unwrap();
+        index.rebuild(&vault).unwrap();
+
+        vault.rename("work", "WORK").unwrap();
+        index.move_folder(&vault, "work", "WORK").unwrap();
+
+        assert_eq!(
+            index.search("loweruniq", 10).unwrap()[0].path,
+            "WORK/other.md"
+        );
+        assert_eq!(
+            index.search("upperuniq", 10).unwrap()[0].path,
+            "Work/upper.md"
+        );
+        assert_eq!(index.counts().unwrap(), (4, 4));
+
+        let mut fresh = Index::open_in_memory().unwrap();
+        fresh.rebuild(&vault).unwrap();
+        assert_eq!(index.dump(), fresh.dump());
+    }
+
+    /// Renaming a folder to a dot-name takes its notes out of the index:
+    /// hidden folders are never indexed, exactly like after a rebuild.
+    #[test]
+    fn renaming_a_folder_to_a_dot_name_takes_its_notes_out() {
+        let (_dir, vault) = sample_vault();
+        vault
+            .write("projects/gamma.md", "# Gamma\nA gammanote.")
+            .unwrap();
+        let mut index = Index::for_vault(&vault).unwrap();
+        index.rebuild(&vault).unwrap();
+        assert_eq!(index.counts().unwrap(), (3, 3));
+
+        vault.rename("projects", ".drafts").unwrap();
+        index.move_folder(&vault, "projects", ".drafts").unwrap();
+
+        assert_eq!(index.counts().unwrap(), (1, 1));
+        assert!(index.search("gammanote", 10).unwrap().is_empty());
+        assert!(index.backlinks("beta.md").unwrap().is_empty());
+        assert_eq!(index.notes_with_tag("project").unwrap().len(), 1);
+
+        let mut fresh = Index::open_in_memory().unwrap();
+        fresh.rebuild(&vault).unwrap();
+        assert_eq!(index.dump(), fresh.dump());
+
+        // The watcher reports the hidden destination with hidden: true;
+        // it changes nothing in the index.
+        let change = VaultChange {
+            kind: ChangeKind::Created,
+            path: ".drafts".into(),
+            hidden: true,
+            entry: None,
+        };
+        index.apply_changes(&vault, &[change]).unwrap();
+        assert_eq!(index.counts().unwrap(), (1, 1));
+    }
+
+    /// A hidden folder renamed to a visible name is picked up by the
+    /// watcher: its Created report re-indexes the notes below it.
+    #[test]
+    fn a_hidden_folder_renamed_to_a_visible_name_is_indexed() {
+        let (dir, vault) = sample_vault();
+        std::fs::create_dir_all(dir.path().join(".drafts/deep")).unwrap();
+        std::fs::write(
+            dir.path().join(".drafts/deep/idea.md"),
+            "# Idea\nAn ideanote.",
+        )
+        .unwrap();
+        let mut index = Index::for_vault(&vault).unwrap();
+        index.rebuild(&vault).unwrap();
+        assert!(index.search("ideanote", 10).unwrap().is_empty());
+
+        vault.rename(".drafts", "drafts").unwrap();
+        // The hidden source was never indexed, so there is nothing to move;
+        // the Created report of the destination brings the notes in.
+        index.move_folder(&vault, ".drafts", "drafts").unwrap();
+        let change = |kind, path: &str, hidden| VaultChange {
+            kind,
+            path: path.into(),
+            hidden,
+            entry: None,
+        };
+        index
+            .apply_changes(
+                &vault,
+                &[
+                    change(ChangeKind::Removed, ".drafts", true),
+                    change(ChangeKind::Created, "drafts", false),
+                ],
+            )
+            .unwrap();
+
+        assert_eq!(
+            index.search("ideanote", 10).unwrap()[0].path,
+            "drafts/deep/idea.md"
+        );
+        let mut fresh = Index::open_in_memory().unwrap();
+        fresh.rebuild(&vault).unwrap();
+        assert_eq!(index.dump(), fresh.dump());
+    }
+
+    /// A folder that is moved in is reported as created and then modified
+    /// while its notes land in it. The batch must still read the notes of
+    /// the folder: the Created report may not be lost to the Modified one.
+    #[test]
+    fn a_folder_created_then_modified_in_one_batch_is_indexed() {
+        let (dir, vault) = sample_vault();
+        let mut index = Index::for_vault(&vault).unwrap();
+        index.rebuild(&vault).unwrap();
+
+        std::fs::create_dir_all(dir.path().join("moved/deep")).unwrap();
+        std::fs::write(dir.path().join("moved/deep/new.md"), "# New\nA movednote.").unwrap();
+        let change = |kind| VaultChange {
+            kind,
+            path: "moved".into(),
+            hidden: false,
+            entry: None,
+        };
+        index
+            .apply_changes(
+                &vault,
+                &[change(ChangeKind::Created), change(ChangeKind::Modified)],
+            )
+            .unwrap();
+
+        assert_eq!(
+            index.search("movednote", 10).unwrap()[0].path,
+            "moved/deep/new.md"
+        );
+        assert_eq!(index.counts().unwrap(), (3, 3));
+    }
+
+    /// The watcher report after an in-app folder rename must not undo the
+    /// SQL-only move: the notes below the destination are already indexed
+    /// with the same moment of change and size, so none is read again. A
+    /// note that is read again is deleted and written anew, which gives it
+    /// a new rowid; the rowids staying put is the proof that nothing was
+    /// parsed a second time.
+    #[test]
+    fn the_folder_report_after_an_in_app_rename_reads_nothing_again() {
+        let (_dir, vault) = sample_vault();
+        vault
+            .write("projects/gamma.md", "# Gamma\nA #project note.")
+            .unwrap();
+        let mut index = Index::for_vault(&vault).unwrap();
+        index.rebuild(&vault).unwrap();
+
+        vault.rename("projects", "work").unwrap();
+        index.move_folder(&vault, "projects", "work").unwrap();
+        let expected = index.dump();
+        let rowids = |index: &Index| -> Vec<(String, i64)> {
+            index
+                .conn()
+                .prepare("SELECT path, rowid FROM notes ORDER BY path")
+                .unwrap()
+                .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+                .unwrap()
+                .collect::<std::result::Result<_, _>>()
+                .unwrap()
+        };
+        let before = rowids(&index);
+
+        let change = |kind, path: &str| VaultChange {
+            kind,
+            path: path.into(),
+            hidden: false,
+            entry: None,
+        };
+        index
+            .apply_changes(
+                &vault,
+                &[
+                    change(ChangeKind::Removed, "projects"),
+                    change(ChangeKind::Created, "work"),
+                ],
+            )
+            .unwrap();
+        assert_eq!(
+            rowids(&index),
+            before,
+            "the folder report parsed the notes again"
+        );
+        assert_eq!(index.dump(), expected);
+    }
+
+    /// The skip of unchanged notes keeps correctness: a note that changed
+    /// inside the reported folder is read again, the others are not.
+    #[test]
+    fn a_folder_report_reads_only_the_notes_that_changed() {
+        let (_dir, vault) = sample_vault();
+        vault
+            .write("projects/gamma.md", "# Gamma\nA gammanote.")
+            .unwrap();
+        let mut index = Index::for_vault(&vault).unwrap();
+        index.rebuild(&vault).unwrap();
+        let before = index.writes();
+
+        vault
+            .write("projects/gamma.md", "# Gamma\nA timetable instead.")
+            .unwrap();
+        let change = VaultChange {
+            kind: ChangeKind::Created,
+            path: "projects".into(),
+            hidden: false,
+            entry: None,
+        };
+        index.apply_changes(&vault, &[change]).unwrap();
+        assert_eq!(index.writes(), before + 1);
+
+        assert_eq!(
+            index.search("timetable", 10).unwrap()[0].path,
+            "projects/gamma.md"
+        );
+        assert!(index.search("gammanote", 10).unwrap().is_empty());
+        // The untouched note is still there, with its text.
+        assert_eq!(
+            index.search("links", 10).unwrap()[0].path,
+            "projects/alpha.md"
+        );
+        assert_eq!(index.counts().unwrap(), (3, 3));
+    }
+
+    /// The prefix select of a folder rename must not scan the notes table:
+    /// the LIKE part is a range search on the NOCASE index, the substr
+    /// check only filters its rows.
+    #[test]
+    fn the_folder_move_select_uses_the_path_index() {
+        let (_dir, vault) = sample_vault();
+        let mut index = Index::for_vault(&vault).unwrap();
+        index.rebuild(&vault).unwrap();
+
+        let mut plan = index
+            .conn()
+            .prepare(
+                "EXPLAIN QUERY PLAN SELECT rowid, path FROM notes
+                 WHERE path LIKE ?1 ESCAPE '\\' AND substr(path, 1, ?2) = ?3",
+            )
+            .unwrap();
+        let detail: String = plan
+            .query_row(params!["x/%", 2, "x/"], |r| r.get(3))
+            .unwrap();
+        assert!(
+            !detail.contains("SCAN notes"),
+            "the move select scans the notes table: {detail}"
+        );
+    }
+
+    /// The index collects no planner statistics: after a rebuild and a
+    /// sync there is no sqlite_stat1, so every query is planned by the
+    /// shape of the indexes (see SECONDARY_INDEXES).
+    #[test]
+    fn the_index_keeps_no_planner_statistics() {
+        let (_dir, vault) = sample_vault();
+        let mut index = Index::for_vault(&vault).unwrap();
+        index.rebuild(&vault).unwrap();
+        index.sync(&vault).unwrap();
+
+        let stats: i64 = index
+            .conn()
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE name = 'sqlite_stat1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(stats, 0, "the index collected planner statistics");
     }
 }

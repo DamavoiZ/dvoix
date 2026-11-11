@@ -181,9 +181,23 @@ where
     }
 }
 
-/// Adds a change to the batch. When the path is already in it, the last
-/// report wins: an editor that writes a file five times in a burst means
-/// one re-index, not five. The place of the first report is kept, so the
+/// The kind after several reports about one path in a burst. The last
+/// report wins, except that a `Created` survives a following `Modified`:
+/// a folder that is moved into the vault is reported as created and then
+/// modified while its notes land in it, and only the created report makes
+/// the index read the notes below the folder. A `Removed` still ends the
+/// story (the path is gone), a `Created` after it starts a new one.
+fn merged_kind(previous: ChangeKind, next: ChangeKind) -> ChangeKind {
+    match (previous, next) {
+        (ChangeKind::Created, ChangeKind::Modified) => ChangeKind::Created,
+        _ => next,
+    }
+}
+
+/// Adds a change to the batch. When the path is already in it, the reports
+/// collapse into one change (see `merged_kind`): an editor that writes a
+/// file five times in a burst means one re-index, not five. The entry of
+/// the last report is kept and the place of the first report stays, so the
 /// order of the paths stays the order they first changed in.
 fn push_change(
     batch: &mut Vec<VaultChange>,
@@ -191,7 +205,11 @@ fn push_change(
     change: VaultChange,
 ) {
     match positions.get(&change.path) {
-        Some(&i) => batch[i] = change,
+        Some(&i) => {
+            batch[i].kind = merged_kind(batch[i].kind, change.kind);
+            batch[i].hidden = change.hidden;
+            batch[i].entry = change.entry;
+        }
         None => {
             positions.insert(change.path.clone(), batch.len());
             batch.push(change);
@@ -352,8 +370,9 @@ mod tests {
     }
 
     /// Repeated reports about the same path become one change: the last
-    /// kind wins, the entry of the last report is kept, and the place of the
-    /// first report stays.
+    /// kind wins (a `Created` survives a `Modified`, see `merged_kind`), the
+    /// entry of the last report is kept, and the place of the first report
+    /// stays.
     #[test]
     fn the_batcher_coalesces_repeated_paths() {
         let dir = tempfile::tempdir().unwrap();
@@ -387,11 +406,65 @@ mod tests {
             .expect("the changes did not arrive");
         assert_eq!(batch.len(), 3);
         assert_eq!(batch[0].path, "note.md");
-        assert_eq!(batch[0].kind, ChangeKind::Modified);
+        assert_eq!(
+            batch[0].kind,
+            ChangeKind::Created,
+            "the created report was lost to a later modified report"
+        );
         assert!(batch[0].entry.is_some(), "the last entry was not kept");
         assert_eq!(batch[1].path, "other.md");
         assert_eq!(batch[2].path, "gone.md");
         assert_eq!(batch[2].kind, ChangeKind::Created);
+    }
+
+    /// A folder that is moved into the vault is reported as created and
+    /// then modified while its notes land in it. The merged change must
+    /// stay `Created`, or the index never reads the notes of the folder.
+    /// The common burst (repeated writes of one file) still collapses.
+    #[test]
+    fn a_created_folder_stays_created_through_modified_reports() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let batcher = ChangeBatcher::start(move |changes| {
+            let _ = tx.send(changes);
+        })
+        .unwrap();
+        let sender = batcher.sender();
+        let change = |kind, path: &str| VaultChange {
+            kind,
+            path: path.into(),
+            hidden: false,
+            entry: None,
+        };
+        sender.send(change(ChangeKind::Created, "moved"));
+        sender.send(change(ChangeKind::Modified, "moved"));
+        sender.send(change(ChangeKind::Modified, "moved"));
+        sender.send(change(ChangeKind::Modified, "edited.md"));
+        sender.send(change(ChangeKind::Modified, "edited.md"));
+
+        let batch = rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("the changes did not arrive");
+        assert_eq!(batch.len(), 2);
+        assert_eq!(batch[0].path, "moved");
+        assert_eq!(batch[0].kind, ChangeKind::Created);
+        assert_eq!(batch[1].path, "edited.md");
+        assert_eq!(batch[1].kind, ChangeKind::Modified);
+    }
+
+    /// Every way two reports about one path can meet: only Created followed
+    /// by Modified keeps the earlier kind, everything else takes the last
+    /// report (a Removed ends the story, a Created after it starts anew).
+    #[test]
+    fn merged_kinds_keep_the_created_of_a_burst() {
+        use ChangeKind::{Created, Modified, Removed};
+        assert_eq!(merged_kind(Created, Modified), Created);
+        assert_eq!(merged_kind(Created, Created), Created);
+        assert_eq!(merged_kind(Modified, Modified), Modified);
+        assert_eq!(merged_kind(Modified, Created), Created);
+        assert_eq!(merged_kind(Created, Removed), Removed);
+        assert_eq!(merged_kind(Modified, Removed), Removed);
+        assert_eq!(merged_kind(Removed, Created), Created);
+        assert_eq!(merged_kind(Removed, Modified), Modified);
     }
 
     /// Changes that never pause still reach the app, in batches.
