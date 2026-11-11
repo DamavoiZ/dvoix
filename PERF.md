@@ -230,6 +230,80 @@ sorted. That happens now once per change of the vault.
 | build the targets | every keystroke | once per change |
 | walk the targets for a suggestion | — | 0.26 ms |
 
+### The panels, round 2
+
+The counters told the panels when to refresh, but a batch of changes still
+moved them once per file, and several panels did their own work on every
+keystroke. This round takes the bursts and the typing out of the hot paths.
+
+**A batch moves each counter once.** The backend hands a batch of watcher
+changes over as one event; the vault corrects the entries of the whole batch
+and then moves each change group once. A `git checkout` of 100 files is one
+refresh of every panel, not 100.
+
+**The app does not read its own saves back.** Every save came back from the
+watcher and the open file was read from disk again, even though the text was
+already on screen. The app remembers what it wrote (path, size, moment of
+change), skips the echo of its own write and corrects the entry of the file
+right away, so views of it (an embedded image) see the new version without
+waiting for the watcher.
+
+**Typing does not re-render the sidebar.** The outline parsed the whole note
+on every keystroke, and a docked copy of the open note was rendered by the
+backend on every keystroke. Both wait until the typing has settled (150 ms
+for the outline, 200 ms for the docked note); a note docked from disk is read
+once per batch of changes, and only the properties changing does not render
+it again (the same guard as in the reading view).
+
+**The graph waits for the typing.** Every letter in the filter field rebuilt
+the whole graph (all nodes, all lines, the layout). The settings that change
+nodes and lines are applied 200 ms after the last input; the data load runs
+once at a time.
+
+**Git reads its state once.** The panel called `git status` for every
+changed file and again every few seconds, even when the window was in the
+background. Now the refresh is debounced, only one runs at a time (requests
+during it become one more afterwards), the timer rests while no panel shows
+the state or the window is hidden (opening the panel catches up right
+away), and the history loads once per batch with a guard against
+out-of-order answers.
+
+**The tasks panel does the work once.** The filter lower-cased the text,
+title and tags of every task for every query, and the due-date bucket of a
+task was computed again for every row that showed it. The search text is
+built once per load, the bucket once per task:
+
+| 5 000 tasks | Before | After |
+| --- | --- | --- |
+| filter a query | 0.49 ms | 0.14 ms |
+| build the search texts | every query | 0.97 ms once per load |
+
+Checking off a task listed the whole vault again (37 ms with 20 000 files);
+now the watcher's report is enough, and the tick shows right away, before
+the file is written.
+
+**Long lists are drawn in pages.** A folder with thousands of entries, the
+tasks of a due date, the notes of a tag and the backlinks of a note were all
+drawn at once, thousands of DOM rows. Folders draw 500 rows and the panels
+200, with "Show more" for the rest; the open note is always revealed. The
+backlinks footer lists 50 links and opens the rest behind "and N more".
+
+| 5 000 entries in a folder | Before | After |
+| --- | --- | --- |
+| rows to draw on open | 5 000 | 500 |
+
+**The table widget keeps what did not change.** Adding a row built the whole
+table DOM again; now rows whose text did not change keep their DOM (and the
+cell being typed in). Growing a table by a paste re-reads only the changed
+lines instead of the whole table for every added row. Dragging a row or
+column measured every grip on every mouse move (`getBoundingClientRect`
+flushes the layout each time); the positions are measured once per drag, and
+the drop marks are only written when the drop place changes.
+
+**Opening the vault reads in parallel.** The settings files, `store.json`
+and the app version, and a store plugin's `main.js` and `styles.css` do not
+depend on each other and are read at once instead of one after another.
+
 ## The attempts
 
 ### Kept: the search row takes the rowid of its note

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { ChevronRight } from "@lucide/svelte";
   import Self from "./TreeItem.svelte";
-  import type { TreeNode } from "./tree";
+  import { FOLDER_PAGE, visibleChildren, type TreeNode } from "./tree";
   import { contextMenu } from "../../components/contextMenuState.svelte";
   import { DRAG_TYPE, entryMenu } from "./fileMenu";
   import { vault } from "../../vault.svelte";
@@ -25,6 +25,19 @@
 
   let draft = $state("");
   let dropTarget = $state(false);
+  /** How many children of this folder are drawn; big folders grow in steps. */
+  let limit = $state(FOLDER_PAGE);
+  const shown = $derived(visibleChildren(node.children, limit));
+  const hiddenCount = $derived(node.children.length - shown.length);
+
+  // The open note stays visible even when its folder draws only its first
+  // entries: revealing it (opening a note) shows enough rows to include it.
+  $effect(() => {
+    const open = vault.openPath;
+    if (!entry.isDir || !expanded || !open || !open.startsWith(`${entry.path}/`)) return;
+    const index = node.children.findIndex((child) => open === child.entry.path || open.startsWith(`${child.entry.path}/`));
+    if (index >= limit) limit = Math.ceil((index + 1) / FOLDER_PAGE) * FOLDER_PAGE;
+  });
 
   function click(e: MouseEvent) {
     if (entry.isDir) ui.toggleFolder(entry.path);
@@ -114,8 +127,17 @@
   <div class="relative">
     <!-- indent guide like in Obsidian -->
     <div class="absolute top-0 bottom-0 w-px bg-zinc-800" style:left="{0.5 + depth * 1 + 0.5}rem"></div>
-    {#each node.children as child (child.entry.path)}
+    {#each shown as child (child.entry.path)}
       <Self node={child} depth={depth + 1} />
     {/each}
+    {#if hiddenCount > 0}
+      <button
+        class="block w-full truncate py-1 pr-2 text-left text-xs text-zinc-500 hover:text-zinc-300"
+        style:padding-left="{1.9 + depth * 1}rem"
+        onclick={() => (limit += FOLDER_PAGE)}
+      >
+        Show {Math.min(hiddenCount, FOLDER_PAGE)} more ({hiddenCount} hidden)
+      </button>
+    {/if}
   </div>
 {/if}

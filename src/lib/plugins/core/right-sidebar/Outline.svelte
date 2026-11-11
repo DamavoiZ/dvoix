@@ -3,13 +3,44 @@
   // jumps to it, in the editor and in the reading view.
   import { reveal } from "../../../reveal.svelte";
   import { vault } from "../../../vault.svelte";
-  import { outlineEntries, parseHeadings, type Heading } from "./headings";
+  import { outlineEntries, parseHeadings, type Heading, type OutlineEntry } from "./headings";
 
   /** The path of the open note, if it is a note. */
   const path = $derived(vault.openPath && /\.(md|markdown)$/i.test(vault.openPath) ? vault.openPath : null);
 
   /** The headings of the open note, nested as they are in the note. */
-  const entries = $derived(path ? outlineEntries(parseHeadings(vault.content)) : []);
+  let entries = $state<OutlineEntry[]>([]);
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let lastPath: string | null = null;
+  let lastText = "";
+  // Typing changes the text on every key press; the whole note is only
+  // walked once the typing settles, and only when it really changed.
+  const update = (text: string) => {
+    if (text === lastText) return;
+    lastText = text;
+    entries = outlineEntries(parseHeadings(text));
+  };
+  $effect(() => {
+    const p = path;
+    const text = vault.content;
+    clearTimeout(timer);
+    if (!p) {
+      lastPath = null;
+      lastText = "";
+      entries = [];
+      return;
+    }
+    if (p !== lastPath) {
+      lastPath = p;
+      update(text);
+    } else if (vault.dirty) {
+      timer = setTimeout(() => update(text), 150);
+    } else {
+      update(text);
+    }
+    return () => clearTimeout(timer);
+  });
 
   function jump(heading: Heading, index: number) {
     if (!path) return;

@@ -42,8 +42,8 @@ function scheduleRefresh() {
  * Changes in `.git` and `.dvoix` are not reported at all (see `watcher.rs`).
  */
 export async function watch(): Promise<() => void> {
-  const unlisten = await onVaultChanged((c) => {
-    if (c.hidden || c.kind !== "modified") scheduleRefresh();
+  const unlisten = await onVaultChanged((changes) => {
+    if (changes.some((c) => c.hidden || c.kind !== "modified")) scheduleRefresh();
   });
   return () => {
     unlisten();

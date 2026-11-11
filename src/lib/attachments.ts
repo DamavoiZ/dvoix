@@ -37,7 +37,7 @@ const cache = new Map<string, { modified: number; url: Promise<string> }>();
 export async function attachmentUrl(target: string): Promise<string | null> {
   const path = vault.resolveLink(target);
   if (!path) return null;
-  const modified = vault.entries.find((e) => e.path === path)?.modified ?? 0;
+  const modified = vault.entryAt(path)?.modified ?? 0;
   const hit = cache.get(path);
   if (hit && hit.modified === modified) return hit.url;
   if (hit) void hit.url.then((u) => URL.revokeObjectURL(u), () => {});

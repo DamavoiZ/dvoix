@@ -1,9 +1,11 @@
 <script lang="ts">
   // A note docked in the right sidebar, shown as it is read. The open note
   // comes from the editor, every other note from the file on disk.
+  import { onMount } from "svelte";
   import { api, type RenderedNote } from "../../../api";
   import { embedImage, isImage, parseEmbed } from "../../../attachments";
   import { highlightCodeBlocks } from "../../../filetypes/markdown/codeHighlight";
+  import { parseFrontmatter } from "../../../filetypes/markdown/frontmatter";
   import { vault } from "../../../vault.svelte";
 
   let { path }: { path: string } = $props();
@@ -16,6 +18,11 @@
   let missing = $state(false);
   /** The note that is shown, so a new one starts without the old text. */
   let shownPath = "";
+  /** The body that was rendered last, so an unchanged one is not rendered again. */
+  let lastBody: string | undefined;
+  /** A fresh read of the file is only asked for once the changes have settled. */
+  let readTimer: ReturnType<typeof setTimeout> | undefined;
+  onMount(() => () => clearTimeout(readTimer));
 
   // Code blocks are colored after the HTML is in place; `{@html}` replaces
   // them on every render, so this runs again for each new HTML.
@@ -35,34 +42,52 @@
 
   $effect(() => {
     const p = path;
-    // A note in the vault changed: the file is read again.
-    void vault.changes.notes.number;
-    if (p !== shownPath) {
-      shownPath = p;
-      text = null;
-      rendered = null;
-      missing = false;
-    }
-    if (p === vault.openPath) {
-      text = vault.content;
+    const changed = vault.changes.notes;
+    // The path names one change of a batch, so it only says when a re-read is
+    // surely not needed; any other change of a note may be this one's folder.
+    void changed.number;
+    const isOpen = p === vault.openPath;
+    // While the note is open, its text comes from the editor, not from disk.
+    const live = isOpen ? vault.content : null;
+    const same = p === shownPath;
+    shownPath = p;
+    if (isOpen) {
+      clearTimeout(readTimer);
+      text = live;
       missing = false;
       return;
     }
+    // A batch that names another file and no folder leaves this note alone.
+    if (same && changed.path && changed.path !== p && !changed.path.startsWith(`${p}/`)) return;
     let stale = false;
-    void api.readFile(p).then(
-      (content) => {
-        if (stale) return;
-        text = content;
-        missing = false;
-      },
-      () => {
-        if (stale) return;
-        text = null;
-        missing = true;
-      },
-    );
+    const load = () => {
+      void api.readFile(p).then(
+        (content) => {
+          if (stale) return;
+          text = content;
+          missing = false;
+        },
+        () => {
+          if (stale) return;
+          text = null;
+          missing = true;
+        },
+      );
+    };
+    if (same) {
+      // A change on disk: wait for the burst to end before reading the file.
+      clearTimeout(readTimer);
+      readTimer = setTimeout(load, 200);
+    } else {
+      text = null;
+      rendered = null;
+      missing = false;
+      lastBody = undefined;
+      load();
+    }
     return () => {
       stale = true;
+      clearTimeout(readTimer);
     };
   });
 
@@ -71,14 +96,31 @@
   $effect(() => {
     const c = content;
     if (c === null) return;
+    // Only the properties changed: the text stays as it is, so it is not
+    // rendered again (like in the reading view).
+    const body = bodyOf(c);
+    if (body === lastBody) return;
+    lastBody = body;
     let stale = false;
-    void api.renderMarkdown(c).then((r) => {
-      if (!stale) rendered = r;
-    });
+    // While typing, render once the text has settled, not on every key press.
+    // Text read from a file is rendered right away.
+    const delay = path === vault.openPath && vault.dirty ? 200 : 0;
+    const timer = setTimeout(() => {
+      void api.renderMarkdown(c).then((r) => {
+        if (!stale) rendered = r;
+      });
+    }, delay);
     return () => {
       stale = true;
+      clearTimeout(timer);
     };
   });
+
+  /** The part of the note that is shown as text; the properties do not change it. */
+  function bodyOf(text: string): string {
+    const fm = parseFrontmatter(text);
+    return fm ? text.slice(fm.to + fm.eol.length) : text;
+  }
 
   /** Wikilinks and links to other notes open in the main area, everything else stays. */
   function handleClick(event: MouseEvent) {

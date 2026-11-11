@@ -83,7 +83,8 @@ export function parseRow(line: string, start = 0): Row {
   return { text: line, cells, start, length: line.length, lead, trail, trailPipe: trail ? pipes[pipes.length - 1] : -1 };
 }
 
-function alignOf(cell: string): Align {
+/** The alignment a delimiter cell stands for (`:---`, `:---:`, `---:`). */
+export function alignOf(cell: string): Align {
   const left = cell.startsWith(":");
   const right = cell.endsWith(":");
   if (left && right) return "center";

@@ -42,3 +42,17 @@ export function buildTree(entries: VaultEntry[]): TreeNode[] {
   sort(root);
   return root;
 }
+
+/**
+ * A folder with more than this many entries is drawn in steps: all of them
+ * as DOM rows at once would freeze the tree for a moment on every open.
+ */
+export const FOLDER_PAGE = 500;
+
+/**
+ * The slice of a folder's children to draw. Below the page size the list
+ * itself is returned, so its identity (and the tree's DOM) stays stable.
+ */
+export function visibleChildren(children: TreeNode[], limit: number): TreeNode[] {
+  return children.length <= limit ? children : children.slice(0, limit);
+}

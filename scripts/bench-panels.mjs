@@ -4,7 +4,7 @@
 //   node scripts/bench-panels.mjs
 //
 // The numbers are the ones in PERF.md.
-import { buildTree, mergeEntries } from "../src/lib/features/file-explorer/tree.ts";
+import { buildTree, mergeEntries, FOLDER_PAGE, visibleChildren } from "../src/lib/features/file-explorer/tree.ts";
 
 /** A vault of 20 000 files in 100 folders. */
 function makeEntries(count, folders) {
@@ -193,6 +193,82 @@ function benchLinkTargets(entries, recent) {
   console.log(`  walking the targets for a suggestion: ${((performance.now() - t) / n).toFixed(3)} ms`);
 }
 
+// ---------------------------------------------------------------- the task filter
+
+/** A vault with many checkbox tasks, as the tasks panel gets them. */
+function makeTasks(count) {
+  const tasks = [];
+  for (let i = 0; i < count; i++) {
+    tasks.push({
+      path: `folder-${i % 100}/note-${i % 500}.md`,
+      noteTitle: `Note ${i % 500}`,
+      line: i % 40,
+      done: i % 3 === 0,
+      text: `Write the report for client ${i} and send it out`,
+      due: i % 4 === 0 ? "2026-11-20" : null,
+      priority: null,
+      tags: ["work", `client-${i % 20}`],
+      indent: 0,
+    });
+  }
+  return tasks;
+}
+
+/** OLD: the text of every task is lower-cased again for every query. */
+function filterTasksOld(tasks, q) {
+  return tasks.filter(
+    (t) =>
+      t.text.toLowerCase().includes(q) || t.noteTitle.toLowerCase().includes(q) || t.tags.some((tag) => tag.includes(q.replace(/^#/, ""))),
+  );
+}
+
+/** NEW: the search text of every task is built once per load. */
+function taskHaystacks(tasks) {
+  return tasks.map((t) => `${t.text}\n${t.noteTitle}\n${t.tags.map((tag) => `#${tag}`).join(" ")}`.toLowerCase());
+}
+
+function filterTasksNew(tasks, haystacks, q) {
+  const plain = q.replace(/^#/, "");
+  return tasks.filter((t, i) => haystacks[i].includes(q) || (plain !== q && haystacks[i].includes(`#${plain}`)));
+}
+
+function benchTaskFilter(tasks) {
+  const queries = ["report", "client-1", "nothing", "#work"];
+  const n = 50;
+  let t = performance.now();
+  for (let i = 0; i < n; i++) for (const q of queries) filterTasksOld(tasks, q);
+  const old = (performance.now() - t) / (n * queries.length);
+  const haystacks = taskHaystacks(tasks);
+  t = performance.now();
+  for (let i = 0; i < n; i++) for (const q of queries) filterTasksNew(tasks, haystacks, q);
+  const now = (performance.now() - t) / (n * queries.length);
+  console.log(`  filter a query: old ${old.toFixed(3)} ms | new ${now.toFixed(3)} ms`);
+  t = performance.now();
+  for (let i = 0; i < n; i++) taskHaystacks(tasks);
+  console.log(`  building the search texts once: ${((performance.now() - t) / n).toFixed(2)} ms`);
+  // Both ways must find the same tasks.
+  for (const q of queries) {
+    const a = filterTasksOld(tasks, q).length;
+    const b = filterTasksNew(tasks, haystacks, q).length;
+    if (a !== b) throw new Error(`the filters disagree on "${q}": ${a} vs ${b}`);
+  }
+}
+
+// ---------------------------------------------------------------- big folders
+
+function benchFolderWindow(children) {
+  const n = 200;
+  let t = performance.now();
+  for (let i = 0; i < n; i++) children.map((child) => child.entry.path);
+  const all = (performance.now() - t) / n;
+  t = performance.now();
+  for (let i = 0; i < n; i++) visibleChildren(children, FOLDER_PAGE).map((child) => child.entry.path);
+  const page = (performance.now() - t) / n;
+  console.log(`  keys of the rows to draw: all ${all.toFixed(3)} ms | first page ${page.toFixed(3)} ms`);
+  if (visibleChildren(children, FOLDER_PAGE).length !== FOLDER_PAGE) throw new Error("the page is not full");
+  if (visibleChildren(children.slice(0, 10), FOLDER_PAGE).length !== 10) throw new Error("a small folder is cut");
+}
+
 const entries = makeEntries(20000, 100);
 const extra = [{ path: ".hidden/notes.md", name: "notes.md", extension: "md", isDir: false, size: 10, modified: 1 }];
 const recent = ["folder-3/note-5.md", "folder-7/note-9.md"];
@@ -204,3 +280,7 @@ console.log("the tree of the vault:");
 benchTree(entries, extra);
 console.log("the suggestions of links:");
 benchLinkTargets(entries, recent);
+console.log("the task filter (5000 tasks):");
+benchTaskFilter(makeTasks(5000));
+console.log("a folder with 5000 entries:");
+benchFolderWindow(buildTree(makeEntries(5000, 1))[0].children);

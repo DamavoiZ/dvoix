@@ -1,5 +1,6 @@
 <script lang="ts">
   // All checkbox tasks of the vault, grouped by due date or by note.
+  import { SvelteMap } from "svelte/reactivity";
   import { Flag } from "@lucide/svelte";
   import { api, type TaskItem } from "../../../api";
   import { vault } from "../../../vault.svelte";
@@ -18,6 +19,12 @@
 
   import { taskSettings, type TaskGroup, type TaskShow } from "./settings";
 
+  /**
+   * How many tasks a section draws at first. A vault can hold thousands of
+   * tasks; the rest wait behind "Show more" and are found with the filter.
+   */
+  const SECTION_PAGE = 200;
+
   let tasks = $state<TaskItem[]>([]);
   let loaded = $state(false);
   // Filter and grouping are remembered in `.dvoix/plugins/tasks/data.json`.
@@ -33,13 +40,19 @@
   }
   let query = $state("");
 
+  let reloadTimer: ReturnType<typeof setTimeout> | undefined;
   $effect(() => {
     void vault.changes.notes.number;
-    api
-      .tasks()
-      .then((t) => (tasks = t))
-      .catch(() => (tasks = []))
-      .finally(() => (loaded = true));
+    // Once per batch of changes, not once per changed note.
+    clearTimeout(reloadTimer);
+    reloadTimer = setTimeout(() => {
+      api
+        .tasks()
+        .then((t) => (tasks = t))
+        .catch(() => (tasks = []))
+        .finally(() => (loaded = true));
+    }, 150);
+    return () => clearTimeout(reloadTimer);
   });
 
   const now = $derived.by(() => {
@@ -47,15 +60,18 @@
     return today();
   });
 
+  /** What the filter looks for in a task, computed once per load and not per query. */
+  const haystacks = $derived(tasks.map((t) => `${t.text}\n${t.noteTitle}\n${t.tags.map((tag) => `#${tag}`).join(" ")}`.toLowerCase()));
+
   const visible = $derived.by(() => {
     const q = query.trim().toLowerCase();
-    return tasks.filter((t) => {
+    const plain = q.replace(/^#/, "");
+    return tasks.filter((t, i) => {
       if (show === "open" && t.done) return false;
       if (show === "done" && !t.done) return false;
       if (!q) return true;
-      return (
-        t.text.toLowerCase().includes(q) || t.noteTitle.toLowerCase().includes(q) || t.tags.some((tag) => tag.includes(q.replace(/^#/, "")))
-      );
+      const hay = haystacks[i];
+      return hay.includes(q) || (plain !== q && hay.includes(`#${plain}`));
     });
   });
 
@@ -65,6 +81,27 @@
     tone?: string;
     path?: string;
     items: TaskItem[];
+  }
+
+  /** How far each section is unfolded, by its key. */
+  const limits = new SvelteMap<string, number>();
+  const limitOf = (key: string) => limits.get(key) ?? SECTION_PAGE;
+  const shownOf = (s: Section) => {
+    const limit = limitOf(s.key);
+    return s.items.length <= limit ? s.items : s.items.slice(0, limit);
+  };
+  function showMore(key: string, shown: number) {
+    limits.set(key, shown + SECTION_PAGE);
+  }
+
+  /** The due-date bucket of a task, kept per task so the sections and the rows share it. */
+  const bucketCache = new WeakMap<TaskItem, { now: string; done: boolean; bucket: DueBucket | "done" }>();
+  function bucketOf(t: TaskItem): DueBucket | "done" {
+    const hit = bucketCache.get(t);
+    if (hit && hit.now === now && hit.done === t.done) return hit.bucket;
+    const bucket = t.done ? "done" : dueBucket(t.due, now);
+    bucketCache.set(t, { now, done: t.done, bucket });
+    return bucket;
   }
 
   const sections = $derived.by((): Section[] => {
@@ -79,23 +116,31 @@
     }
     // Finished tasks are not "overdue": they get their own section at the end.
     const order: (DueBucket | "done")[] = ["overdue", "today", "week", "later", "none", "done"];
-    const buckets = new Map<DueBucket | "done", TaskItem[]>(order.map((b) => [b, []]));
-    for (const t of visible) buckets.get(t.done ? "done" : dueBucket(t.due, now))!.push(t);
+    const grouped = new Map<DueBucket | "done", TaskItem[]>(order.map((b) => [b, []]));
+    for (const t of visible) grouped.get(bucketOf(t))!.push(t);
     return order
-      .filter((b) => buckets.get(b)!.length)
+      .filter((b) => grouped.get(b)!.length)
       .map((b) => ({
         key: b,
         label: b === "done" ? "Done" : bucketLabels[b],
         tone: b === "overdue" ? "text-red-400" : b === "today" ? "text-violet-300" : undefined,
-        items: buckets.get(b)!.sort(compareTasks),
+        items: grouped.get(b)!.sort(compareTasks),
       }));
   });
 
   const openCount = $derived(tasks.filter((t) => !t.done).length);
 
+  /** Checks a task off right in the panel; the file changes behind it and the list reloads. */
+  async function toggle(task: TaskItem) {
+    const was = task.done;
+    task.done = !was;
+    // Undo the optimistic tick only when this toggle is the one that failed.
+    if (!(await toggleTask(task))) task.done = was;
+  }
+
   function dueClass(t: TaskItem): string {
     if (t.done || !t.due) return "text-zinc-500";
-    const b = dueBucket(t.due, now);
+    const b = bucketOf(t);
     return b === "overdue" ? "text-red-400" : b === "today" ? "text-violet-300" : "text-zinc-400";
   }
 
@@ -134,7 +179,7 @@
         <span class="text-zinc-600">{section.items.length}</span>
       </h3>
       <ul>
-        {#each section.items as task (`${task.path}:${task.line}`)}
+        {#each shownOf(section) as task (`${task.path}:${task.line}`)}
           <li
             class="group flex items-start gap-2 rounded px-2 py-1 hover:bg-zinc-800/70"
             style:padding-left={group === "note" ? `${0.5 + Math.min(task.indent, 12) * 0.25}rem` : undefined}
@@ -146,7 +191,7 @@
               aria-label={task.done ? "Mark as open" : "Mark as done"}
               onclick={(e) => {
                 e.preventDefault();
-                void toggleTask(task);
+                void toggle(task);
               }}
             />
             <button class="min-w-0 flex-1 text-left" onclick={() => openTask(task)}>
@@ -172,6 +217,14 @@
           </li>
         {/each}
       </ul>
+      {#if section.items.length > limitOf(section.key)}
+        <button
+          class="block w-full rounded px-2 py-1 text-left text-xs text-zinc-500 hover:text-zinc-300"
+          onclick={() => showMore(section.key, limitOf(section.key))}
+        >
+          Show {Math.min(section.items.length - limitOf(section.key), SECTION_PAGE)} more ({section.items.length - limitOf(section.key)} hidden)
+        </button>
+      {/if}
     </section>
   {:else}
     {#if loaded}

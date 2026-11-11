@@ -35,8 +35,11 @@ class SettingsStore {
   appearance = $state<AppearanceSettings>({ ...APPEARANCE_DEFAULTS });
 
   async load() {
-    this.app = await readJson("app.json", APP_DEFAULTS);
-    this.appearance = await readJson("appearance.json", APPEARANCE_DEFAULTS);
+    // The two files do not depend on each other: read both at once.
+    [this.app, this.appearance] = await Promise.all([
+      readJson("app.json", APP_DEFAULTS),
+      readJson("appearance.json", APPEARANCE_DEFAULTS),
+    ]);
   }
 
   reset() {

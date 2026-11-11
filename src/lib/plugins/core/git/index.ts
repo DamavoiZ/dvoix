@@ -59,8 +59,9 @@ export const gitPlugin: Plugin = {
       run: () => void vault.openViewTab(HISTORY_VIEW, { newTab: !!vault.openPath }),
     });
 
-    // The state is loaded again every few seconds, so changes from other
-    // programs show up too. Everything the plugin starts, it stops again.
+    // The state is loaded when a panel shows it and then kept fresh every
+    // few seconds, so changes from other programs show up too. Everything
+    // the plugin starts, it stops again.
     gitState.reset();
     gitState.start();
     ctx.register(() => gitState.stop());
