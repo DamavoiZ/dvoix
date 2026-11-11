@@ -6,8 +6,8 @@
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, TryRecvError};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -26,10 +26,23 @@ pub enum ProcessEvent {
     Exit(Option<i32>),
 }
 
+/// A running program. The reaper thread waits for the exit while holding
+/// the lock of `child`; `kill` therefore asks for the lock with `try_lock`
+/// and, when the reaper holds it, signals the program by its id instead
+/// (see `signal_kill`). The exit is noticed at once, without polling.
+struct Running {
+    /// The process id, kept next to the handle so a kill needs no lock.
+    pid: u32,
+    /// Set once the exit was reaped, so a kill never signals a process id
+    /// that the system may have handed out again in the meantime.
+    exited: AtomicBool,
+    child: Mutex<Child>,
+}
+
 #[derive(Default)]
 pub struct Processes {
     next_id: AtomicU32,
-    running: Mutex<HashMap<u32, Arc<Mutex<Child>>>>,
+    running: Mutex<HashMap<u32, Arc<Running>>>,
 }
 
 pub struct SpawnSpec {
@@ -106,7 +119,11 @@ impl Processes {
         drop(tx);
 
         let id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
-        let child = Arc::new(Mutex::new(child));
+        let child = Arc::new(Running {
+            pid: child.id(),
+            exited: AtomicBool::new(false),
+            child: Mutex::new(child),
+        });
         self.running
             .lock()
             .map_err(|e| e.to_string())?
@@ -114,20 +131,18 @@ impl Processes {
 
         let this = Arc::clone(self);
         thread::spawn(move || {
-            // The lock is only held while asking whether the program ended,
-            // never while waiting, so `kill` can take it at any time. The
-            // pause grows to 50 ms, so a long-running program is not asked
-            // twenty times a second.
-            let mut pause = Duration::from_millis(1);
-            let status = loop {
-                match child.lock().map(|mut c| c.try_wait()) {
-                    Ok(Ok(Some(status))) => break Some(status),
-                    Ok(Ok(None)) => {
-                        thread::sleep(pause);
-                        pause = (pause * 2).min(Duration::from_millis(50));
-                    }
-                    _ => break None,
+            // A blocking wait: the exit is noticed at once and a running
+            // program costs no wakeups at all. The lock stays held while
+            // waiting; `kill` does not need it (see `Running`).
+            let status = match child.child.lock() {
+                Ok(mut c) => {
+                    let status = c.wait().ok();
+                    // The exit is marked before the lock is freed, so a kill
+                    // that cannot take the lock knows the id is still ours.
+                    child.exited.store(true, Ordering::SeqCst);
+                    status
                 }
+                Err(_) => None,
             };
             // All output first, so the plugin sees the exit last.
             for r in readers.into_iter().flatten() {
@@ -144,10 +159,23 @@ impl Processes {
 
     pub fn kill(&self, id: u32) {
         let child = self.running.lock().ok().and_then(|r| r.get(&id).cloned());
-        if let Some(child) = child
-            && let Ok(mut c) = child.lock()
-        {
-            let _ = c.kill();
+        let Some(child) = child else { return };
+        if child.exited.load(Ordering::SeqCst) {
+            return;
+        }
+        match child.child.try_lock() {
+            // The reaper is not waiting: kill through the handle as before.
+            Ok(mut c) => {
+                let _ = c.kill();
+            }
+            // The reaper holds the lock in `wait()`: the program has not
+            // been reaped yet, so its id is still its own. Signal it by the
+            // id; the wait returns with the exit right away.
+            Err(_) => {
+                if !child.exited.load(Ordering::SeqCst) {
+                    signal_kill(child.pid);
+                }
+            }
         }
     }
 
@@ -163,17 +191,38 @@ impl Processes {
     }
 }
 
+/// Ends a program by its process id while the reaper holds the handle in
+/// `wait()`. On unix SIGKILL, like `Child::kill`; on Windows
+/// `TerminateProcess`, the same call `Child::kill` makes.
+#[cfg(unix)]
+fn signal_kill(pid: u32) {
+    // SAFETY: `kill` only sends a signal to the given process id and touches
+    // no memory. The id was checked against `exited` right before, so it
+    // still belongs to our program.
+    unsafe {
+        libc::kill(pid as libc::pid_t, libc::SIGKILL);
+    }
+}
+
+#[cfg(windows)]
+fn signal_kill(pid: u32) {
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_TERMINATE, TerminateProcess};
+    // SAFETY: the handle comes from `OpenProcess` and is closed again below;
+    // the id was checked against `exited` right before.
+    unsafe {
+        let handle = OpenProcess(PROCESS_TERMINATE, 0, pid);
+        if !handle.is_null() {
+            TerminateProcess(handle, 1);
+            CloseHandle(handle);
+        }
+    }
+}
+
 /// How long output is collected before it is sent as one event. Long enough
 /// that a stream of small writes becomes a handful of events per second,
 /// short enough that an interactive program still answers at once.
 const FLUSH_WINDOW: Duration = Duration::from_millis(25);
-
-/// Which stream the output being collected belongs to.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Stream {
-    Out,
-    Err,
-}
 
 /// Sends the output of a program to the plugin, collected over
 /// [`FLUSH_WINDOW`]: what arrives within one window becomes one event.
@@ -183,62 +232,83 @@ fn flush_events(
     events: Channel<ProcessEvent>,
 ) -> thread::JoinHandle<()> {
     thread::spawn(move || {
-        let mut pending: Option<(Stream, String)> = None;
+        // One buffer per stream: a piece of the other stream must never
+        // throw away what was collected so far.
+        let mut out = String::new();
+        let mut err = String::new();
         let mut deadline = Instant::now();
         loop {
-            // Without output there is nothing to wait for: the thread sleeps
-            // until a piece arrives instead of waking up on its own.
-            let next = match &pending {
-                Some(_) => rx.recv_timeout(deadline.saturating_duration_since(Instant::now())),
-                None => rx.recv().map_err(|_| RecvTimeoutError::Disconnected),
-            };
-            match next {
-                Ok(ProcessEvent::Stdout(text)) => {
-                    append(&mut pending, &mut deadline, Stream::Out, text);
+            let idle = out.is_empty() && err.is_empty();
+            if idle {
+                // Without output there is nothing to wait for: the thread
+                // sleeps until a piece arrives instead of waking up on its own.
+                match rx.recv() {
+                    Ok(event) => collect(&mut out, &mut err, &mut deadline, event),
+                    Err(_) => break,
                 }
-                Ok(ProcessEvent::Stderr(text)) => {
-                    append(&mut pending, &mut deadline, Stream::Err, text);
+            } else {
+                // Take everything that is already there first, so a busy
+                // program is not woken up once per piece.
+                let mut open = true;
+                loop {
+                    match rx.try_recv() {
+                        Ok(event) => collect(&mut out, &mut err, &mut deadline, event),
+                        Err(TryRecvError::Empty) => break,
+                        Err(TryRecvError::Disconnected) => {
+                            open = false;
+                            break;
+                        }
+                    }
                 }
-                // Exit never travels this way; it is sent after this thread
-                // ended, so the plugin sees it last.
-                Ok(ProcessEvent::Exit(_)) => {}
-                Err(RecvTimeoutError::Timeout) => {}
-                Err(RecvTimeoutError::Disconnected) => break,
-            }
-            if Instant::now() >= deadline
-                && let Some((stream, text)) = pending.take()
-            {
-                let _ = events.send(wrap(stream, text));
+                let wait = deadline.saturating_duration_since(Instant::now());
+                if !wait.is_zero() && open {
+                    match rx.recv_timeout(wait) {
+                        Ok(event) => collect(&mut out, &mut err, &mut deadline, event),
+                        Err(RecvTimeoutError::Timeout) => {}
+                        Err(RecvTimeoutError::Disconnected) => open = false,
+                    }
+                }
+                if Instant::now() >= deadline || !open {
+                    flush(&mut out, &mut err, &events);
+                }
+                if !open {
+                    break;
+                }
             }
         }
-        if let Some((stream, text)) = pending {
-            let _ = events.send(wrap(stream, text));
-        }
+        flush(&mut out, &mut err, &events);
     })
 }
 
-/// Turns collected output back into the event of its stream.
-fn wrap(stream: Stream, text: String) -> ProcessEvent {
-    match stream {
-        Stream::Out => ProcessEvent::Stdout(text),
-        Stream::Err => ProcessEvent::Stderr(text),
+/// Adds one piece of output to the buffer of its stream. The first piece of
+/// a window sets its end; the pieces after it only add to the buffers.
+fn collect(out: &mut String, err: &mut String, deadline: &mut Instant, event: ProcessEvent) {
+    match event {
+        ProcessEvent::Stdout(text) => {
+            if out.is_empty() && err.is_empty() {
+                *deadline = Instant::now() + FLUSH_WINDOW;
+            }
+            out.push_str(&text);
+        }
+        ProcessEvent::Stderr(text) => {
+            if out.is_empty() && err.is_empty() {
+                *deadline = Instant::now() + FLUSH_WINDOW;
+            }
+            err.push_str(&text);
+        }
+        // Exit never travels this way; it is sent after this thread ended,
+        // so the plugin sees it last.
+        ProcessEvent::Exit(_) => {}
     }
 }
 
-/// Adds a piece of output to the event being collected. A different stream
-/// closes the one before it, so the order of the output stays as it was.
-fn append(
-    pending: &mut Option<(Stream, String)>,
-    deadline: &mut Instant,
-    stream: Stream,
-    text: String,
-) {
-    match pending {
-        Some((kind, buf)) if *kind == stream => buf.push_str(&text),
-        _ => {
-            *pending = Some((stream, text));
-            *deadline = Instant::now() + FLUSH_WINDOW;
-        }
+/// Sends what was collected, stdout before stderr, and empties the buffers.
+fn flush(out: &mut String, err: &mut String, events: &Channel<ProcessEvent>) {
+    if !out.is_empty() {
+        let _ = events.send(ProcessEvent::Stdout(std::mem::take(out)));
+    }
+    if !err.is_empty() {
+        let _ = events.send(ProcessEvent::Stderr(std::mem::take(err)));
     }
 }
 
@@ -387,6 +457,65 @@ mod tests {
         assert_eq!(
             events.last().map(String::as_str),
             Some(r#"{"event":"exit","data":0}"#)
+        );
+    }
+
+    /// Output of both streams in one window all arrives: the piece of one
+    /// stream must not throw away what was collected of the other.
+    #[test]
+    fn both_streams_survive_one_collection_window() {
+        let spec = SpawnSpec {
+            command: "sh".into(),
+            args: vec![
+                "-c".into(),
+                "printf 'out-one\\n'; printf 'err-one\\n' >&2; printf 'out-two\\n'; printf 'err-two\\n' >&2".into(),
+            ],
+            stdin: None,
+            env: HashMap::new(),
+        };
+        let (_, _, rx) = run(spec);
+        let events = collect(&rx);
+        let mut out = String::new();
+        let mut err = String::new();
+        for e in &events {
+            let value: serde_json::Value = serde_json::from_str(e).expect("json");
+            match value["event"].as_str() {
+                Some("stdout") => out.push_str(value["data"].as_str().unwrap_or_default()),
+                Some("stderr") => err.push_str(value["data"].as_str().unwrap_or_default()),
+                _ => {}
+            }
+        }
+        assert_eq!(out, "out-one\nout-two\n");
+        assert_eq!(err, "err-one\nerr-two\n");
+        assert_eq!(
+            events.last().map(String::as_str),
+            Some(r#"{"event":"exit","data":0}"#)
+        );
+    }
+
+    /// A kill while the reaper waits (the usual case) ends the program and
+    /// is reported without waiting for the program's own end.
+    #[test]
+    fn kill_works_while_the_reaper_waits() {
+        let spec = SpawnSpec {
+            command: "sleep".into(),
+            args: vec!["30".into()],
+            stdin: None,
+            env: HashMap::new(),
+        };
+        let (processes, id, rx) = run(spec);
+        // Give the reaper time to take the lock and block in `wait()`.
+        thread::sleep(Duration::from_millis(100));
+        let start = Instant::now();
+        processes.kill(id);
+        let events = collect(&rx);
+        assert!(
+            start.elapsed() < Duration::from_secs(5),
+            "the kill should not wait for the program"
+        );
+        assert_eq!(
+            events.last().map(String::as_str),
+            Some(r#"{"event":"exit","data":null}"#)
         );
     }
 }

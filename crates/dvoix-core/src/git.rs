@@ -142,7 +142,18 @@ pub fn status(vault: &Vault) -> Result<GitStatus> {
 
     let out = git_raw(
         &repo.root,
-        &["status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all"],
+        // `--untracked-files=all` on purpose, not `normal`: `normal` reports
+        // a new folder as one entry, but the panel lists files, filters the
+        // machine state per file and offers "stage this file". Listing the
+        // files of such a folder correctly would need more calls of git
+        // (gitignore rules), which is what this one call is meant to avoid.
+        &[
+            "status",
+            "--porcelain=v2",
+            "--branch",
+            "-z",
+            "--untracked-files=all",
+        ],
     )?;
     if !out.status.success() {
         return Err(Error::Git(git_error(&out)));
@@ -210,18 +221,35 @@ pub fn status(vault: &Vault) -> Result<GitStatus> {
                 }
                 push_changes(&mut staged, &mut unstaged, letters, path);
             }
-            // Unmerged entries (`u`) and anything unknown are not shown, like before.
+            // Unmerged entries (a conflict) keep the file visible in both
+            // lists, as the v1 format showed them (`U` on both sides).
+            Some("u") => {
+                // `u <XY> <sub> <m1> <m2> <m3> <mW> <h1> <h2> <h3> <path>`
+                let mut rest = fields.next().unwrap_or_default().splitn(10, ' ');
+                let Some(path) = rest.nth(9).and_then(|p| repo.to_vault(p)) else {
+                    continue;
+                };
+                if is_machine_state(&path) {
+                    continue;
+                }
+                staged.push(ChangedFile {
+                    path: path.clone(),
+                    status: "U".into(),
+                });
+                unstaged.push(ChangedFile {
+                    path,
+                    status: "U".into(),
+                });
+            }
+            // Anything unknown is not shown.
             _ => {}
         }
     }
 
-    // The remote cannot be read from the status; only push and pull need it,
-    // so it is asked for only when there is a remote branch to name.
-    if info.upstream.is_some() {
-        info.remote = git_optional(&repo.root, &["remote"])
-            .and_then(|s| s.lines().next().map(|l| l.trim().to_string()))
-            .filter(|s| !s.is_empty());
-    }
+    // The status does not name the remote, but the upstream does: its first
+    // part is the remote it is fetched from (`origin/main` -> `origin`).
+    // That is the remote push and pull use, and it costs no extra call of git.
+    info.remote = remote_of(info.upstream.as_deref());
 
     Ok(GitStatus {
         repo: Some(info),
@@ -229,6 +257,13 @@ pub fn status(vault: &Vault) -> Result<GitStatus> {
         unstaged,
         untracked,
     })
+}
+
+/// The remote an upstream branch is fetched from: the first part of its
+/// name (`origin/main` -> `origin`). `None` without an upstream.
+fn remote_of(upstream: Option<&str>) -> Option<String> {
+    let (remote, _) = upstream?.split_once('/')?;
+    Some(remote.to_string())
 }
 
 /// Reads one `# ` header of `status --porcelain=v2 --branch`: the branch (or
@@ -811,7 +846,10 @@ mod tests {
     #[test]
     fn branch_headers_give_branch_upstream_and_distance() {
         let mut info = empty_info();
-        branch_header(&mut info, "branch.oid 292a5af7913bc5d64a669d432ffa40f5a5aba4ec");
+        branch_header(
+            &mut info,
+            "branch.oid 292a5af7913bc5d64a669d432ffa40f5a5aba4ec",
+        );
         branch_header(&mut info, "branch.head main");
         branch_header(&mut info, "branch.upstream origin/main");
         branch_header(&mut info, "branch.ab +3 -2");
@@ -824,7 +862,10 @@ mod tests {
     #[test]
     fn a_detached_head_shows_the_short_commit() {
         let mut info = empty_info();
-        branch_header(&mut info, "branch.oid 292a5af7913bc5d64a669d432ffa40f5a5aba4ec");
+        branch_header(
+            &mut info,
+            "branch.oid 292a5af7913bc5d64a669d432ffa40f5a5aba4ec",
+        );
         branch_header(&mut info, "branch.head (detached)");
         assert_eq!(info.branch, "292a5af");
         assert!(info.upstream.is_none());
@@ -1194,7 +1235,11 @@ mod tests {
         assert_eq!((repo.ahead, repo.behind), (1, 0));
 
         let other = tempdir().expect("temp dir");
-        git(other.path(), &["clone", &remote.path().to_string_lossy(), "."]).expect("clone");
+        git(
+            other.path(),
+            &["clone", &remote.path().to_string_lossy(), "."],
+        )
+        .expect("clone");
         git(other.path(), &["config", "user.name", "dvoix"]).expect("config");
         git(other.path(), &["config", "user.email", "dvoix@example.com"]).expect("config");
         fs::write(other.path().join("third.md"), "# Third\n").expect("write");
@@ -1206,5 +1251,50 @@ mod tests {
         let state = status(&vault).expect("status");
         let repo = state.repo.expect("repo");
         assert_eq!((repo.ahead, repo.behind), (1, 1));
+    }
+
+    /// A conflict keeps the file visible in both lists with `U`, as the v1
+    /// format showed it; resolving it empties the status again.
+    #[test]
+    fn a_conflict_is_shown_until_it_is_resolved() {
+        if !git_available() {
+            return;
+        }
+        let (dir, vault) = vault_with_repo();
+        commit(&vault, "First", true).expect("commit");
+        create_branch(&vault, "other").expect("branch");
+        fs::write(dir.path().join("note.md"), "# Other\n").expect("write");
+        commit(&vault, "Other side", true).expect("commit");
+        checkout(&vault, "main").expect("checkout");
+        fs::write(dir.path().join("note.md"), "# Main\n").expect("write");
+        commit(&vault, "Main side", true).expect("commit");
+
+        // The merge conflicts; that is expected here.
+        let _ = git_raw(vault.root(), &["merge", "other"]);
+        let state = status(&vault).expect("status");
+        assert_eq!(state.staged.len(), 1, "staged: {:?}", state.staged);
+        assert_eq!(state.staged[0].path, "note.md");
+        assert_eq!(state.staged[0].status, "U");
+        assert_eq!(state.unstaged.len(), 1, "unstaged: {:?}", state.unstaged);
+        assert_eq!(state.unstaged[0].status, "U");
+
+        // Resolving the file takes it out of both lists again.
+        fs::write(dir.path().join("note.md"), "# Resolved\n").expect("write");
+        stage(&vault, &["note.md".into()]).expect("stage");
+        let state = status(&vault).expect("status");
+        assert!(state.unstaged.is_empty());
+        assert_eq!(state.staged[0].status, "M");
+    }
+
+    /// The remote is taken from the upstream, so the status needs no extra
+    /// call of git for it.
+    #[test]
+    fn the_remote_is_the_first_part_of_the_upstream() {
+        assert_eq!(
+            remote_of(Some("origin/topic/with-slashes")).as_deref(),
+            Some("origin")
+        );
+        assert_eq!(remote_of(Some("main")).as_deref(), None);
+        assert_eq!(remote_of(None).as_deref(), None);
     }
 }

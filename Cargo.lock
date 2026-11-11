@@ -656,6 +656,7 @@ name = "dvoix"
 version = "0.1.0"
 dependencies = [
  "dvoix-core",
+ "libc",
  "serde",
  "serde_json",
  "tauri",
@@ -664,6 +665,7 @@ dependencies = [
  "tempfile",
  "ureq",
  "webkit2gtk",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

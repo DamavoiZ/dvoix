@@ -27,3 +27,11 @@ tempfile = "3"
 # Settings of the Linux webview that Tauri doesn't expose (smooth scrolling).
 [target.'cfg(target_os = "linux")'.dependencies]
 webkit2gtk = "2.0.2"
+
+# `process.rs` ends a program by its process id while the reaper thread holds
+# the child handle in a blocking wait (kill without polling).
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Threading"] }
