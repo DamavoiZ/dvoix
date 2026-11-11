@@ -12,7 +12,8 @@ import {
   type DecorationSet,
   type ViewUpdate,
 } from "@codemirror/view";
-import { embedImage, isImage, parseEmbed } from "../../attachments";
+import { embedImage, embeddedImageHeight, isImage, parseEmbed } from "../../attachments";
+import { SCROLL_SETTLE_MS } from "../../editorScroll";
 import { parseFrontmatter } from "./frontmatter";
 import { PropertiesWidget } from "./propertiesWidget.svelte";
 import { TableWidget, focusTable } from "./tableWidget";
@@ -63,15 +64,31 @@ class RuleWidget extends WidgetType {
 class ImageWidget extends WidgetType {
   constructor(
     readonly target: string,
-    readonly width?: number,
+    readonly width: number | undefined,
+    /** The editor the image is drawn in; asked for the line width when the height is estimated. */
+    readonly view: EditorView,
   ) {
     super();
   }
   eq(other: ImageWidget) {
+    // Only what the image shows decides whether its DOM can stay.
     return other.target === this.target && other.width === this.width;
   }
-  toDOM() {
-    return embedImage(this.target, this.width);
+  /**
+   * The height the image will take, from the size of the file remembered
+   * when it was first loaded. CodeMirror uses it for the lines it has not
+   * drawn yet, so the scrollbar and the text below do not jump when the
+   * image comes into view. Unknown size: -1, CodeMirror measures the DOM.
+   */
+  get estimatedHeight() {
+    // The text of a line is inset by 1.5rem on each side (`editor.ts`).
+    const lineWidth = Math.max(1, this.view.contentDOM.clientWidth - 48);
+    return embeddedImageHeight(this.target, this.width ?? lineWidth) ?? -1;
+  }
+  toDOM(view: EditorView) {
+    // Once the image has its size the editor measures again: until then the
+    // line was only as tall as its text.
+    return embedImage(this.target, this.width, () => view.requestMeasure());
   }
 }
 
@@ -268,8 +285,8 @@ function addCodeLines(
   }
 }
 
-/** Builds the decorations of the live preview for the current state. */
-function buildDecorations(view: EditorView): DecorationSet {
+/** Builds the decorations of the live preview for the given ranges. */
+function buildDecorations(view: EditorView, ranges: Range[] = visibleLines(view)): DecorationSet {
   const { state } = view;
   const active = activeLines(state);
   const hides: Hide[] = [];
@@ -279,7 +296,7 @@ function buildDecorations(view: EditorView): DecorationSet {
   const marks: { from: number; to: number; class: string }[] = [];
   const images: Embed[] = [];
 
-  for (const range of visibleLines(view)) {
+  for (const range of ranges) {
     collectWikilinks(state, range, hides, images);
     collectSyntax(state, range, hides, bullets, rules, lineClasses, marks);
   }
@@ -300,7 +317,7 @@ function buildDecorations(view: EditorView): DecorationSet {
     // The line of the cursor keeps its syntax.
     if (active.has(state.doc.lineAt(h.from).number)) continue;
     const image = images.find((i) => i.from === h.from && i.to === h.to);
-    const widget = image ? new ImageWidget(image.target, image.width) : undefined;
+    const widget = image ? new ImageWidget(image.target, image.width, view) : undefined;
     replaces.push({ from: h.from, to: h.to, deco: Decoration.replace(widget ? { widget } : {}) });
   }
   for (const b of bullets) {
@@ -334,21 +351,122 @@ function buildDecorations(view: EditorView): DecorationSet {
   return builder.finish();
 }
 
+/** Sorts ranges and joins the ones that touch or overlap. */
+function mergeRanges(ranges: Range[]): Range[] {
+  const sorted = [...ranges].sort((a, b) => a.from - b.from);
+  const out: Range[] = [];
+  for (const r of sorted) {
+    const last = out[out.length - 1];
+    if (last && r.from <= last.to + 1) last.to = Math.max(last.to, r.to);
+    else out.push({ ...r });
+  }
+  return out;
+}
+
 const livePreviewPlugin = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet;
+    private view: EditorView | undefined;
+    /** The positions the decorations cover; while the scroll settles they lag behind. */
+    private covered: Range[] = [];
+    private timer: ReturnType<typeof setTimeout> | undefined;
+    private onScroll = () => {
+      // Every scroll step restarts the wait; the full rebuild happens once
+      // the scroll has been quiet for a moment.
+      clearTimeout(this.timer);
+      this.timer = setTimeout(() => {
+        this.timer = undefined;
+        // A new decoration set only reaches the view through a transaction;
+        // the empty one asks for the redraw without changing anything else.
+        this.view?.dispatch({});
+      }, SCROLL_SETTLE_MS);
+    };
+
     constructor(view: EditorView) {
+      this.view = view;
       this.decorations = buildDecorations(view);
+      this.rememberCovered(view);
+      view.scrollDOM.addEventListener("scroll", this.onScroll, { passive: true });
     }
+
     update(update: ViewUpdate) {
+      this.view = update.view;
       if (
         update.docChanged ||
         update.selectionSet ||
-        update.viewportChanged ||
-        syntaxTree(update.startState) !== syntaxTree(update.state)
+        syntaxTree(update.startState) !== syntaxTree(update.state) ||
+        update.transactions.length > 0
       ) {
-        this.decorations = buildDecorations(update.view);
+        // A real change (typing, cursor, an empty dispatch after the scroll
+        // settled) decorates right away, also while a wait is running.
+        this.buildNow();
+        return;
       }
+      if (update.viewportChanged) {
+        // The rendered range moved. The lines that came into view are
+        // decorated right away, so no raw syntax shows while scrolling; the
+        // full rebuild (which also drops what scrolled out and re-measures
+        // the heights) waits for the scroll to settle.
+        this.coverNewLines();
+      }
+    }
+
+    /** Adds the decorations of the lines the viewport gained, without touching the rest. */
+    private coverNewLines() {
+      const view = this.view;
+      if (!view) return;
+      const { doc } = view.state;
+      // The part of the rendered ranges the decorations do not cover yet,
+      // widened to whole lines: a marker is hidden per line, never half.
+      const fresh: Range[] = [];
+      for (const range of visibleLines(view)) {
+        let rest: Range[] = [range];
+        for (const old of this.covered) {
+          const next: Range[] = [];
+          for (const r of rest) {
+            if (old.to < r.from || old.from > r.to) next.push(r);
+            else {
+              if (r.from < old.from) next.push({ from: r.from, to: old.from - 1 });
+              if (r.to > old.to) next.push({ from: old.to + 1, to: r.to });
+            }
+          }
+          rest = next;
+        }
+        for (const r of rest) fresh.push({ from: doc.lineAt(r.from).from, to: doc.lineAt(r.to).to });
+      }
+      if (!fresh.length) return;
+      // The new ranges lie outside the covered ones, so the sets can be
+      // joined without a conflict; the cursor line keeps its syntax because
+      // the new build skips it just like the old one did.
+      const added: { from: number; to: number; value: Decoration }[] = [];
+      buildDecorations(view, fresh).between(0, view.state.doc.length, (from, to, value) => {
+        added.push({ from, to, value });
+      });
+      this.decorations = this.decorations.update({ add: added });
+      // Union, not reset: the old decorations stay while the scroll settles,
+      // so what they cover must not be forgotten even though it has left the
+      // viewport. Merged, so the list stays as short as the covered stretch.
+      this.covered = mergeRanges([...this.covered, ...fresh]);
+    }
+
+    /** Rebuilds the decorations for the current state and ends a running wait. */
+    private buildNow() {
+      clearTimeout(this.timer);
+      this.timer = undefined;
+      if (!this.view) return;
+      this.decorations = buildDecorations(this.view);
+      this.rememberCovered(this.view);
+    }
+
+    /** Notes which ranges the decorations cover now. */
+    private rememberCovered(view: EditorView) {
+      this.covered = visibleLines(view);
+    }
+
+    destroy() {
+      clearTimeout(this.timer);
+      this.view?.scrollDOM.removeEventListener("scroll", this.onScroll);
+      this.view = undefined;
     }
   },
   { decorations: (v) => v.decorations },

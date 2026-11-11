@@ -20,6 +20,9 @@ cargo run --release --example index_bench -- 80000 2000
 # The editor: the live preview and the check of the note.
 node scripts/bench-editor.mjs
 
+# The editor while it scrolls: the decorations per scroll step.
+node scripts/bench-scroll.mjs
+
 # The panels: the lookups of links, the tree of the vault, the suggestions.
 node scripts/bench-panels.mjs
 ```
@@ -208,6 +211,47 @@ the change avoids.
 
 The line endings of a note were also looked for in the whole text on every
 keystroke. They are decided once per note now.
+
+### Scrolling the editor
+
+The live preview rebuilt its decorations whenever the rendered range moved.
+On Linux the webview (WebKitGTK) animates a wheel scroll over many frames, and
+every frame that moved the range rebuilt the decorations of the whole window
+and made the editor measure the heights again, which showed as stutter.
+
+Now a scroll step only decorates the lines that came into view and joins them
+into the set that is kept; nothing that is already drawn is touched. The full
+rebuild, which also drops what scrolled away, waits until the scroll has been
+quiet for 120 ms (`src/lib/editorScroll.ts`). Typing, a click and every other
+transaction still decorate right away, so the syntax never lags behind an
+edit, and a line that comes into view never shows its raw markers.
+
+The work per scroll burst, from `node scripts/bench-scroll.mjs` (a window of
+160 lines scrolled in steps of 8, a burst of 30 steps between two settles),
+in milliseconds:
+
+| Note | Rebuild the window every step | Cover only the new lines | |
+| --- | --- | --- | --- |
+| 200 sections (3 445 lines) | 6.80 | 1.53 | **4.4×** |
+| 400 sections (6 885 lines) | 12.05 | 2.56 | **4.7×** |
+| 1500 sections (25 805 lines) | 42.02 | 9.73 | **4.3×** |
+
+The bench models the decoration logic on the real markdown parser; the frame
+time in the app itself could not be measured outside the webview. What it
+shows is the work the change takes out of the scroll frames: the height
+measure of a widget that stays on screen is not paid again on every step.
+
+An embedded image also reserves its height before it is drawn. The size of
+the file is remembered when it was first loaded (`embeddedImageHeight` in
+`src/lib/attachments.ts`), and the image widget reports it to CodeMirror, so
+the lines below the viewport do not jump when the image arrives. The height
+of an embed line off screen, measured with the real editor in a headless
+browser (a Vite harness that mounts the editor with a mocked Tauri bridge and
+an image of 800 × 450 px, driven through the Chrome DevTools Protocol):
+
+| | Before | After |
+| --- | --- | --- |
+| height reserved for the line | 26 px (its text) | 509 px (the image) |
 
 ### The panels
 
