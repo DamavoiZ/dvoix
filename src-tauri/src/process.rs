@@ -251,20 +251,21 @@ fn kill_target(child: &Child) -> KillTarget {
 fn signal_kill(target: &KillTarget) {
     // The pidfd names exactly our process: even a signal that arrives after
     // the reap can never reach a program that got the id in the meantime.
-    // A pidfd signal that fails (the process is gone, or the kernel has no
-    // pidfds) falls through to the id, which is safe while the child is
-    // unreaped.
+    // A failed pidfd signal (practically always ESRCH: the process is gone
+    // or unreachable) ends the attempt right there. Falling through to the
+    // id would reopen exactly the race the pidfd closes: ESRCH means the
+    // exit may have been reaped and the id handed out again in the meantime.
     #[cfg(target_os = "linux")]
-    if let Some(pidfd) = &target.pidfd
-        && pidfd.send_sigkill()
-    {
+    if let Some(pidfd) = &target.pidfd {
+        let _ = pidfd.send_sigkill();
         return;
     }
-    // SAFETY: `kill` only sends a signal to the given process id and touches
-    // no memory. The target was taken under the state lock before the reaper
-    // marked the exit, so the id named our program then. Without a pidfd a
-    // kill that races the natural end can land just after the reap; that
-    // residual window is what the pidfd closes on Linux.
+    // Only kernels without pidfd support (and the other unix systems) end
+    // up here. SAFETY: `kill` only sends a signal to the given process id
+    // and touches no memory. The target was taken under the state lock
+    // before the reaper marked the exit, so the id named our program then.
+    // Without a pidfd a kill that races the natural end can land just after
+    // the reap; that residual window is what the pidfd closes on Linux.
     unsafe {
         libc::kill(target.pid as libc::pid_t, libc::SIGKILL);
     }
@@ -338,7 +339,9 @@ fn creation_time(pid: u32) -> Option<u64> {
 /// for as long as it is open, independent of its process id. The syscalls are
 /// called through libc directly so no new dependency is needed; on kernels
 /// without them `open` returns `None` and the kill falls back to the id,
-/// which is safe while the child is unreaped (see [`signal_kill`]).
+/// which is safe while the child is unreaped (see [`signal_kill`]). Once a
+/// pidfd exists the kill never signals the id, even when the pidfd signal
+/// fails.
 #[cfg(target_os = "linux")]
 struct PidFd(std::os::fd::OwnedFd);
 
@@ -359,7 +362,8 @@ impl PidFd {
     }
 
     /// Sends SIGKILL through the descriptor. True when the signal was sent;
-    /// a process that already exited reports ESRCH, which is fine.
+    /// a process that already exited reports ESRCH, which is fine: the kill
+    /// then does nothing more, never falls back to the id.
     fn send_sigkill(&self) -> bool {
         use std::os::fd::AsRawFd;
         // SAFETY: the descriptor is owned and open; the remaining arguments
@@ -772,5 +776,54 @@ mod tests {
         // After the reap the descriptor still names the old process only;
         // sending again fails with ESRCH instead of reaching a new one.
         assert!(!pidfd.send_sigkill());
+    }
+
+    /// A failed pidfd signal must not fall through to `kill(pid)`: failure
+    /// practically means the exit was reaped (ESRCH), and the id may name
+    /// another program by then. Waiting for the kernel to really hand the
+    /// id out again would mean wrapping the whole id space, so the target's
+    /// id points at a live stand-in directly: the same state a recycled id
+    /// produces, and a stray `kill(pid)` would be visible at once.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_failed_pidfd_signal_does_not_fall_back_to_kill() {
+        let mut victim = Command::new("sleep")
+            .arg("30")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn");
+        let pidfd = PidFd::open(victim.id()).expect("pidfd on a modern kernel");
+        victim.kill().expect("kill the victim");
+        victim.wait().expect("reap the victim");
+        // The pidfd signal fails now: the victim has been reaped.
+        assert!(!pidfd.send_sigkill());
+        let mut stand_in = Command::new("sleep")
+            .arg("30")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn");
+        let target = KillTarget {
+            pid: stand_in.id(),
+            pidfd: Some(pidfd),
+        };
+        signal_kill(&target);
+        // SIGKILL is asynchronous: give a wrongly sent signal time to land
+        // before declaring the stand-in safe. A fallthrough to kill(pid)
+        // ends it within milliseconds; the pidfd path leaves it alone.
+        let deadline = Instant::now() + Duration::from_millis(500);
+        loop {
+            assert!(
+                stand_in.try_wait().expect("stand-in status").is_none(),
+                "the failed pidfd signal fell back to kill(pid) and hit another process"
+            );
+            if Instant::now() >= deadline {
+                break;
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+        stand_in.kill().expect("clean up the stand-in");
+        stand_in.wait().expect("reap the stand-in");
     }
 }
