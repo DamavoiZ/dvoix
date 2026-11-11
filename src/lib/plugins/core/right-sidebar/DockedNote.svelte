@@ -154,15 +154,15 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
 <div class="reading docked h-full overflow-y-auto px-3 py-3" onclick={handleClick}>
-  {#if rendered}
+  {#if missing}
+    <p class="py-4 text-xs text-zinc-600">This note is gone from the vault.</p>
+  {:else if rendered}
     <div class="reading-inner">
       <div class="prose" bind:this={prose}>
         <!-- The HTML is built by the Rust core; raw HTML from a note is escaped there. -->
         {@html rendered.html}
       </div>
     </div>
-  {:else if missing}
-    <p class="py-4 text-xs text-zinc-600">This note is gone from the vault.</p>
   {:else}
     <p class="py-4 text-xs text-zinc-600">Loading …</p>
   {/if}

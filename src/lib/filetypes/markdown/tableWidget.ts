@@ -124,8 +124,8 @@ interface Selection {
 type Drag =
   | { kind: "select"; r: number; c: number; x: number; y: number; active: boolean }
   | { kind: "cells"; rect: Rect; r: number; c: number; x: number; y: number; active: boolean; target: [number, number] | null }
-  | { kind: "rows"; from: number; to: number; y: number; active: boolean; before: number | null; click: number; mids?: number[]; marked?: number }
-  | { kind: "cols"; from: number; to: number; x: number; active: boolean; before: number | null; click: number; mids?: number[]; marked?: number };
+  | { kind: "rows"; from: number; to: number; y: number; active: boolean; click: number; marked?: number }
+  | { kind: "cols"; from: number; to: number; x: number; active: boolean; click: number; marked?: number };
 
 /** How far the mouse has to move before a press becomes a drag. */
 const DRAG_DISTANCE = 4;
@@ -707,12 +707,12 @@ class TableEditor {
         const r = Number(rowGrip.dataset.row);
         const whole = rect && rect.c0 === 0 && rect.c1 === this.table.columns - 1 && r >= rect.r0 && r <= rect.r1;
         const [from, to] = whole ? [rect.r0, rect.r1] : [r, r];
-        this.startDrag({ kind: "rows", from, to, y: event.clientY, active: false, before: null, click: r });
+        this.startDrag({ kind: "rows", from, to, y: event.clientY, active: false, click: r });
       } else {
         const c = Number(colGrip!.dataset.col);
         const whole = rect && rect.r0 === 0 && rect.r1 === this.lastRow && c >= rect.c0 && c <= rect.c1;
         const [from, to] = whole ? [rect.c0, rect.c1] : [c, c];
-        this.startDrag({ kind: "cols", from, to, x: event.clientX, active: false, before: null, click: c });
+        this.startDrag({ kind: "cols", from, to, x: event.clientX, active: false, click: c });
       }
       return;
     }
@@ -739,19 +739,6 @@ class TableEditor {
 
   private startDrag(drag: Drag): void {
     this.drag = drag;
-    // Where the rows and columns stand is measured once per drag, not on
-    // every mouse move: `getBoundingClientRect` flushes the layout each time.
-    if (drag.kind === "rows") {
-      drag.mids = this.rowGrips.map((g) => {
-        const box = g.getBoundingClientRect();
-        return box.top + box.height / 2;
-      });
-    } else if (drag.kind === "cols") {
-      drag.mids = this.colGrips.map((g) => {
-        const box = g.getBoundingClientRect();
-        return box.left + box.width / 2;
-      });
-    }
     const move = (e: MouseEvent) => this.onDragMove(e);
     const up = (e: MouseEvent) => {
       document.removeEventListener("mousemove", move, true);
@@ -760,6 +747,31 @@ class TableEditor {
     };
     document.addEventListener("mousemove", move, true);
     document.addEventListener("mouseup", up, true);
+  }
+
+  /**
+   * The row a drop at `y` lands before (`rows.length`: past the last row).
+   * The grips are measured as they stand now, not once at the drag's start:
+   * the table can scroll during a drag, and cached positions would then name
+   * a row the scrolled distance away from the mouse. The scan stops at the
+   * first row below `y` and the drop marks are only shadows, so the layout
+   * stays clean and this is cheap on every mouse move.
+   */
+  private rowBefore(y: number): number {
+    for (let r = 1; r < this.table.rows.length; r++) {
+      const box = this.rowGrips[r].getBoundingClientRect();
+      if (y < box.top + box.height / 2) return r;
+    }
+    return this.table.rows.length;
+  }
+
+  /** The column a drop at `x` lands before (`columns`: past the last column), measured like `rowBefore`. */
+  private colBefore(x: number): number {
+    for (let c = 0; c < this.table.columns; c++) {
+      const box = this.colGrips[c].getBoundingClientRect();
+      if (x < box.left + box.width / 2) return c;
+    }
+    return this.table.columns;
   }
 
   private onDragMove(event: MouseEvent): void {
@@ -800,18 +812,10 @@ class TableEditor {
         drag.active = true;
         event.preventDefault();
         this.dom.classList.add("cm-lp-dragging");
-        const mids = drag.mids ?? [];
-        let before = this.table.rows.length;
-        for (let r = 1; r < this.table.rows.length; r++) {
-          if (event.clientY < mids[r]) {
-            before = r;
-            break;
-          }
-        }
+        const before = this.rowBefore(event.clientY);
         // The drop place did not move: the marks stay, no style is touched.
         if (drag.marked === before) return;
         drag.marked = before;
-        drag.before = before;
         this.clearDropMarks();
         const ok = !(before >= drag.from && before <= drag.to + 1);
         if (ok) {
@@ -825,18 +829,10 @@ class TableEditor {
         drag.active = true;
         event.preventDefault();
         this.dom.classList.add("cm-lp-dragging");
-        const mids = drag.mids ?? [];
-        let before = this.table.columns;
-        for (let c = 0; c < this.table.columns; c++) {
-          if (event.clientX < mids[c]) {
-            before = c;
-            break;
-          }
-        }
+        const before = this.colBefore(event.clientX);
         // The drop place did not move: the marks stay, no style is touched.
         if (drag.marked === before) return;
         drag.marked = before;
-        drag.before = before;
         this.clearDropMarks();
         if (!(before >= drag.from && before <= drag.to + 1)) {
           const last = before === this.table.columns;
@@ -889,11 +885,14 @@ class TableEditor {
           this.select({ ar: from, ac: 0, hr: r, hc: this.table.columns - 1 });
           return;
         }
-        if (drag.before === null) return;
-        const change = moveRows(this.table, drag.from, drag.to, drag.before);
+        // Measured again where the mouse is released: the table may have
+        // scrolled since the last move, and the drop follows the view, not
+        // the place the mark was drawn at.
+        const before = this.rowBefore(event.clientY);
+        const change = moveRows(this.table, drag.from, drag.to, before);
         if (!change) return;
         const count = drag.to - drag.from;
-        const start = drag.before < drag.from ? drag.before : drag.before - count - 1;
+        const start = before < drag.from ? before : before - count - 1;
         this.apply(change);
         this.select({ ar: start, ac: 0, hr: start + count, hc: this.table.columns - 1 });
         return;
@@ -905,11 +904,12 @@ class TableEditor {
           this.select({ ar: 0, ac: from, hr: this.lastRow, hc: c });
           return;
         }
-        if (drag.before === null) return;
-        const changes = moveColumns(this.table, drag.from, drag.to, drag.before);
+        // Measured again at the release point, like the rows above.
+        const before = this.colBefore(event.clientX);
+        const changes = moveColumns(this.table, drag.from, drag.to, before);
         if (!changes.length) return;
         const count = drag.to - drag.from;
-        const start = drag.before < drag.from ? drag.before : drag.before - count - 1;
+        const start = before < drag.from ? before : before - count - 1;
         this.apply(changes);
         this.select({ ar: 0, ac: start, hr: this.lastRow, hc: start + count });
         return;
