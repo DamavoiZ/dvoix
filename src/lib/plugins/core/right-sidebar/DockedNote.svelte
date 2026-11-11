@@ -18,11 +18,16 @@
   let missing = $state(false);
   /** The note that is shown, so a new one starts without the old text. */
   let shownPath = "";
-  /** The body that was rendered last, so an unchanged one is not rendered again. */
+  /** The body of the last render that landed, so an unchanged one is not rendered again. */
   let lastBody: string | undefined;
   /** A fresh read of the file is only asked for once the changes have settled. */
   let readTimer: ReturnType<typeof setTimeout> | undefined;
-  onMount(() => () => clearTimeout(readTimer));
+  /** Counts the reads asked for; the answer to an older one is dropped. */
+  let readGen = 0;
+  onMount(() => () => {
+    readGen++;
+    clearTimeout(readTimer);
+  });
 
   // Code blocks are colored after the HTML is in place; `{@html}` replaces
   // them on every render, so this runs again for each new HTML.
@@ -43,40 +48,45 @@
   $effect(() => {
     const p = path;
     const changed = vault.changes.notes;
-    // The path names one change of a batch, so it only says when a re-read is
-    // surely not needed; any other change of a note may be this one's folder.
+    // Every path of the last batch: a batch names more than one file, and this
+    // note may be any of them.
     void changed.number;
-    const isOpen = p === vault.openPath;
-    // While the note is open, its text comes from the editor, not from disk.
-    const live = isOpen ? vault.content : null;
+    const paths = changed.paths;
     const same = p === shownPath;
     shownPath = p;
-    if (isOpen) {
+    if (p === vault.openPath) {
+      // While the note is open, its text comes from the editor, not from disk.
+      readGen++;
       clearTimeout(readTimer);
-      text = live;
+      text = vault.content;
       missing = false;
       return;
     }
-    // A batch that names another file and no folder leaves this note alone.
-    if (same && changed.path && changed.path !== p && !changed.path.startsWith(`${p}/`)) return;
-    let stale = false;
+    // A batch that names neither this note nor a folder holding it leaves it
+    // alone; re-reading on every change of the vault would cost a file read
+    // per batch for every docked note. Nothing lives below a note, so a path
+    // of the batch is either the note itself or one of its folders. A read
+    // an earlier batch asked for stays pending: this run must not cancel it,
+    // or an unrelated change right after a relevant one loses the re-read.
+    if (same && paths.length && !paths.some((q) => q === p || p.startsWith(`${q}/`))) return;
+    const gen = ++readGen;
     const load = () => {
       void api.readFile(p).then(
         (content) => {
-          if (stale) return;
+          if (gen !== readGen) return;
           text = content;
           missing = false;
         },
         () => {
-          if (stale) return;
+          if (gen !== readGen) return;
           text = null;
           missing = true;
         },
       );
     };
+    clearTimeout(readTimer);
     if (same) {
       // A change on disk: wait for the burst to end before reading the file.
-      clearTimeout(readTimer);
       readTimer = setTimeout(load, 200);
     } else {
       text = null;
@@ -85,10 +95,6 @@
       lastBody = undefined;
       load();
     }
-    return () => {
-      stale = true;
-      clearTimeout(readTimer);
-    };
   });
 
   const content = $derived(path === vault.openPath ? vault.content : text);
@@ -100,14 +106,19 @@
     // rendered again (like in the reading view).
     const body = bodyOf(c);
     if (body === lastBody) return;
-    lastBody = body;
     let stale = false;
     // While typing, render once the text has settled, not on every key press.
     // Text read from a file is rendered right away.
     const delay = path === vault.openPath && vault.dirty ? 200 : 0;
     const timer = setTimeout(() => {
       void api.renderMarkdown(c).then((r) => {
-        if (!stale) rendered = r;
+        if (stale) return;
+        rendered = r;
+        // Remembered only once the render has landed, not when it is asked
+        // for: when the cleanup cancels a pending render (e.g. a tab switch
+        // right after typing), the next run must render this body again
+        // instead of skipping it as done, or the preview loses the last keys.
+        lastBody = body;
       });
     }, delay);
     return () => {
