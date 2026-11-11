@@ -304,6 +304,74 @@ the drop marks are only written when the drop place changes.
 and the app version, and a store plugin's `main.js` and `styles.css` do not
 depend on each other and are read at once instead of one after another.
 
+### The index, round 2
+
+20 000 notes of 2 kB, in milliseconds, measured with `index_bench` before
+and after this round:
+
+| Operation | Before | After | |
+| --- | --- | --- | --- |
+| full rebuild | 1359 | 1028 | **1.3×** |
+| re-index one note | 2.96 | 0.32 | **9×** |
+| write and re-index one note | 2.39 | 0.36 | **7×** |
+| sync (nothing changed) | 65 | 50 | |
+| remove a folder of 100 notes | 4.57 | 2.59 | |
+| 100 changes one by one | 216 | 64 | **3.4×** |
+| the same 100 changes in one batch | 20.9 | 13.9 | |
+| graph | 21 | 17 | |
+| search / tasks / tags | ~unchanged | | |
+
+**Renaming a folder only moves paths.** The rename deleted the old rows and
+read, parsed and indexed every note of the folder again, although only the
+paths change. Now the paths are moved with SQL updates (the search row by
+its rowid, `path` is `UNINDEXED`, so nothing is tokenized again). Names with
+`%` or `_` are escaped, and a rename that only changes the case works too.
+A test compares the result with a full rebuild of the same vault.
+
+**The write path prepares once.** Every tag, link and task of a note was
+written with a freshly prepared statement; the statements are cached now,
+and empty frontmatter and tag lists take a fast path. The inline scanner
+collected every text run into a `Vec<char>` (four bytes per character) just
+to look for `#`; it walks the string directly now. Ticking a task parsed
+every task of the note to find one line; only that line is parsed now.
+
+**The watcher does less per event.** The kind of an event is decided before
+the file is asked for its metadata, removals need no metadata at all, and a
+batch keeps only the last change per path. The index reuses the metadata
+the watcher already collected instead of asking the file system again.
+
+**SQLite is tuned for a cache.** `synchronous=NORMAL` (the index can always
+be rebuilt from the files, rule 1), a larger page cache, memory temp store
+and a memory-mapped read window. The secondary indexes are dropped before a
+full rebuild and built once over the finished tables, which measured faster
+than maintaining them per row. `PRAGMA optimize` was tried and rejected: its
+statistics made the planner leave the `NOCASE` path index for folder deletes
+and backlinks (two plan tests fail); the statistics table is dropped after
+bulk writes instead.
+
+**Links are unique.** A `UNIQUE(source, target)` index (schema version 5,
+one rebuild on the first open) lets the graph read a plain covering index
+scan instead of sorting and deduplicating the whole link table.
+
+### The shell, round 2
+
+**Git state costs one process.** `git status` spawned up to eight `git`
+processes (discovery, status, branch, upstream, remote, ahead/behind, two
+branch lists) on every refresh. One `git status --porcelain=v2 --branch -z`
+now carries the changes and the branch headers, the remote is derived from
+the upstream, and the branch list is one `for-each-ref`. Unmerged paths are
+reported like before. `--untracked-files=all` is kept on purpose: `normal`
+reports untracked folders as one entry, which breaks the per-file panel.
+
+**Downloads keep their connection.** Every store download built a new HTTP
+agent and paid a full TLS handshake; one shared agent is reused now, and an
+install fetches `main.js` and `styles.css` at the same time.
+
+**Plugin processes stream in windows.** Output was sent to the webview once
+per 8 kB read; it is collected per stream over 25 ms now (nothing is lost
+when the streams switch). The exit was polled every 50 ms; the reaper waits
+on the process now, and a kill goes through the stored handle or the pid.
+
 ## The attempts
 
 ### Kept: the search row takes the rowid of its note
