@@ -352,10 +352,13 @@ and after this round:
 
 **Renaming a folder only moves paths.** The rename deleted the old rows and
 read, parsed and indexed every note of the folder again, although only the
-paths change. Now the paths are moved with SQL updates (the search row by
-its rowid, `path` is `UNINDEXED`, so nothing is tokenized again). Names with
-`%` or `_` are escaped, and a rename that only changes the case works too.
-A test compares the result with a full rebuild of the same vault.
+paths change. Now the paths are moved with SQL updates. Names with `%` or `_`
+are escaped, and a rename that only changes the case works too. A test
+compares the result with a full rebuild of the same vault.
+The search table holds no path of its own (see below), so a rename does not
+reach it at all. With 20 000 notes in the index the rename of a folder of 100
+notes costs 3.9 ms; while the table still carried a copy of every path the same
+rename cost up to 96 ms, and at 80 000 notes between 284 and 371 ms.
 
 **The write path prepares once.** Every tag, link and task of a note was
 written with a freshly prepared statement; the statements are cached now,
@@ -417,8 +420,44 @@ EXPLAIN QUERY PLAN DELETE FROM notes_fts WHERE path = 'x.md';
 The note's rowid is now written into the search row, and the row is deleted by
 that rowid. The plan of the new delete is `INDEX 0:=` — a lookup, not a walk.
 
-The search itself did not change: the rowid is a hidden column, so the query
-and its `snippet()` call are the same as before.
+### Kept: the search table keeps no copy of the path
+
+The rowid made the delete cheap, but the table still stored a copy of every
+path, and a copy has to be written: the insert of a note paid for it, and a
+folder rename had to rewrite it for every note below. Isolating the statements
+of a rename measured the batch over the four tables at 8 to 13 ms for 800 rows
+and the same batch with the rewrite of the copy added at 87 to 93 ms, so the
+copy alone costs about ten times what the real work costs.
+
+The rename of a folder of 100 notes, measured by `index_bench` on the same
+vault before and after the column went away:
+
+| Vault | With the copy | Without it |
+| --- | --- | --- |
+| 20 000 notes | 25 to 96 ms | 3.9 ms |
+| 80 000 notes | 284 to 371 ms | 14.6 ms |
+
+The path is never searched, so the column can go: `search()` reads it through
+the rowid instead.
+
+```
+SELECT notes.path, notes_fts.title, snippet(notes_fts, 1, '«', '»', ' … ', 12)
+FROM notes_fts JOIN notes ON notes.rowid = notes_fts.rowid
+WHERE notes_fts MATCH ?1 ORDER BY rank LIMIT ?2
+```
+
+The join costs nothing measurable: a search over 20 000 notes runs in 10.23 ms
+with the column and 10.22 ms with the join, and a query that matches a single
+note is below a hundredth of a millisecond either way. The file of the index
+grows by about a megabyte for the copy (measured on 20 000 notes of 2 kB with
+nothing but the notes and the search table in the file: 107 MB against 106 MB),
+because the body of a note dwarfs its path. The win is the writing, not the
+size.
+
+One trap: dropping the first column moves the others, so the body of the note
+is column 1 and not 2, and `snippet()` has to be told. A test checks the exact
+snippet text and the exact path of a hit, because a wrong column still returns
+a hit and only the text gives it away.
 
 ### Kept: a `NOCASE` index for the delete of a folder
 
@@ -450,7 +489,8 @@ rebuild only touches the notes that changed.
 
 Measured 6.01 ms → 5.75 ms for the delete at 20 000 notes. FTS5 does not build
 a usable index for such a column, so the delete still walks the table. Not
-worth the change to the schema.
+worth the change to the schema. The column itself went later, for the cost of
+writing it rather than reading it (see above).
 
 ### Rejected: a search table that takes its content from the notes table
 
