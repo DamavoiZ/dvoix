@@ -323,9 +323,10 @@ class VaultStore {
   }
 
   /**
-   * An entry the app just wrote, remembered for the echo check. Other helpers
-   * that write a note themselves (ticking a task) register their write here,
-   * so the watcher does not read the file back over the editor.
+   * An entry the app just wrote, remembered for the echo check. Only writes
+   * whose new text the editor already shows belong here (saves, moves); a
+   * helper that changes a note behind the editor (ticking a task) must not
+   * register its write, or the editor would keep the old text.
    */
   noteSelfWrite(entry: VaultEntry): void {
     this.selfWrites = [{ path: entry.path, size: entry.size, modified: entry.modified, at: Date.now() }, ...this.selfWrites].slice(
