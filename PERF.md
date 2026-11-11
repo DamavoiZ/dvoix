@@ -2,7 +2,8 @@
 
 What was measured for dvoix, what it was, and what came out of it. Every
 number comes from `cargo run --release --example index_bench -- <notes> <bytes>`,
-which builds a vault of synthetic notes and times the operations of the index.
+which builds a vault of synthetic notes and times the operations of the index,
+unless a section names another source for it.
 
 The same command is used before and after a change, with the same note count
 and the same note size, so the numbers are comparable.
@@ -90,6 +91,34 @@ is taken as unchanged. A note that was written in the same millisecond as the
 last index build and has the same size as before would therefore be missed.
 That is rare, and the full rebuild is still there for the cases where it
 matters.
+
+### The search while it is still being typed
+
+Every word of a search is matched as a prefix (`fts_query`), because the user
+has usually not finished typing it. Without an extra index, FTS5 has to walk
+its term dictionary to find the beginnings: the search of a vault with many
+different words can cost a few seconds, although it answers in a millisecond
+for a word that is rare. An index over the first letter of every word
+(`prefix='1'` on the search table, schema version 6) makes that lookup cheap.
+
+80 000 notes of 2 kB, in milliseconds:
+
+| Search | Before | After | |
+| --- | --- | --- | --- |
+| `s`, a letter of nearly every note | 155 | 90 | **1.7×** |
+| a whole word | 67 | 66 | unchanged |
+| one letter, with a vocabulary of 20 000 words | 4357 | 210 | **21×** |
+| full rebuild | 4276 | 5026 | 18 % slower |
+| 100 changes in one batch | 36 | 35 | unchanged |
+| the file of the index | 491 MB | 563 MB | 15 % bigger |
+
+All rows but the one for a big vocabulary come from `index_bench`. That row
+comes from a corpus of the same size whose notes use 20 000 different words:
+the text of the bench repeats the same few words, so its term dictionary stays
+small and cannot show the worst case.
+
+The rebuild is what the extra index costs: once per version of the schema, or
+when the index file is deleted. The search is what happens on every keystroke.
 
 ### Renaming a folder
 
@@ -462,6 +491,17 @@ so a block that moved would keep its widget. The map costs more than it
 saves: the blocks are matched by their place in the document, which needs no
 lookup at all, and the map made a keystroke slower. Not used.
 
+### Rejected: prefix indexes over two and three letters
+
+`prefix='1 2 3'` was measured before `prefix='1'` was kept. It answers the
+same searches at the same speed (4357 ms → 212 ms for the one-letter case),
+but it costs 58 % more on a rebuild (6959 ms → 10994 ms) and 45 % more on the
+file (445 MB → 648 MB), and re-indexing a batch of notes gets 74 % slower
+(1507 ms → 2630 ms with 80 000 notes). Two- and three-letter beginnings are
+already cheap enough in the plain dictionary not to need their own index: a
+search for `wor` costs 43 ms without any prefix index and 41 ms with the
+three-level one.
+
 ### Rejected: sorting the names of the tree in lower case
 
 The names of the tree could be compared in lower case instead of with a
@@ -469,6 +509,18 @@ collator. That is faster, but it is a different order: a collator puts "a"
 before "B", a comparison in lower case cannot tell them apart. The order of
 the tree is what the user sees, so the collator was kept — but only one of
 them, for all the comparisons.
+
+### Rejected: sorting the search results in the query instead of by rank
+
+FTS5 answers the search `ORDER BY rank`, which is its own BM25 score. Measured
+on a corpus where one word is in every note, the sort costs the whole query:
+0.4 ms without it and 37 ms with it, because the score of every match has to
+be known before the best fifty can be picked. Taking the first 400 matches and
+sorting only those is 4 ms, but the fifty that come out are a different set:
+not one of the fifty best overlapped. The order of the results is what makes
+the search useful, so the honest sort was kept and the cheaper wrong one
+rejected. What was kept instead is the prefix index above, which is the part
+that actually grows with the vault.
 
 ## Still open
 

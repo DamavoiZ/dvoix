@@ -124,6 +124,17 @@ fn main() {
     let (elapsed, hits) = time(|| index.search("words", 50).expect("the search works"));
     row(&format!("search ({} hits)", hits.len()), elapsed);
 
+    // The same search while it is still being typed: one letter and three
+    // letters. These are the queries the prefix index of the search table
+    // exists for; without it each one walks the whole term dictionary.
+    let (elapsed, hits) = time(|| index.search("s", 50).expect("the search works"));
+    row(&format!("search one letter ({} hits)", hits.len()), elapsed);
+    let (elapsed, hits) = time(|| index.search("sea", 50).expect("the search works"));
+    row(
+        &format!("search three letters ({} hits)", hits.len()),
+        elapsed,
+    );
+
     let (elapsed, tags) = time(|| index.tags().expect("the tags are read"));
     row(&format!("tags ({} tags)", tags.len()), elapsed);
 
@@ -187,4 +198,33 @@ fn main() {
             .expect("the changes are applied")
     });
     row("the same 100 changes in one batch", elapsed);
+
+    // The size of the file the index lives in, with the write ahead log that
+    // still belongs to it. Schema options such as the prefix index of the
+    // search table show here and on the rebuild, not on a single query.
+    let size = ["index.sqlite", "index.sqlite-wal"]
+        .iter()
+        .map(|name| {
+            vault
+                .app_dir()
+                .join(name)
+                .metadata()
+                .map(|m| m.len())
+                .unwrap_or(0)
+        })
+        .sum::<u64>();
+    println!("\nindex file: {:.0} MB", size as f64 / 1e6);
+
+    // The same batch again, twice. The first one can still be busy with the
+    // write ahead log of the rebuild, so its number is the cost of that log
+    // and not of the batch; only the last of the three is the batch itself.
+    for round in ["third", "fourth"] {
+        write_burst(round);
+        let (elapsed, ()) = time(|| {
+            index
+                .apply_changes(&vault, &changes)
+                .expect("the changes are applied")
+        });
+        row(&format!("a batch again ({round})"), elapsed);
+    }
 }

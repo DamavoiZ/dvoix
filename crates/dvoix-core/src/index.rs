@@ -20,7 +20,23 @@ use crate::vault::{Vault, VaultEntry};
 use crate::watcher::{ChangeKind, VaultChange};
 
 /// Bump this when the schema changes; an outdated index is rebuilt.
-const SCHEMA_VERSION: i64 = 5;
+const SCHEMA_VERSION: i64 = 6;
+
+/// How the search table is built. `prefix='1'` keeps an extra index over the
+/// first letter of every word. The search of the app matches every word as a
+/// prefix (see `fts_query`), because the user is usually still typing, and
+/// without that extra index a search for a short beginning walks the whole
+/// term dictionary of the vault.
+///
+/// Measured with 80 000 notes of 2 kB (see `PERF.md`): the search for `s`
+/// goes from 155 ms to 90 ms, and on a vault with many different words (a
+/// large term dictionary) from 4357 ms to 210 ms. A rebuild costs 18 % more
+/// and the file of the index grows by 15 %; writing a batch of changes is not
+/// measurably slower. `prefix='1 2 3'` was measured too: it adds 58 % to the
+/// rebuild and 45 % to the file, makes a batch 74 % slower and wins nothing
+/// over `prefix='1'`, because a longer beginning already matches few terms in
+/// the plain dictionary.
+const FTS_TABLE: &str = "CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(path UNINDEXED, title, body, prefix='1');";
 
 /// The secondary indexes of the tables. They are kept in one place because
 /// `rebuild` drops them for the bulk insert and builds them again afterwards:
@@ -222,7 +238,7 @@ impl Index {
                  indent INTEGER NOT NULL
              );
              {SECONDARY_INDEXES}
-             CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(path UNINDEXED, title, body);
+             {FTS_TABLE}
              PRAGMA user_version = {SCHEMA_VERSION};"
         ))?;
         // The hot statements of the write path (delete_note, write_note,
@@ -1228,6 +1244,73 @@ mod tests {
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].path, "beta.md");
         assert_eq!(index.counts().unwrap(), (2, 2));
+    }
+
+    /// The search matches every word as a prefix, because the user is still
+    /// typing. The prefix index of the search table is what makes even a
+    /// one-letter beginning cheap; a test of its own, since the cost cannot
+    /// be checked by a test and the result can.
+    #[test]
+    fn a_search_finds_a_note_while_the_word_is_still_being_typed() {
+        let (_dir, vault) = sample_vault();
+        let mut index = Index::for_vault(&vault).unwrap();
+        index.rebuild(&vault).unwrap();
+
+        // The whole word and every beginning of it give the same note.
+        for typed in ["schedul", "schedule"] {
+            let hits = index.search(typed, 10).unwrap();
+            assert_eq!(hits.len(), 1, "search for {typed:?}");
+            assert_eq!(hits[0].path, "beta.md");
+        }
+        // A prefix of one letter already reaches the term dictionary.
+        assert!(!index.search("s", 10).unwrap().is_empty());
+        // Something that is not in any note finds nothing.
+        assert!(index.search("zzznothing", 10).unwrap().is_empty());
+    }
+
+    /// The search table of an index that was opened after a version bump
+    /// really has the prefix option, and a sync (the way the app brings an
+    /// existing index in line) fills it. `rebuild` is covered by the test
+    /// above; the app itself only calls `sync` on open.
+    #[test]
+    fn an_upgraded_index_gets_the_prefix_index_of_the_search_table() {
+        let (_dir, vault) = sample_vault();
+        let path = vault.app_dir().join("index.sqlite");
+
+        // An index of the version before the prefix index was introduced.
+        {
+            let old = Connection::open(&path).unwrap();
+            old.execute_batch(
+                "CREATE TABLE notes (path TEXT PRIMARY KEY, title TEXT NOT NULL,
+                                     frontmatter TEXT NOT NULL, modified INTEGER NOT NULL,
+                                     size INTEGER NOT NULL);
+                 CREATE VIRTUAL TABLE notes_fts USING fts5(path UNINDEXED, title, body);
+                 INSERT INTO notes VALUES ('old.md', 'Old', '{}', 1, 10);
+                 PRAGMA user_version = 5;",
+            )
+            .unwrap();
+        }
+
+        let mut index = Index::open(&path).unwrap();
+        // The schema of the new search table is the one of `FTS_TABLE`.
+        let ddl: String = index
+            .conn()
+            .query_row(
+                "SELECT sql FROM sqlite_master WHERE name = 'notes_fts'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(
+            ddl.contains("prefix='1'"),
+            "schema of the search table: {ddl}"
+        );
+
+        // A sync over an emptied index indexes the vault, and the search
+        // still answers a beginning of a word.
+        index.sync(&vault).unwrap();
+        assert_eq!(index.counts().unwrap(), (2, 2));
+        assert_eq!(index.search("schedul", 10).unwrap().len(), 1);
     }
 
     /// Removing a folder takes every note below it out of the index, the
