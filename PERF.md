@@ -369,8 +369,10 @@ every task of the note to find one line; only that line is parsed now.
 
 **The watcher does less per event.** The kind of an event is decided before
 the file is asked for its metadata, removals need no metadata at all, and a
-batch keeps only the last change per path. The index reuses the metadata
-the watcher already collected instead of asking the file system again.
+batch keeps only the last change per path, but a Created survives a
+following Modified (a folder moved into the vault is still new, its notes
+must be indexed). The index reuses the metadata the watcher already
+collected instead of asking the file system again.
 
 **SQLite is tuned for a cache.** `synchronous=NORMAL` (the index can always
 be rebuilt from the files, rule 1), a larger page cache, memory temp store
@@ -378,8 +380,9 @@ and a memory-mapped read window. The secondary indexes are dropped before a
 full rebuild and built once over the finished tables, which measured faster
 than maintaining them per row. `PRAGMA optimize` was tried and rejected: its
 statistics made the planner leave the `NOCASE` path index for folder deletes
-and backlinks (two plan tests fail); the statistics table is dropped after
-bulk writes instead.
+and backlinks (two plan tests fail). Nothing collects statistics anymore, so
+the planner decides by the shape of the indexes, which is what this schema
+is built for; a test pins that no statistics table exists.
 
 **Links are unique.** A `UNIQUE(source, target)` index (schema version 5,
 one rebuild on the first open) lets the graph read a plain covering index
