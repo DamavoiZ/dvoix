@@ -12,6 +12,8 @@ use dvoix_core::{ChangeBatcher, Index, Vault, VaultChange, VaultWatcher};
 use tauri::{AppHandle, Emitter, Manager};
 
 /// Event sent to the frontend whenever something in the vault changed on disk.
+/// The payload is always an array of `VaultChange`, also for a single change:
+/// a burst arrives as one event instead of one webview dispatch per file.
 pub const VAULT_CHANGED_EVENT: &str = "vault://changed";
 
 /// The parts of the open vault a command needs.
@@ -71,10 +73,10 @@ impl Workspace {
                 }
                 // The app is told about the changes now, not when they came
                 // in: the index knows about them, so the panels read the new
-                // state and not the one from before.
-                for change in &changes {
-                    let _ = app.emit(VAULT_CHANGED_EVENT, change);
-                }
+                // state and not the one from before. The whole batch travels
+                // as one event, so a burst costs one serialization and one
+                // refresh cycle in the app instead of one per change.
+                let _ = app.emit(VAULT_CHANGED_EVENT, &changes);
             }
         })?;
 
@@ -84,8 +86,9 @@ impl Workspace {
             VaultWatcher::start(&vault, move |change| {
                 if change.hidden {
                     // Hidden files are not indexed, so the app is told right
-                    // away: there is nothing to wait for.
-                    let _ = app.emit(VAULT_CHANGED_EVENT, &change);
+                    // away: there is nothing to wait for. The payload stays
+                    // an array, like the one of a batch.
+                    let _ = app.emit(VAULT_CHANGED_EVENT, std::slice::from_ref(&change));
                 } else {
                     sender.send(change);
                 }

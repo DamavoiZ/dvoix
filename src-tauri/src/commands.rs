@@ -475,12 +475,19 @@ pub fn store_install(
     id: String,
 ) -> CmdResult<PluginManifest> {
     let (manifest, manifest_text) = fetch_manifest(&repo)?;
-    let get = |file: &str| -> CmdResult<Option<String>> {
-        http::get_text(&store::release_url(&repo, &manifest.version, file).map_err(err)?)
-    };
-    let main = get(store::MAIN_FILE)?
+    let main_url = store::release_url(&repo, &manifest.version, store::MAIN_FILE).map_err(err)?;
+    let styles_url = store::release_url(&repo, &manifest.version, store::STYLES_FILE).map_err(err)?;
+    // The two files do not depend on each other: fetch them at the same
+    // time, so an install waits one download instead of two.
+    let (main, styles) = std::thread::scope(|scope| {
+        let main = scope.spawn(|| http::get_text(&main_url));
+        let styles = scope.spawn(|| http::get_text(&styles_url));
+        let main = main.join().map_err(|_| "The download failed".to_string())?;
+        let styles = styles.join().map_err(|_| "The download failed".to_string())?;
+        CmdResult::Ok((main?, styles?))
+    })?;
+    let main = main
         .ok_or_else(|| format!("Release {} of {repo} is missing main.js", manifest.version))?;
-    let styles = get(store::STYLES_FILE)?;
     let files = PluginFiles {
         manifest: manifest_text,
         main,

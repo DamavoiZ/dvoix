@@ -125,6 +125,11 @@ pub struct Branch {
 /// Reads the state of the repository: what is staged, what is changed and
 /// what is new. A vault without a repository is not an error, the status then
 /// simply has no repository.
+///
+/// One call of git answers everything: `status --porcelain=v2 --branch`
+/// reports the changes and the branch headers (branch, upstream, ahead and
+/// behind) together. The panel asks for the status on every save, so fewer
+/// started programs make every save cheaper.
 pub fn status(vault: &Vault) -> Result<GitStatus> {
     let Some(repo) = Repo::find(vault)? else {
         return Ok(GitStatus {
@@ -137,12 +142,21 @@ pub fn status(vault: &Vault) -> Result<GitStatus> {
 
     let out = git_raw(
         &repo.root,
-        &["status", "--porcelain=v1", "-z", "--untracked-files=all"],
+        &["status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all"],
     )?;
     if !out.status.success() {
         return Err(Error::Git(git_error(&out)));
     }
 
+    let mut info = RepoInfo {
+        root: repo.root.to_string_lossy().into_owned(),
+        branch: String::new(),
+        upstream: None,
+        remote: None,
+        ahead: 0,
+        behind: 0,
+        vault_is_root: repo.prefix.is_empty(),
+    };
     let mut staged = Vec::new();
     let mut unstaged = Vec::new();
     let mut untracked = Vec::new();
@@ -150,51 +164,138 @@ pub fn status(vault: &Vault) -> Result<GitStatus> {
     let text = String::from_utf8_lossy(&out.stdout).to_string();
     let mut entries = text.split('\0');
     while let Some(entry) = entries.next() {
-        if entry.len() < 3 {
+        if let Some(header) = entry.strip_prefix("# ") {
+            branch_header(&mut info, header);
             continue;
         }
-        let mut letters = entry.chars();
-        let index = letters.next().unwrap_or(' ');
-        let worktree = letters.next().unwrap_or(' ');
-        let path = &entry[3..];
-        // A rename or a copy carries the old path in the next entry.
-        if matches!(index, 'R' | 'C') || matches!(worktree, 'R' | 'C') {
-            let _ = entries.next();
-        }
-        // Files outside of the vault belong to the repository, not to dvoix.
-        let Some(path) = repo.to_vault(path) else {
-            continue;
-        };
-        if is_machine_state(&path) {
-            continue;
-        }
-        if index == '?' && worktree == '?' {
-            untracked.push(ChangedFile {
-                path,
-                status: "?".into(),
-            });
-            continue;
-        }
-        if index != ' ' && index != '?' {
-            staged.push(ChangedFile {
-                path: path.clone(),
-                status: index.to_string(),
-            });
-        }
-        if worktree != ' ' && worktree != '?' {
-            unstaged.push(ChangedFile {
-                path,
-                status: worktree.to_string(),
-            });
+        let mut fields = entry.splitn(2, ' ');
+        match fields.next() {
+            Some("?") => {
+                // Files outside of the vault belong to the repository, not to dvoix.
+                let Some(path) = fields.next().and_then(|p| repo.to_vault(p)) else {
+                    continue;
+                };
+                if is_machine_state(&path) {
+                    continue;
+                }
+                untracked.push(ChangedFile {
+                    path,
+                    status: "?".into(),
+                });
+            }
+            Some("1") => {
+                // `1 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <path>`
+                let mut rest = fields.next().unwrap_or_default().splitn(8, ' ');
+                let letters = rest.next().unwrap_or_default();
+                let Some(path) = rest.nth(6).and_then(|p| repo.to_vault(p)) else {
+                    continue;
+                };
+                if is_machine_state(&path) {
+                    continue;
+                }
+                push_changes(&mut staged, &mut unstaged, letters, path);
+            }
+            Some("2") => {
+                // `2 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <X><score> <path>`;
+                // a rename or a copy carries the old path in the next entry.
+                let mut rest = fields.next().unwrap_or_default().splitn(9, ' ');
+                let letters = rest.next().unwrap_or_default();
+                let path = rest.nth(7).and_then(|p| repo.to_vault(p));
+                let _ = entries.next();
+                let Some(path) = path else {
+                    continue;
+                };
+                if is_machine_state(&path) {
+                    continue;
+                }
+                push_changes(&mut staged, &mut unstaged, letters, path);
+            }
+            // Unmerged entries (`u`) and anything unknown are not shown, like before.
+            _ => {}
         }
     }
 
+    // The remote cannot be read from the status; only push and pull need it,
+    // so it is asked for only when there is a remote branch to name.
+    if info.upstream.is_some() {
+        info.remote = git_optional(&repo.root, &["remote"])
+            .and_then(|s| s.lines().next().map(|l| l.trim().to_string()))
+            .filter(|s| !s.is_empty());
+    }
+
     Ok(GitStatus {
-        repo: Some(repo_info(&repo)?),
+        repo: Some(info),
         staged,
         unstaged,
         untracked,
     })
+}
+
+/// Reads one `# ` header of `status --porcelain=v2 --branch`: the branch (or
+/// the commit when HEAD is detached), the upstream and how far ahead and
+/// behind it is.
+fn branch_header(info: &mut RepoInfo, header: &str) {
+    let mut parts = header.split(' ');
+    match parts.next() {
+        Some("branch.oid") => {
+            // "(initial)" before the first commit, the commit id when HEAD
+            // is detached: both are shown like the short id of a commit.
+            let oid = parts.next().unwrap_or_default();
+            if oid != "(initial)" {
+                info.branch = oid.chars().take(7).collect();
+            }
+        }
+        Some("branch.head") => {
+            let head = parts.next().unwrap_or_default();
+            if head != "(detached)" {
+                info.branch = head.to_string();
+            }
+        }
+        Some("branch.upstream") => {
+            let upstream = parts.next().unwrap_or_default();
+            if !upstream.is_empty() {
+                info.upstream = Some(upstream.to_string());
+            }
+        }
+        Some("branch.ab") => {
+            // "+<ahead> -<behind>"
+            for part in parts {
+                let number = part.get(1..).and_then(|n| n.parse().ok()).unwrap_or(0);
+                match part.as_bytes().first() {
+                    Some(b'+') => info.ahead = number,
+                    Some(b'-') => info.behind = number,
+                    _ => {}
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Puts the two letters of a v2 entry into the lists of the panel: the first
+/// is the change in the index (staged), the second the one in the working
+/// tree. A `.` means no change there.
+fn push_changes(
+    staged: &mut Vec<ChangedFile>,
+    unstaged: &mut Vec<ChangedFile>,
+    letters: &str,
+    path: String,
+) {
+    let mut letters = letters.chars();
+    let index = letters.next().unwrap_or('.');
+    let worktree = letters.next().unwrap_or('.');
+    if index != '.' && index != '?' {
+        staged.push(ChangedFile {
+            path: path.clone(),
+            status: index.to_string(),
+        });
+    }
+    if worktree != '.' && worktree != '?' {
+        unstaged.push(ChangedFile {
+            path,
+            status: worktree.to_string(),
+        });
+    }
 }
 
 /// Reads the last commits, newest first.
@@ -243,30 +344,33 @@ pub fn commit_files(vault: &Vault, id: &str) -> Result<Vec<String>> {
         .collect())
 }
 
-/// Lists the local branches and the ones on the remotes.
+/// Lists the local branches and the ones on the remotes. One call of git
+/// walks both places; the full ref name tells them apart.
 pub fn branches(vault: &Vault) -> Result<Vec<Branch>> {
     let repo = Repo::of(vault)?;
+    let format = format!("--format=%(refname){FIELD}%(refname:short){FIELD}%(HEAD){FIELD}");
+    let text = git(
+        &repo.root,
+        &["for-each-ref", &format, "refs/heads", "refs/remotes"],
+    )?;
     let mut out = Vec::new();
-    for (refs, remote) in [("refs/heads", false), ("refs/remotes", true)] {
-        let format = format!("--format=%(refname:short){FIELD}%(HEAD){FIELD}");
-        let text = git(&repo.root, &["for-each-ref", &format, refs])?;
-        for line in text.lines() {
-            let mut fields = line.split(FIELD);
-            let name = fields.next().unwrap_or("").trim().to_string();
-            let head = fields.next().unwrap_or("").trim();
-            if name.is_empty() {
-                continue;
-            }
-            // `origin/HEAD` points at the default branch, it is no branch of its own.
-            if name.ends_with("/HEAD") {
-                continue;
-            }
-            out.push(Branch {
-                name,
-                remote,
-                current: head == "*",
-            });
+    for line in text.lines() {
+        let mut fields = line.split(FIELD);
+        let full = fields.next().unwrap_or("").trim();
+        let name = fields.next().unwrap_or("").trim().to_string();
+        let head = fields.next().unwrap_or("").trim();
+        if name.is_empty() {
+            continue;
         }
+        // `origin/HEAD` points at the default branch, it is no branch of its own.
+        if name.ends_with("/HEAD") {
+            continue;
+        }
+        out.push(Branch {
+            name,
+            remote: full.starts_with("refs/remotes/"),
+            current: head == "*",
+        });
     }
     Ok(out)
 }
@@ -691,6 +795,71 @@ mod tests {
             .unwrap_or(false)
     }
 
+    /// An empty repository info to read branch headers into.
+    fn empty_info() -> RepoInfo {
+        RepoInfo {
+            root: String::new(),
+            branch: String::new(),
+            upstream: None,
+            remote: None,
+            ahead: 0,
+            behind: 0,
+            vault_is_root: true,
+        }
+    }
+
+    #[test]
+    fn branch_headers_give_branch_upstream_and_distance() {
+        let mut info = empty_info();
+        branch_header(&mut info, "branch.oid 292a5af7913bc5d64a669d432ffa40f5a5aba4ec");
+        branch_header(&mut info, "branch.head main");
+        branch_header(&mut info, "branch.upstream origin/main");
+        branch_header(&mut info, "branch.ab +3 -2");
+        assert_eq!(info.branch, "main");
+        assert_eq!(info.upstream.as_deref(), Some("origin/main"));
+        assert_eq!(info.ahead, 3);
+        assert_eq!(info.behind, 2);
+    }
+
+    #[test]
+    fn a_detached_head_shows_the_short_commit() {
+        let mut info = empty_info();
+        branch_header(&mut info, "branch.oid 292a5af7913bc5d64a669d432ffa40f5a5aba4ec");
+        branch_header(&mut info, "branch.head (detached)");
+        assert_eq!(info.branch, "292a5af");
+        assert!(info.upstream.is_none());
+    }
+
+    #[test]
+    fn a_repository_without_a_commit_shows_its_branch() {
+        let mut info = empty_info();
+        branch_header(&mut info, "branch.oid (initial)");
+        branch_header(&mut info, "branch.head main");
+        assert_eq!(info.branch, "main");
+        assert_eq!(info.ahead, 0);
+        assert_eq!(info.behind, 0);
+    }
+
+    #[test]
+    fn the_letters_of_an_entry_split_into_staged_and_unstaged() {
+        let mut staged = Vec::new();
+        let mut unstaged = Vec::new();
+        push_changes(&mut staged, &mut unstaged, "M.", "a.md".into());
+        push_changes(&mut staged, &mut unstaged, ".M", "b.md".into());
+        push_changes(&mut staged, &mut unstaged, "MM", "c.md".into());
+        push_changes(&mut staged, &mut unstaged, "R.", "d.md".into());
+        let listed: Vec<(&str, &str)> = staged
+            .iter()
+            .map(|f| (f.path.as_str(), f.status.as_str()))
+            .collect();
+        assert_eq!(listed, vec![("a.md", "M"), ("c.md", "M"), ("d.md", "R")]);
+        let listed: Vec<(&str, &str)> = unstaged
+            .iter()
+            .map(|f| (f.path.as_str(), f.status.as_str()))
+            .collect();
+        assert_eq!(listed, vec![("b.md", "M"), ("c.md", "M")]);
+    }
+
     /// A vault with a repository in it and one file to work with.
     fn vault_with_repo() -> (tempfile::TempDir, Vault) {
         let dir = tempdir().expect("temp dir");
@@ -976,5 +1145,66 @@ mod tests {
         assert!(status(&vault).expect("status").repo.is_none());
         init(&vault).expect("init");
         assert!(status(&vault).expect("status").repo.is_some());
+    }
+
+    #[test]
+    fn a_detached_head_shows_the_commit_in_the_status() {
+        if !git_available() {
+            return;
+        }
+        let (_dir, vault) = vault_with_repo();
+        commit(&vault, "First", true).expect("commit");
+        git(vault.root(), &["checkout", "--detach", "HEAD"]).expect("detach");
+        let state = status(&vault).expect("status");
+        let repo = state.repo.expect("repo");
+        assert_eq!(repo.branch.len(), 7);
+        assert!(repo.branch.chars().all(|c| c.is_ascii_hexdigit()));
+        assert!(repo.upstream.is_none());
+    }
+
+    #[test]
+    fn the_status_reads_the_upstream_and_the_distance() {
+        if !git_available() {
+            return;
+        }
+        let (dir, vault) = vault_with_repo();
+        commit(&vault, "First", true).expect("commit");
+        // A second repository plays the remote, so no network is needed.
+        let remote = tempdir().expect("temp dir");
+        git(remote.path(), &["init", "--bare", "--initial-branch=main"]).expect("init");
+        git(
+            vault.root(),
+            &["remote", "add", "origin", &remote.path().to_string_lossy()],
+        )
+        .expect("remote");
+        git(vault.root(), &["push", "-u", "origin", "main"]).expect("push");
+
+        let state = status(&vault).expect("status");
+        let repo = state.repo.expect("repo");
+        assert_eq!(repo.branch, "main");
+        assert_eq!(repo.upstream.as_deref(), Some("origin/main"));
+        assert_eq!(repo.remote.as_deref(), Some("origin"));
+        assert_eq!((repo.ahead, repo.behind), (0, 0));
+
+        // A commit of our own moves ahead; one on the remote moves behind.
+        fs::write(dir.path().join("second.md"), "# Second\n").expect("write");
+        commit(&vault, "Second", true).expect("commit");
+        let state = status(&vault).expect("status");
+        let repo = state.repo.expect("repo");
+        assert_eq!((repo.ahead, repo.behind), (1, 0));
+
+        let other = tempdir().expect("temp dir");
+        git(other.path(), &["clone", &remote.path().to_string_lossy(), "."]).expect("clone");
+        git(other.path(), &["config", "user.name", "dvoix"]).expect("config");
+        git(other.path(), &["config", "user.email", "dvoix@example.com"]).expect("config");
+        fs::write(other.path().join("third.md"), "# Third\n").expect("write");
+        git(other.path(), &["add", "third.md"]).expect("add");
+        git(other.path(), &["commit", "-m", "Third"]).expect("commit");
+        git(other.path(), &["push"]).expect("push");
+        git(vault.root(), &["fetch"]).expect("fetch");
+
+        let state = status(&vault).expect("status");
+        let repo = state.repo.expect("repo");
+        assert_eq!((repo.ahead, repo.behind), (1, 1));
     }
 }

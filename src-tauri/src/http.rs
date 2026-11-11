@@ -1,6 +1,7 @@
 //! Downloads for the plugin store. Only `https` to GitHub, with a size limit;
 //! which URLs are built from what is decided in `dvoix_core::store`.
 
+use std::sync::OnceLock;
 use std::time::Duration;
 
 use dvoix_core::store::MAX_FILE_BYTES;
@@ -9,13 +10,19 @@ use dvoix_core::store::MAX_FILE_BYTES;
 /// storage hosts, which ureq follows.
 const ALLOWED_HOSTS: &[&str] = &["github.com", "raw.githubusercontent.com"];
 
-fn agent() -> ureq::Agent {
-    ureq::Agent::config_builder()
-        .timeout_global(Some(Duration::from_secs(30)))
-        .user_agent(concat!("dvoix/", env!("CARGO_PKG_VERSION")))
-        .https_only(true)
-        .build()
-        .into()
+/// One agent for all downloads, so connections to GitHub stay open between
+/// requests: a manifest check, an install or an update check reuses the
+/// TCP+TLS connection instead of paying a handshake for every file.
+fn agent() -> &'static ureq::Agent {
+    static AGENT: OnceLock<ureq::Agent> = OnceLock::new();
+    AGENT.get_or_init(|| {
+        ureq::Agent::config_builder()
+            .timeout_global(Some(Duration::from_secs(30)))
+            .user_agent(concat!("dvoix/", env!("CARGO_PKG_VERSION")))
+            .https_only(true)
+            .build()
+            .into()
+    })
 }
 
 fn allowed(url: &str) -> bool {

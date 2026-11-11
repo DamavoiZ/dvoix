@@ -256,6 +256,11 @@ export const api = {
   storeInstalled: () => invoke<InstalledPlugin[]>("store_installed"),
 };
 
-export function onVaultChanged(handler: (change: VaultChange) => void): Promise<UnlistenFn> {
-  return listen<VaultChange>("vault://changed", (e) => handler(e.payload));
+/**
+ * The vault changed on disk. The backend sends one event per batch of
+ * changes (see `Workspace::open` in `src-tauri/src/lib.rs`), so a burst
+ * arrives together; a single change is a batch of one.
+ */
+export function onVaultChanged(handler: (changes: VaultChange[]) => void): Promise<UnlistenFn> {
+  return listen<VaultChange[]>("vault://changed", (e) => handler(e.payload));
 }
