@@ -59,8 +59,9 @@ struct KillTarget {
     /// reaper marks the reap, so at that moment the child is unreaped and
     /// the id still names our program. On Linux the pidfd below closes even
     /// the small window between taking the target and sending the signal;
-    /// the id fallback on the other systems keeps that window when a kill
-    /// races the program's natural end.
+    /// the id fallback, used only where no pidfd exists (older kernels and
+    /// the other systems), keeps that window when a kill races the
+    /// program's natural end.
     pid: u32,
     /// A pidfd on Linux: it names exactly this process, so a signal through
     /// it can never reach a recycled id, even one sent late. `None` on older
