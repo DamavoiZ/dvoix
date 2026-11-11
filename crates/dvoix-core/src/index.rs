@@ -244,8 +244,7 @@ impl Index {
         // The secondary indexes are built once over the finished tables
         // instead of being maintained for every inserted row. A failure
         // rolls back to the old content with its indexes.
-        // A/B measurement: index drop/recreate disabled.
-        // tx.execute_batch(DROP_SECONDARY_INDEXES)?;
+        tx.execute_batch(DROP_SECONDARY_INDEXES)?;
         let mut count = 0;
         for entry in files.iter().filter(|e| is_indexable(&e.path)) {
             let Ok(content) = vault.read(&entry.path) else {
