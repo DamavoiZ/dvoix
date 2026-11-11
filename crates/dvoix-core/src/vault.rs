@@ -24,10 +24,16 @@ fn entry_of(rel: &str, meta: &fs::Metadata) -> VaultEntry {
     let extension = if meta.is_dir() {
         String::new()
     } else {
-        Path::new(rel)
-            .extension()
-            .map(|e| e.to_string_lossy().to_lowercase())
-            .unwrap_or_default()
+        match Path::new(rel).extension().and_then(|e| e.to_str()) {
+            // Most extensions are already lower-case ASCII; only then is no
+            // second copy needed. Non-ASCII always goes through
+            // `to_lowercase`, which knows more characters than ASCII does.
+            Some(e) if e.is_ascii() && !e.bytes().any(|b| b.is_ascii_uppercase()) => {
+                e.to_string()
+            }
+            Some(e) => e.to_lowercase(),
+            None => String::new(),
+        }
     };
     let modified = meta
         .modified()
@@ -42,6 +48,30 @@ fn entry_of(rel: &str, meta: &fs::Metadata) -> VaultEntry {
         is_dir: meta.is_dir(),
         size: if meta.is_dir() { 0 } else { meta.len() },
         modified,
+    }
+}
+
+/// True for names of hidden files and folders (`.git`, `.dvoix`, ...). Looks
+/// at the bytes, so no copy of the name is made for every entry of a walk.
+#[cfg(unix)]
+fn is_dot_name(name: &std::ffi::OsStr) -> bool {
+    use std::os::unix::ffi::OsStrExt;
+    name.as_bytes().first() == Some(&b'.')
+}
+
+#[cfg(not(unix))]
+fn is_dot_name(name: &std::ffi::OsStr) -> bool {
+    name.as_encoded_bytes().first() == Some(&b'.')
+}
+
+/// The key the listings are sorted by: the path in lower case, built once
+/// per entry instead of once per comparison. Plain ASCII paths (almost all)
+/// only need the copy itself, without the Unicode machinery.
+fn sort_key(entry: &VaultEntry) -> String {
+    if entry.path.is_ascii() {
+        entry.path.to_ascii_lowercase()
+    } else {
+        entry.path.to_lowercase()
     }
 }
 
@@ -146,7 +176,7 @@ impl Vault {
         let walker = WalkDir::new(&self.root)
             .min_depth(1)
             .into_iter()
-            .filter_entry(|e| !e.file_name().to_string_lossy().starts_with('.'));
+            .filter_entry(|e| !is_dot_name(e.file_name()));
         for entry in walker {
             let entry = match entry {
                 Ok(e) => e,
@@ -163,7 +193,7 @@ impl Vault {
             entries.push(entry_of(&rel, &meta));
         }
         // Plain path order; the UI builds the tree and decides how to group it.
-        entries.sort_by_cached_key(|e| e.path.to_lowercase());
+        entries.sort_by_cached_key(sort_key);
         Ok(entries)
     }
 
@@ -179,7 +209,7 @@ impl Vault {
         let walker = WalkDir::new(&dir)
             .min_depth(1)
             .into_iter()
-            .filter_entry(|e| !e.file_name().to_string_lossy().starts_with('.'));
+            .filter_entry(|e| !is_dot_name(e.file_name()));
         for entry in walker {
             let entry = match entry {
                 Ok(e) => e,
@@ -196,7 +226,7 @@ impl Vault {
             };
             entries.push(entry_of(&path, &meta));
         }
-        entries.sort_by_cached_key(|e| e.path.to_lowercase());
+        entries.sort_by_cached_key(sort_key);
         Ok(entries)
     }
 
@@ -210,9 +240,12 @@ impl Vault {
             .min_depth(1)
             .into_iter()
             .filter_entry(|e| {
-                let name = e.file_name().to_string_lossy();
-                if filter.exclude.iter().any(|x| x.as_str() == name) || name.ends_with(".dvoix-tmp")
-                {
+                let name = e.file_name();
+                if filter.exclude.iter().any(|x| x.as_str() == name) {
+                    return false;
+                }
+                let name = name.to_string_lossy();
+                if name.ends_with(".dvoix-tmp") {
                     return false;
                 }
                 !(e.depth() == 1 && name == APP_DIR && !filter.include_app_dir)
@@ -240,7 +273,7 @@ impl Vault {
                 break;
             }
         }
-        entries.sort_by_cached_key(|e| e.path.to_lowercase());
+        entries.sort_by_cached_key(sort_key);
         Ok(entries)
     }
 
@@ -486,6 +519,27 @@ mod tests {
         assert!(vault.files_below("nothing").unwrap().is_empty());
         // A file is not a folder.
         assert!(vault.files_below("top.md").unwrap().is_empty());
+    }
+
+    /// The listing stays in lower-cased path order, whatever case the names
+    /// were written in, and the extension is always lower-case.
+    #[test]
+    fn lists_in_lowercase_path_order_with_lowercase_extensions() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = Vault::open(dir.path()).unwrap();
+        vault.write("Zebra.MD", "z").unwrap();
+        vault.write("apple.md", "a").unwrap();
+        vault.write("Mango.Txt", "m").unwrap();
+
+        let entries = vault.list().unwrap();
+        let paths: Vec<_> = entries.iter().map(|e| e.path.as_str()).collect();
+        assert_eq!(paths, vec!["apple.md", "Mango.Txt", "Zebra.MD"]);
+        let extensions: Vec<_> = entries.iter().map(|e| e.extension.as_str()).collect();
+        assert_eq!(extensions, vec!["md", "txt", "md"]);
+
+        // `files` keeps the same order, without the folders.
+        let files: Vec<_> = vault.files().unwrap().into_iter().map(|e| e.path).collect();
+        assert_eq!(files, vec!["apple.md", "Mango.Txt", "Zebra.MD"]);
     }
 
     #[test]

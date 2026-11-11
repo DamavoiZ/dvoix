@@ -3,6 +3,8 @@
 //! Frontmatter carries structured metadata (status, tags, due dates, ...) which
 //! is what project management and tracking features will query later.
 
+use std::borrow::Cow;
+
 use pulldown_cmark::{CowStr, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 use serde::Serialize;
 use serde_json::Value;
@@ -140,7 +142,7 @@ pub fn parse(content: &str, file_stem: &str) -> ParsedNote {
             Event::Start(Tag::Link { dest_url, .. }) => {
                 flush(&mut buffer, &mut tags, &mut links);
                 if let Some(target) = local_link(&dest_url) {
-                    links.push(target);
+                    links.push(target.into_owned());
                 }
             }
             Event::SoftBreak | Event::HardBreak => {
@@ -333,12 +335,19 @@ fn normalize_tag(tag: &str) -> String {
 }
 
 fn dedup(items: &mut Vec<String>) {
-    let mut seen = std::collections::HashSet::new();
-    items.retain(|i| !i.is_empty() && seen.insert(i.clone()));
+    // The set borrows the strings instead of cloning every one of them; a
+    // note can repeat the same tag or link many times.
+    let mut seen = std::collections::HashSet::with_capacity(items.len());
+    let keep: Vec<bool> = items
+        .iter()
+        .map(|i| !i.is_empty() && seen.insert(i.as_str()))
+        .collect();
+    let mut keep = keep.into_iter();
+    items.retain(|_| keep.next() == Some(true));
 }
 
 /// Markdown links to other files in the vault (no URLs, no anchors).
-fn local_link(dest: &str) -> Option<String> {
+fn local_link(dest: &str) -> Option<Cow<'_, str>> {
     if dest.is_empty()
         || dest.starts_with('#')
         || dest.contains("://")
@@ -347,7 +356,12 @@ fn local_link(dest: &str) -> Option<String> {
         return None;
     }
     let target = dest.split('#').next().unwrap_or(dest);
-    Some(target.replace("%20", " "))
+    // Most targets have no escaped space; then no copy is needed.
+    Some(if target.contains("%20") {
+        Cow::Owned(target.replace("%20", " "))
+    } else {
+        Cow::Borrowed(target)
+    })
 }
 
 /// Finds `[[target|alias]]` wikilinks and `#tags` in a run of plain text.
@@ -368,25 +382,31 @@ pub(crate) fn scan_inline(text: &str, tags: &mut Vec<String>, links: &mut Vec<St
         }
     }
 
-    let chars: Vec<char> = text.chars().collect();
-    let mut i = 0;
-    while i < chars.len() {
-        let at_word_start = i == 0 || chars[i - 1].is_whitespace() || chars[i - 1] == '(';
-        if chars[i] == '#' && at_word_start {
-            let mut j = i + 1;
-            while j < chars.len()
-                && (chars[j].is_alphanumeric() || matches!(chars[j], '_' | '-' | '/'))
-            {
-                j += 1;
+    // Walk the text once without collecting it into a `Vec<char>` first;
+    // this runs for every paragraph of every note that is indexed.
+    let mut chars = text.char_indices().peekable();
+    let mut prev: Option<char> = None;
+    while let Some((i, c)) = chars.next() {
+        let at_word_start = prev.is_none_or(|p| p.is_whitespace() || p == '(');
+        if c == '#' && at_word_start {
+            let start = i + 1;
+            let mut end = start;
+            prev = Some('#');
+            while let Some(&(j, tc)) = chars.peek() {
+                if !(tc.is_alphanumeric() || matches!(tc, '_' | '-' | '/')) {
+                    break;
+                }
+                end = j + tc.len_utf8();
+                prev = Some(tc);
+                chars.next();
             }
-            let tag: String = chars[i + 1..j].iter().collect();
+            let tag = &text[start..end];
             // A tag needs at least one non-digit so "#1" (issue numbers) is not a tag.
             if tag.chars().any(|c| !c.is_ascii_digit()) {
                 tags.push(tag.to_lowercase());
             }
-            i = j;
         } else {
-            i += 1;
+            prev = Some(c);
         }
     }
 }
@@ -422,10 +442,75 @@ mod tests {
     }
 
     #[test]
+    fn scans_tags_and_wikilinks_in_plain_text() {
+        let mut tags = Vec::new();
+        let mut links = Vec::new();
+        scan_inline(
+            "#start (#paren) x#no ##no #12 #ok-1/sub #Ünicode [[Note|alias]] [[Other#head]] [[ ]]",
+            &mut tags,
+            &mut links,
+        );
+        assert_eq!(tags, ["start", "paren", "ok-1/sub", "ünicode"]);
+        assert_eq!(links, ["Note", "Other"]);
+
+        // An empty run is scanned for every flush; it must stay cheap and quiet.
+        let mut tags = Vec::new();
+        let mut links = Vec::new();
+        scan_inline("", &mut tags, &mut links);
+        assert!(tags.is_empty() && links.is_empty());
+    }
+
+    #[test]
     fn invalid_frontmatter_is_reported_not_fatal() {
         let n = parse("---\n: : :\n---\nbody", "x");
         assert!(n.frontmatter_error.is_some());
         assert!(n.frontmatter.as_object().unwrap().is_empty());
+    }
+
+    /// A tag runs to the next character that does not belong to it; what
+    /// stands right after a tag must not start a new one.
+    #[test]
+    fn tags_end_at_the_first_foreign_character() {
+        let mut tags = Vec::new();
+        let mut links = Vec::new();
+        scan_inline("#one#two (#three)#four #five-", &mut tags, &mut links);
+        assert_eq!(tags, ["one", "three", "five-"]);
+    }
+
+    /// Repeated tags and links are kept once, in the order of their first
+    /// appearance; empty items go away.
+    #[test]
+    fn parse_dedups_tags_and_links_in_order() {
+        let n = parse(
+            "#work #idea #work [[Beta]] #idea [[Beta]] [[Alpha]]",
+            "file",
+        );
+        assert_eq!(n.tags, ["work", "idea"]);
+        assert_eq!(n.links, ["Beta", "Alpha"]);
+    }
+
+    /// A markdown link target keeps its spaces: `%20` becomes a space, and
+    /// a target without it is taken as it is.
+    #[test]
+    fn markdown_link_targets_unescape_spaces() {
+        let n = parse(
+            "[A](my%20note.md) [B](plain.md) [C](with%20space.md#head) [D](https://x.dev/a%20b)",
+            "file",
+        );
+        assert_eq!(n.links, ["my note.md", "plain.md", "with space.md"]);
+    }
+
+    #[test]
+    fn local_links_skip_urls_and_anchors() {
+        assert_eq!(local_link(""), None);
+        assert_eq!(local_link("#head"), None);
+        assert_eq!(local_link("mailto:a@b.c"), None);
+        assert_eq!(local_link("plain.md").as_deref(), Some("plain.md"));
+        assert!(matches!(local_link("plain.md"), Some(Cow::Borrowed(_))));
+        assert_eq!(
+            local_link("a%20b.md").as_deref(),
+            Some("a b.md")
+        );
     }
 
     #[test]

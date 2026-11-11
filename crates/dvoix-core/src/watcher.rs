@@ -1,6 +1,7 @@
 //! Watches the vault folder so edits made outside dvoix (another editor, a
 //! sync tool, git) show up in the app right away.
 
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -151,12 +152,15 @@ where
 {
     let quiet = Duration::from_millis(BATCH_QUIET_MS);
     let mut batch: Vec<VaultChange> = Vec::new();
+    // Where a path already sits in the batch, so repeated reports about the
+    // same file collapse into one change.
+    let mut positions: HashMap<String, usize> = HashMap::new();
     loop {
         if stop.load(Ordering::SeqCst) {
             break;
         }
         match receiver.recv_timeout(quiet) {
-            Ok(change) => batch.push(change),
+            Ok(change) => push_change(&mut batch, &mut positions, change),
             Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => break,
         }
@@ -168,11 +172,30 @@ where
         let deadline = Instant::now() + Duration::from_millis(BATCH_MAX_MS);
         while let Some(left) = deadline.checked_duration_since(Instant::now()) {
             match receiver.recv_timeout(quiet.min(left)) {
-                Ok(change) => batch.push(change),
+                Ok(change) => push_change(&mut batch, &mut positions, change),
                 Err(_) => break,
             }
         }
+        positions.clear();
         on_batch(std::mem::take(&mut batch));
+    }
+}
+
+/// Adds a change to the batch. When the path is already in it, the last
+/// report wins: an editor that writes a file five times in a burst means
+/// one re-index, not five. The place of the first report is kept, so the
+/// order of the paths stays the order they first changed in.
+fn push_change(
+    batch: &mut Vec<VaultChange>,
+    positions: &mut HashMap<String, usize>,
+    change: VaultChange,
+) {
+    match positions.get(&change.path) {
+        Some(&i) => batch[i] = change,
+        None => {
+            positions.insert(change.path.clone(), batch.len());
+            batch.push(change);
+        }
     }
 }
 
@@ -198,6 +221,9 @@ fn to_changes(vault: &Vault, event: &notify::Event) -> Vec<VaultChange> {
         .paths
         .iter()
         .filter_map(|p| {
+            // The kind comes first: events dvoix does not report (metadata
+            // changes, access) cost no work on the file system at all.
+            let kind = kind_for(p)?;
             let rel = vault.relative(p)?;
             if is_noisy(&rel) {
                 return None;
@@ -205,10 +231,15 @@ fn to_changes(vault: &Vault, event: &notify::Event) -> Vec<VaultChange> {
             let hidden = Vault::is_ignored(&rel);
             // The entry of the path, so the app can correct its list of the
             // vault without listing the whole vault again. Hidden paths are
-            // not part of that list, so they are not read.
-            let entry = if hidden { None } else { vault.entry(&rel).ok() };
+            // not part of that list, and a removed path has no entry, so
+            // neither is asked from the file system.
+            let entry = if hidden || kind == ChangeKind::Removed {
+                None
+            } else {
+                vault.entry(&rel).ok()
+            };
             Some(VaultChange {
-                kind: kind_for(p)?,
+                kind,
                 hidden,
                 path: rel,
                 entry,
@@ -274,6 +305,28 @@ mod tests {
         assert!(!is_noisy("sub/.git-notes.md"));
     }
 
+    /// Events dvoix does not report are dropped before anything is read
+    /// about the path.
+    #[test]
+    fn metadata_events_are_not_reported() {
+        use notify::event::{AccessKind, MetadataKind};
+
+        let dir = tempfile::tempdir().unwrap();
+        let vault = Vault::open(dir.path()).unwrap();
+        std::fs::write(dir.path().join("note.md"), "# Note").unwrap();
+        for kind in [
+            EventKind::Modify(ModifyKind::Metadata(MetadataKind::Any)),
+            EventKind::Access(AccessKind::Any),
+        ] {
+            let event = notify::Event {
+                kind,
+                paths: vec![dir.path().join("note.md")],
+                attrs: Default::default(),
+            };
+            assert!(to_changes(&vault, &event).is_empty());
+        }
+    }
+
     #[test]
     fn the_batcher_hands_over_several_changes_at_once() {
         let (tx, rx) = std::sync::mpsc::channel();
@@ -296,6 +349,49 @@ mod tests {
         assert_eq!(batch.len(), 5);
         assert_eq!(batch[0].path, "note-0.md");
         assert_eq!(batch[4].path, "note-4.md");
+    }
+
+    /// Repeated reports about the same path become one change: the last
+    /// kind wins, the entry of the last report is kept, and the place of the
+    /// first report stays.
+    #[test]
+    fn the_batcher_coalesces_repeated_paths() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = Vault::open(dir.path()).unwrap();
+        std::fs::write(dir.path().join("note.md"), "# Note").unwrap();
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        let batcher = ChangeBatcher::start(move |changes| {
+            let _ = tx.send(changes);
+        })
+        .unwrap();
+        let sender = batcher.sender();
+        let change = |kind, path: &str, entry: Option<VaultEntry>| VaultChange {
+            kind,
+            path: path.into(),
+            hidden: false,
+            entry,
+        };
+        sender.send(change(ChangeKind::Created, "note.md", None));
+        sender.send(change(ChangeKind::Modified, "other.md", None));
+        sender.send(change(
+            ChangeKind::Modified,
+            "note.md",
+            vault.entry("note.md").ok(),
+        ));
+        sender.send(change(ChangeKind::Removed, "gone.md", None));
+        sender.send(change(ChangeKind::Created, "gone.md", None));
+
+        let batch = rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("the changes did not arrive");
+        assert_eq!(batch.len(), 3);
+        assert_eq!(batch[0].path, "note.md");
+        assert_eq!(batch[0].kind, ChangeKind::Modified);
+        assert!(batch[0].entry.is_some(), "the last entry was not kept");
+        assert_eq!(batch[1].path, "other.md");
+        assert_eq!(batch[2].path, "gone.md");
+        assert_eq!(batch[2].kind, ChangeKind::Created);
     }
 
     /// Changes that never pause still reach the app, in batches.
