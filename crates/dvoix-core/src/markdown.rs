@@ -507,10 +507,7 @@ mod tests {
         assert_eq!(local_link("mailto:a@b.c"), None);
         assert_eq!(local_link("plain.md").as_deref(), Some("plain.md"));
         assert!(matches!(local_link("plain.md"), Some(Cow::Borrowed(_))));
-        assert_eq!(
-            local_link("a%20b.md").as_deref(),
-            Some("a b.md")
-        );
+        assert_eq!(local_link("a%20b.md").as_deref(), Some("a b.md"));
     }
 
     #[test]

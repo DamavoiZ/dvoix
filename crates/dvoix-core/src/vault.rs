@@ -28,9 +28,7 @@ fn entry_of(rel: &str, meta: &fs::Metadata) -> VaultEntry {
             // Most extensions are already lower-case ASCII; only then is no
             // second copy needed. Non-ASCII always goes through
             // `to_lowercase`, which knows more characters than ASCII does.
-            Some(e) if e.is_ascii() && !e.bytes().any(|b| b.is_ascii_uppercase()) => {
-                e.to_string()
-            }
+            Some(e) if e.is_ascii() && !e.bytes().any(|b| b.is_ascii_uppercase()) => e.to_string(),
             Some(e) => e.to_lowercase(),
             None => String::new(),
         }

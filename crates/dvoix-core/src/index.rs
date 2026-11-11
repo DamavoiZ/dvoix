@@ -330,7 +330,9 @@ impl Index {
     /// the shape of the indexes, which is what this schema is built for.
     /// A failure here must not fail the write that already succeeded.
     fn clear_planner_stats(&self) {
-        let _ = self.conn.execute_batch("DROP TABLE IF EXISTS sqlite_stat1;");
+        let _ = self
+            .conn
+            .execute_batch("DROP TABLE IF EXISTS sqlite_stat1;");
     }
 
     /// Moves the notes of a folder to its new name, after the folder was
@@ -344,8 +346,8 @@ impl Index {
         // the NOCASE index, the same search the old prefix delete used.
         let mut moved: Vec<(i64, String)> = Vec::new();
         {
-            let mut stmt = tx
-                .prepare("SELECT rowid, path FROM notes WHERE path LIKE ?1 ESCAPE '\\'")?;
+            let mut stmt =
+                tx.prepare("SELECT rowid, path FROM notes WHERE path LIKE ?1 ESCAPE '\\'")?;
             let found = stmt.query_map([prefix_pattern(&format!("{from}/"))], |r| {
                 Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))
             })?;
@@ -359,8 +361,8 @@ impl Index {
         // destination prefix matches them too (LIKE is case-insensitive).
         let moved_ids: HashSet<i64> = moved.iter().map(|(id, _)| *id).collect();
         let stale: Vec<String> = {
-            let mut stmt = tx
-                .prepare("SELECT rowid, path FROM notes WHERE path LIKE ?1 ESCAPE '\\'")?;
+            let mut stmt =
+                tx.prepare("SELECT rowid, path FROM notes WHERE path LIKE ?1 ESCAPE '\\'")?;
             let found = stmt.query_map([prefix_pattern(&format!("{to}/"))], |r| {
                 Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))
             })?;
@@ -553,12 +555,11 @@ impl Index {
 
     /// True when the index holds a note with this path or below it.
     fn knows(&self, rel: &str) -> Result<bool> {
-        let mut stmt = self
-            .conn
-            .prepare_cached(
-                "SELECT EXISTS(SELECT 1 FROM notes WHERE path = ?1 OR path LIKE ?2 ESCAPE '\\')",
-            )?;
-        let found: i64 = stmt.query_row([rel, &prefix_pattern(&format!("{rel}/"))], |r| r.get(0))?;
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT EXISTS(SELECT 1 FROM notes WHERE path = ?1 OR path LIKE ?2 ESCAPE '\\')",
+        )?;
+        let found: i64 =
+            stmt.query_row([rel, &prefix_pattern(&format!("{rel}/"))], |r| r.get(0))?;
         Ok(found != 0)
     }
 
@@ -984,8 +985,8 @@ fn write_note(
         // OR IGNORE: two links that differ only in case lower-case to the
         // same target, which the UNIQUE index on (source, target) allows
         // only once.
-        let mut insert_link = tx
-            .prepare_cached("INSERT OR IGNORE INTO links (source, target) VALUES (?1, ?2)")?;
+        let mut insert_link =
+            tx.prepare_cached("INSERT OR IGNORE INTO links (source, target) VALUES (?1, ?2)")?;
         for link in &note.links {
             // Link targets are stored lower-cased, so backlinks find them whatever
             // case they were written in. Most are already lower-case; then no
@@ -994,10 +995,8 @@ fn write_note(
             insert_link.execute(params![entry.path, lower.as_ref()])?;
         }
     }
-    tx.prepare_cached(
-        "INSERT INTO notes_fts (rowid, path, title, body) VALUES (?1, ?2, ?3, ?4)",
-    )?
-    .execute(params![rowid, entry.path, note.title, note.text])?;
+    tx.prepare_cached("INSERT INTO notes_fts (rowid, path, title, body) VALUES (?1, ?2, ?3, ?4)")?
+        .execute(params![rowid, entry.path, note.title, note.text])?;
     {
         let mut insert_task = tx.prepare_cached(
             "INSERT INTO tasks (path, line, done, text, due, priority, tags, indent) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
@@ -1669,7 +1668,9 @@ mod tests {
             .unwrap();
         // A note whose title falls back to the file stem: the file name does
         // not change in a folder rename, so the title must stay.
-        vault.write("projects/plain.md", "No heading here.").unwrap();
+        vault
+            .write("projects/plain.md", "No heading here.")
+            .unwrap();
         let mut index = Index::for_vault(&vault).unwrap();
         index.rebuild(&vault).unwrap();
 
@@ -1887,7 +1888,10 @@ mod tests {
     fn links_that_differ_only_in_case_are_stored_once() {
         let (_dir, vault) = sample_vault();
         vault
-            .write("beta.md", "# Beta\nSee [[Alpha]] and [[alpha]] and [[ALPHA]].")
+            .write(
+                "beta.md",
+                "# Beta\nSee [[Alpha]] and [[alpha]] and [[ALPHA]].",
+            )
             .unwrap();
         let mut index = Index::for_vault(&vault).unwrap();
         index.rebuild(&vault).unwrap();
@@ -1903,11 +1907,7 @@ mod tests {
         assert_eq!(edges, 1);
         let graph = index.graph().unwrap();
         assert_eq!(
-            graph
-                .links
-                .iter()
-                .filter(|l| l.source == "beta.md")
-                .count(),
+            graph.links.iter().filter(|l| l.source == "beta.md").count(),
             1
         );
     }
@@ -1969,7 +1969,10 @@ mod tests {
                 .iter()
                 .any(|n| n.path == "Projects/alpha.md")
         );
-        assert_eq!(index.search("links", 10).unwrap()[0].path, "Projects/alpha.md");
+        assert_eq!(
+            index.search("links", 10).unwrap()[0].path,
+            "Projects/alpha.md"
+        );
     }
 
     /// The same path reported several times in one batch is applied once,
@@ -1981,7 +1984,9 @@ mod tests {
         let mut index = Index::for_vault(&vault).unwrap();
         index.rebuild(&vault).unwrap();
 
-        vault.write("ghost.md", "# Ghost\nA fleeting note.").unwrap();
+        vault
+            .write("ghost.md", "# Ghost\nA fleeting note.")
+            .unwrap();
         vault.trash("ghost.md").unwrap();
         let change = |kind, path: &str| VaultChange {
             kind,
