@@ -10,6 +10,7 @@ import { redo, undo } from "@codemirror/commands";
 import { EditorView, WidgetType } from "@codemirror/view";
 import { contextMenu, type MenuEntry } from "../../components/contextMenuState.svelte";
 import {
+  alignOf,
   deleteColumn,
   escapeCell,
   fromTSV,
@@ -18,6 +19,7 @@ import {
   moveBlock,
   moveColumns,
   moveRows,
+  parseRow,
   parseTable,
   setAlign,
   setCell,
@@ -27,6 +29,7 @@ import {
   type CellUpdate,
   type Change,
   type Rect,
+  type Row,
   type Table,
 } from "./markdownTable";
 import { openLink } from "./propertiesWidget.svelte";
@@ -121,8 +124,8 @@ interface Selection {
 type Drag =
   | { kind: "select"; r: number; c: number; x: number; y: number; active: boolean }
   | { kind: "cells"; rect: Rect; r: number; c: number; x: number; y: number; active: boolean; target: [number, number] | null }
-  | { kind: "rows"; from: number; to: number; y: number; active: boolean; before: number | null; click: number }
-  | { kind: "cols"; from: number; to: number; x: number; active: boolean; before: number | null; click: number };
+  | { kind: "rows"; from: number; to: number; y: number; active: boolean; click: number; marked?: number }
+  | { kind: "cols"; from: number; to: number; x: number; active: boolean; click: number; marked?: number };
 
 /** How far the mouse has to move before a press becomes a drag. */
 const DRAG_DISTANCE = 4;
@@ -160,6 +163,37 @@ function diff(a: string, b: string): Change | null {
 function applyChanges(text: string, changes: Change[]): string {
   for (const ch of [...changes].sort((a, b) => b.from - a.from)) text = text.slice(0, ch.from) + ch.insert + text.slice(ch.to);
   return text;
+}
+
+/**
+ * The table for a new text, with the rows whose line did not change kept as
+ * they are: growing a table by pasting or adding rows re-reads only the new
+ * or changed lines, not the whole table for every step. A row's cell
+ * positions are relative to its line, so an unchanged line keeps its cells
+ * even when it moved; only `start` follows the new position.
+ */
+function reparse(table: Table, text: string): Table {
+  const old = allRows(table);
+  const rows: Row[] = [];
+  let delimiter: Row | null = null;
+  let start = 0;
+  text.split("\n").forEach((line, i) => {
+    const before = old[i];
+    // A line that did not change keeps its row object (and with it its drawn
+    // cells); only a moved line gets a new object with the new start.
+    const row = before?.text === line ? (before.start === start ? before : { ...before, start }) : parseRow(line, start);
+    if (i === 1) delimiter = row;
+    else rows.push(row);
+    start += line.length + 1;
+  });
+  delimiter ??= parseRow("", start);
+  const aligns = delimiter.text === table.delimiter.text ? table.aligns : delimiter.cells.map((c) => alignOf(c.text));
+  return { rows, delimiter, aligns, columns: rows[0]?.cells.length ?? 0 };
+}
+
+/** Header, delimiter and body lines of a table, in the order they stand in. */
+function allRows(table: Table): Row[] {
+  return [table.rows[0], table.delimiter, ...table.rows.slice(1)].filter((r): r is Row => !!r);
 }
 
 class TableEditor {
@@ -236,32 +270,10 @@ class TableEditor {
 
     this.rowGrips = [];
     this.cells = table.rows.map((_, r) => {
-      const tr = document.createElement("tr");
-      const grip = document.createElement("td");
-      grip.className = "cm-lp-row-grip";
-      grip.dataset.row = String(r);
-      grip.title = r === 0 ? "Select header row" : "Select row, drag to move";
-      tr.append(grip);
-      this.rowGrips.push(grip);
-      const row: HTMLElement[] = [];
-      // Like GitHub: every row has as many cells as the header.
-      for (let c = 0; c < table.columns; c++) {
-        const td = document.createElement(r === 0 ? "th" : "td");
-        const align = table.aligns[c];
-        if (align) td.style.textAlign = align;
-        const cell = document.createElement("div");
-        cell.className = "cm-lp-cell";
-        cell.dataset.row = String(r);
-        cell.dataset.col = String(c);
-        makeEditable(cell);
-        cell.spellcheck = false;
-        renderInline(this.raw(r, c), cell);
-        td.append(cell);
-        tr.append(td);
-        row.push(cell);
-      }
-      (r === 0 ? thead : tbody).append(tr);
-      return row;
+      const built = this.buildRow(r);
+      (r === 0 ? thead : tbody).append(built.tr);
+      this.rowGrips.push(built.grip);
+      return built.cells;
     });
     el.append(thead, tbody);
 
@@ -315,7 +327,7 @@ class TableEditor {
     if (source === this.source) return;
     this.source = source;
     const old = this.table;
-    this.table = parseTable(source);
+    this.table = reparse(old, source);
     const sameShape =
       old.rows.length === this.table.rows.length &&
       old.columns === this.table.columns &&
@@ -329,7 +341,9 @@ class TableEditor {
         const cols = this.table.columns - 1;
         this.sel = { ar: clamp(ar, this.lastRow), ac: clamp(ac, cols), hr: clamp(hr, this.lastRow), hc: clamp(hc, cols) };
       }
-      this.build();
+      // Rows whose line did not change keep their DOM (and the cell being
+      // typed in): only new rows are built and old ones thrown away.
+      this.syncRows(old);
       if (keep && !this.sel) this.focusCell(Math.min(keep.r, this.lastRow), Math.min(keep.c, this.table.columns - 1), true);
       if (this.sel) this.clip.focus({ preventScroll: true });
       return;
@@ -351,6 +365,85 @@ class TableEditor {
       }
     });
     if (this.sel) this.fillClip();
+  }
+
+  /**
+   * Brings the drawn table in line with `this.table` after rows were added,
+   * removed or moved: body rows whose cells did not change keep their DOM
+   * (and the cell being typed in), the rest are built anew. Columns or
+   * alignments that changed mean every row differs, then `build` draws all.
+   * Only called from `update`, where the DOM still matches `old` exactly.
+   */
+  private syncRows(old: Table): void {
+    const { table } = this;
+    const tableEl = this.dom.querySelector("table");
+    if (
+      !tableEl ||
+      old.columns !== table.columns ||
+      old.aligns.join() !== table.aligns.join() ||
+      old.rows[0]?.text !== table.rows[0]?.text
+    ) {
+      this.build();
+      return;
+    }
+    const tbody = tableEl.tBodies[0];
+    const sameRow = (r: number) =>
+      r > 0 && r < old.rows.length && r < table.rows.length && old.rows[r].cells.length === table.rows[r].cells.length &&
+      table.rows[r].cells.every((cell, c) => cell.text === old.rows[r].cells[c]?.text);
+    // The old body rows that can be kept, by the row they were drawn for.
+    const oldBody = new Map<number, { tr: HTMLTableRowElement; cells: HTMLElement[]; grip: HTMLElement }>();
+    [...tbody.rows].forEach((tr, i) => {
+      const r = i + 1;
+      if (sameRow(r)) oldBody.set(r, { tr, cells: this.cells[r], grip: this.rowGrips[r] });
+    });
+    const cells: HTMLElement[][] = [this.cells[0]];
+    const grips: HTMLElement[] = [this.rowGrips[0]];
+    const bodyRows: HTMLTableRowElement[] = [];
+    for (let r = 1; r < table.rows.length; r++) {
+      const reuse = oldBody.get(r);
+      const built = reuse ?? this.buildRow(r);
+      built.cells.forEach((el, c) => {
+        el.dataset.row = String(r);
+        el.dataset.col = String(c);
+      });
+      built.grip.dataset.row = String(r);
+      cells.push(built.cells);
+      grips.push(built.grip);
+      bodyRows.push(built.tr);
+    }
+    tbody.replaceChildren(...bodyRows);
+    this.cells = cells;
+    this.rowGrips = grips;
+    this.paintSelection();
+  }
+
+  /** One drawn row: its grip and its cells, the way `build` makes them. */
+  private buildRow(r: number): { tr: HTMLTableRowElement; cells: HTMLElement[]; grip: HTMLElement } {
+    const { table } = this;
+    const tr = document.createElement("tr");
+    const grip = document.createElement("td");
+    grip.className = "cm-lp-row-grip";
+    grip.dataset.row = String(r);
+    grip.title = r === 0 ? "Select header row" : "Select row, drag to move";
+    tr.append(grip);
+    const row: HTMLElement[] = [];
+    // Like GitHub: every row has as many cells as the header.
+    for (let c = 0; c < table.columns; c++) {
+      const td = document.createElement(r === 0 ? "th" : "td");
+      const align = table.aligns[c];
+      if (align) td.style.textAlign = align;
+      const cell = document.createElement("div");
+      cell.className = "cm-lp-cell";
+      cell.dataset.row = String(r);
+      cell.dataset.col = String(c);
+      makeEditable(cell);
+      cell.spellcheck = false;
+      renderInline(this.raw(r, c), cell);
+      td.append(cell);
+      tr.append(td);
+      row.push(cell);
+    }
+    return { tr, cells: row, grip };
   }
 
   private cellOf(target: EventTarget | null): { el: HTMLElement; r: number; c: number } | null {
@@ -529,12 +622,14 @@ class TableEditor {
     }
     const width = Math.max(...block.map((row) => row.length));
     while (table.columns < c0 + width) {
-      text = applyChanges(text, insertColumn(table, table.columns));
-      table = parseTable(text);
+      const changes = insertColumn(table, table.columns);
+      text = applyChanges(text, changes);
+      table = reparse(table, text);
     }
     while (table.rows.length < r0 + block.length) {
-      text = applyChanges(text, [insertRow(table, table.rows.length)]);
-      table = parseTable(text);
+      const changes = [insertRow(table, table.rows.length)];
+      text = applyChanges(text, changes);
+      table = reparse(table, text);
     }
     const updates = block.flatMap((row, dr) => row.map((t, dc) => ({ r: r0 + dr, c: c0 + dc, text: t })));
     text = applyChanges(text, setCells(table, updates));
@@ -612,12 +707,12 @@ class TableEditor {
         const r = Number(rowGrip.dataset.row);
         const whole = rect && rect.c0 === 0 && rect.c1 === this.table.columns - 1 && r >= rect.r0 && r <= rect.r1;
         const [from, to] = whole ? [rect.r0, rect.r1] : [r, r];
-        this.startDrag({ kind: "rows", from, to, y: event.clientY, active: false, before: null, click: r });
+        this.startDrag({ kind: "rows", from, to, y: event.clientY, active: false, click: r });
       } else {
         const c = Number(colGrip!.dataset.col);
         const whole = rect && rect.r0 === 0 && rect.r1 === this.lastRow && c >= rect.c0 && c <= rect.c1;
         const [from, to] = whole ? [rect.c0, rect.c1] : [c, c];
-        this.startDrag({ kind: "cols", from, to, x: event.clientX, active: false, before: null, click: c });
+        this.startDrag({ kind: "cols", from, to, x: event.clientX, active: false, click: c });
       }
       return;
     }
@@ -654,6 +749,31 @@ class TableEditor {
     document.addEventListener("mouseup", up, true);
   }
 
+  /**
+   * The row a drop at `y` lands before (`rows.length`: past the last row).
+   * The grips are measured as they stand now, not once at the drag's start:
+   * the table can scroll during a drag, and cached positions would then name
+   * a row the scrolled distance away from the mouse. The scan stops at the
+   * first row below `y` and the drop marks are only shadows, so the layout
+   * stays clean and this is cheap on every mouse move.
+   */
+  private rowBefore(y: number): number {
+    for (let r = 1; r < this.table.rows.length; r++) {
+      const box = this.rowGrips[r].getBoundingClientRect();
+      if (y < box.top + box.height / 2) return r;
+    }
+    return this.table.rows.length;
+  }
+
+  /** The column a drop at `x` lands before (`columns`: past the last column), measured like `rowBefore`. */
+  private colBefore(x: number): number {
+    for (let c = 0; c < this.table.columns; c++) {
+      const box = this.colGrips[c].getBoundingClientRect();
+      if (x < box.left + box.width / 2) return c;
+    }
+    return this.table.columns;
+  }
+
   private onDragMove(event: MouseEvent): void {
     const drag = this.drag;
     if (!drag) return;
@@ -680,6 +800,8 @@ class TableEditor {
         const w = drag.rect.c1 - drag.rect.c0;
         const r = Math.max(0, Math.min(hit.r - (drag.r - drag.rect.r0), this.lastRow - h));
         const c = Math.max(0, Math.min(hit.c - (drag.c - drag.rect.c0), this.table.columns - 1 - w));
+        // The drop place did not move: the marks stay, no style is touched.
+        if (drag.target && drag.target[0] === r && drag.target[1] === c) return;
         drag.target = [r, c];
         this.markDrop(".cm-lp-drop-target", (rr, cc) => rr >= r && rr <= r + h && cc >= c && cc <= c + w);
         return;
@@ -690,15 +812,10 @@ class TableEditor {
         drag.active = true;
         event.preventDefault();
         this.dom.classList.add("cm-lp-dragging");
-        let before = this.table.rows.length;
-        for (let r = 1; r < this.table.rows.length; r++) {
-          const box = this.rowGrips[r].getBoundingClientRect();
-          if (event.clientY < box.top + box.height / 2) {
-            before = r;
-            break;
-          }
-        }
-        drag.before = before;
+        const before = this.rowBefore(event.clientY);
+        // The drop place did not move: the marks stay, no style is touched.
+        if (drag.marked === before) return;
+        drag.marked = before;
         this.clearDropMarks();
         const ok = !(before >= drag.from && before <= drag.to + 1);
         if (ok) {
@@ -712,15 +829,10 @@ class TableEditor {
         drag.active = true;
         event.preventDefault();
         this.dom.classList.add("cm-lp-dragging");
-        let before = this.table.columns;
-        for (let c = 0; c < this.table.columns; c++) {
-          const box = this.colGrips[c].getBoundingClientRect();
-          if (event.clientX < box.left + box.width / 2) {
-            before = c;
-            break;
-          }
-        }
-        drag.before = before;
+        const before = this.colBefore(event.clientX);
+        // The drop place did not move: the marks stay, no style is touched.
+        if (drag.marked === before) return;
+        drag.marked = before;
         this.clearDropMarks();
         if (!(before >= drag.from && before <= drag.to + 1)) {
           const last = before === this.table.columns;
@@ -773,11 +885,14 @@ class TableEditor {
           this.select({ ar: from, ac: 0, hr: r, hc: this.table.columns - 1 });
           return;
         }
-        if (drag.before === null) return;
-        const change = moveRows(this.table, drag.from, drag.to, drag.before);
+        // Measured again where the mouse is released: the table may have
+        // scrolled since the last move, and the drop follows the view, not
+        // the place the mark was drawn at.
+        const before = this.rowBefore(event.clientY);
+        const change = moveRows(this.table, drag.from, drag.to, before);
         if (!change) return;
         const count = drag.to - drag.from;
-        const start = drag.before < drag.from ? drag.before : drag.before - count - 1;
+        const start = before < drag.from ? before : before - count - 1;
         this.apply(change);
         this.select({ ar: start, ac: 0, hr: start + count, hc: this.table.columns - 1 });
         return;
@@ -789,11 +904,12 @@ class TableEditor {
           this.select({ ar: 0, ac: from, hr: this.lastRow, hc: c });
           return;
         }
-        if (drag.before === null) return;
-        const changes = moveColumns(this.table, drag.from, drag.to, drag.before);
+        // Measured again at the release point, like the rows above.
+        const before = this.colBefore(event.clientX);
+        const changes = moveColumns(this.table, drag.from, drag.to, before);
         if (!changes.length) return;
         const count = drag.to - drag.from;
-        const start = drag.before < drag.from ? drag.before : drag.before - count - 1;
+        const start = before < drag.from ? before : before - count - 1;
         this.apply(changes);
         this.select({ ar: 0, ac: start, hr: this.lastRow, hc: start + count });
         return;
@@ -1023,7 +1139,11 @@ class TableEditor {
     this.clearSelection();
     // From the right, each on the text the one before left: their pipes can touch.
     let text = this.source;
-    for (let c = to; c >= from; c--) text = applyChanges(text, deleteColumn(parseTable(text), c));
+    let table = this.table;
+    for (let c = to; c >= from; c--) {
+      text = applyChanges(text, deleteColumn(table, c));
+      table = reparse(table, text);
+    }
     this.applyText(text);
     this.focusCell(r, Math.min(from, this.table.columns - 1), true);
   }

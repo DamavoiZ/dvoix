@@ -14,24 +14,47 @@
   let open = $state<string | null>(null);
   let error = $state<string | null>(null);
   let loading = $state(false);
+  /** Drops answers that arrive after a newer request. */
+  let generation = 0;
 
   async function load() {
+    const run = ++generation;
     loading = true;
     try {
-      commits = await api.gitLog(LIMIT);
+      const list = await api.gitLog(LIMIT);
+      if (run !== generation) return;
+      commits = list;
       error = null;
     } catch (e) {
+      if (run !== generation) return;
       commits = [];
       error = String(e).replace(/^Error: /, "");
     } finally {
-      loading = false;
+      if (run === generation) loading = false;
     }
   }
 
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let firstLoad = true;
   $effect(() => {
-    // A change on disk makes a new commit, the history grows.
+    // A change on disk makes a new commit, the history grows. A burst of
+    // changes loads it once, after the changes have settled. The first open
+    // loads right away, so "No commits yet" does not flash while waiting.
     void vault.changes.files.number;
-    void load();
+    clearTimeout(timer);
+    if (firstLoad) {
+      firstLoad = false;
+      void load();
+    } else {
+      timer = setTimeout(() => void load(), 300);
+    }
+    return () => clearTimeout(timer);
+  });
+
+  // While the history is shown, the state is kept fresh by the interval.
+  $effect(() => {
+    gitState.viewOpened();
+    return () => gitState.viewClosed();
   });
 
   /** Opens a commit and loads the files it changed. */

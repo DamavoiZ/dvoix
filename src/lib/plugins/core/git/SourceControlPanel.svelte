@@ -21,10 +21,18 @@
     return names.map((name) => ({ value: name, label: name }));
   });
 
-  // A change on disk changes the state of the repository.
+  // A change on disk changes the state of the repository. The state is read
+  // once the changes have settled, not once per changed file.
   $effect(() => {
     void vault.changes.files.number;
-    void gitState.refresh();
+    gitState.scheduleRefresh();
+  });
+
+  // While the panel is shown, the state is kept fresh by the interval; when
+  // it goes away (another panel, collapsed sidebar), the polling rests.
+  $effect(() => {
+    gitState.viewOpened();
+    return () => gitState.viewClosed();
   });
 
   /** The letter of a change and the color it gets. */

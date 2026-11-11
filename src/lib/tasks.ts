@@ -19,13 +19,24 @@ export function addDays(iso: string, days: number): string {
   return isoDate(new Date(y, m - 1, d + days));
 }
 
+/** The day a week ahead, per "today": panels ask for every row, so it is kept. */
+let weekFrom = "";
+let weekEnd = "";
+function weekAhead(now: string): string {
+  if (now !== weekFrom) {
+    weekFrom = now;
+    weekEnd = addDays(now, 7);
+  }
+  return weekEnd;
+}
+
 export type DueBucket = "overdue" | "today" | "week" | "later" | "none";
 
 export function dueBucket(due: string | null, now = today()): DueBucket {
   if (!due) return "none";
   if (due < now) return "overdue";
   if (due === now) return "today";
-  if (due <= addDays(now, 7)) return "week";
+  if (due <= weekAhead(now)) return "week";
   return "later";
 }
 
@@ -37,15 +48,29 @@ export const bucketLabels: Record<DueBucket, string> = {
   none: "No date",
 };
 
+/** One formatter per shape; building one per row costs more than the formatting. */
+const dateShort = new Intl.DateTimeFormat("en-US", { day: "numeric", month: "short" });
+const dateLong = new Intl.DateTimeFormat("en-US", { day: "numeric", month: "short", year: "numeric" });
+
+/** The neighbours of "today", kept per day: panels ask for every row. */
+let dueDay = "";
+let dueTomorrow = "";
+let dueYesterday = "";
+
 /** Short date: "today", "tomorrow", "yesterday" or "3 Dec" (with year if not this year). */
 export function formatDue(due: string, now = today()): string {
   if (due === now) return "today";
-  if (due === addDays(now, 1)) return "tomorrow";
-  if (due === addDays(now, -1)) return "yesterday";
+  if (now !== dueDay) {
+    dueDay = now;
+    dueTomorrow = addDays(now, 1);
+    dueYesterday = addDays(now, -1);
+  }
+  if (due === dueTomorrow) return "tomorrow";
+  if (due === dueYesterday) return "yesterday";
   const [y, m, d] = due.split("-").map(Number);
   const date = new Date(y, m - 1, d);
   const sameYear = due.slice(0, 4) === now.slice(0, 4);
-  return date.toLocaleDateString("en-US", { day: "numeric", month: "short", year: sameYear ? undefined : "numeric" });
+  return (sameYear ? dateShort : dateLong).format(date);
 }
 
 export const priorityRank: Record<Priority, number> = { high: 0, medium: 1, low: 2 };
@@ -84,14 +109,25 @@ export function compareTasks(a: TaskItem, b: TaskItem): number {
   return ap - bp;
 }
 
-/** Checks/unchecks a task in its file. Pending edits are saved first so nothing is lost. */
-export async function toggleTask(task: TaskItem): Promise<void> {
+/**
+ * Sets a task's checkbox to the state `done` in its file. Pending edits are
+ * saved first so nothing is lost. True when the file was written; the watcher
+ * reports the change, the open editor reads the new text back and the panels
+ * refresh from the index, so the vault is not listed again here. The write is
+ * deliberately not registered as our own: the editor still shows the old
+ * text, and its echo must reload it or the next autosave would overwrite the
+ * tick. The target state is passed explicitly: the caller may flip its row
+ * optimistically before the write, so `task.done` is no longer a safe source
+ * for it.
+ */
+export async function toggleTask(task: TaskItem, done: boolean): Promise<boolean> {
   try {
     await vault.flush();
-    await api.setTaskDone(task.path, task.line, task.text, !task.done);
-    await vault.refresh();
+    await api.setTaskDone(task.path, task.line, task.text, done);
+    return true;
   } catch (e) {
     vault.error = String(e);
+    return false;
   }
 }
 

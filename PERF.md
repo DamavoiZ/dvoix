@@ -2,7 +2,8 @@
 
 What was measured for dvoix, what it was, and what came out of it. Every
 number comes from `cargo run --release --example index_bench -- <notes> <bytes>`,
-which builds a vault of synthetic notes and times the operations of the index.
+which builds a vault of synthetic notes and times the operations of the index,
+unless a section names another source for it.
 
 The same command is used before and after a change, with the same note count
 and the same note size, so the numbers are comparable.
@@ -90,6 +91,34 @@ is taken as unchanged. A note that was written in the same millisecond as the
 last index build and has the same size as before would therefore be missed.
 That is rare, and the full rebuild is still there for the cases where it
 matters.
+
+### The search while it is still being typed
+
+Every word of a search is matched as a prefix (`fts_query`), because the user
+has usually not finished typing it. Without an extra index, FTS5 has to walk
+its term dictionary to find the beginnings: the search of a vault with many
+different words can cost a few seconds, although it answers in a millisecond
+for a word that is rare. An index over the first letter of every word
+(`prefix='1'` on the search table, schema version 6) makes that lookup cheap.
+
+80 000 notes of 2 kB, in milliseconds:
+
+| Search | Before | After | |
+| --- | --- | --- | --- |
+| `s`, a letter of nearly every note | 155 | 90 | **1.7×** |
+| a whole word | 67 | 66 | unchanged |
+| one letter, with a vocabulary of 20 000 words | 4357 | 210 | **21×** |
+| full rebuild | 4276 | 5026 | 18 % slower |
+| 100 changes in one batch | 36 | 35 | unchanged |
+| the file of the index | 491 MB | 563 MB | 15 % bigger |
+
+All rows but the one for a big vocabulary come from `index_bench`. That row
+comes from a corpus of the same size whose notes use 20 000 different words:
+the text of the bench repeats the same few words, so its term dictionary stays
+small and cannot show the worst case.
+
+The rebuild is what the extra index costs: once per version of the schema, or
+when the index file is deleted. The search is what happens on every keystroke.
 
 ### Renaming a folder
 
@@ -230,6 +259,161 @@ sorted. That happens now once per change of the vault.
 | build the targets | every keystroke | once per change |
 | walk the targets for a suggestion | — | 0.26 ms |
 
+### The panels, round 2
+
+The counters told the panels when to refresh, but a batch of changes still
+moved them once per file, and several panels did their own work on every
+keystroke. This round takes the bursts and the typing out of the hot paths.
+
+**A batch moves each counter once.** The backend hands a batch of watcher
+changes over as one event; the vault corrects the entries of the whole batch
+and then moves each change group once. A `git checkout` of 100 files is one
+refresh of every panel, not 100.
+
+**The app does not read its own saves back.** Every save came back from the
+watcher and the open file was read from disk again, even though the text was
+already on screen. The app remembers what it wrote (path, size, moment of
+change), skips the echo of its own write and corrects the entry of the file
+right away, so views of it (an embedded image) see the new version without
+waiting for the watcher.
+
+**Typing does not re-render the sidebar.** The outline parsed the whole note
+on every keystroke, and a docked copy of the open note was rendered by the
+backend on every keystroke. Both wait until the typing has settled (150 ms
+for the outline, 200 ms for the docked note); a note docked from disk is read
+once per batch of changes, and only the properties changing does not render
+it again (the same guard as in the reading view).
+
+**The graph waits for the typing.** Every letter in the filter field rebuilt
+the whole graph (all nodes, all lines, the layout). The settings that change
+nodes and lines are applied 200 ms after the last input; the data load runs
+once at a time.
+
+**Git reads its state once.** The panel called `git status` for every
+changed file and again every few seconds, even when the window was in the
+background. Now the refresh is debounced, only one runs at a time (requests
+during it become one more afterwards), the timer rests while no panel shows
+the state or the window is hidden (opening the panel catches up right
+away), and the history loads once per batch with a guard against
+out-of-order answers.
+
+**The tasks panel does the work once.** The filter lower-cased the text,
+title and tags of every task for every query, and the due-date bucket of a
+task was computed again for every row that showed it. The search text is
+built once per load, the bucket once per task:
+
+| 5 000 tasks | Before | After |
+| --- | --- | --- |
+| filter a query | 0.49 ms | 0.14 ms |
+| build the search texts | every query | 0.97 ms once per load |
+
+Checking off a task listed the whole vault again (37 ms with 20 000 files);
+now the watcher's report is enough, and the tick shows right away, before
+the file is written.
+
+**Long lists are drawn in pages.** A folder with thousands of entries, the
+tasks of a due date, the notes of a tag and the backlinks of a note were all
+drawn at once, thousands of DOM rows. Folders draw 500 rows and the panels
+200, with "Show more" for the rest; the open note is always revealed. The
+backlinks footer lists 50 links and opens the rest behind "and N more".
+
+| 5 000 entries in a folder | Before | After |
+| --- | --- | --- |
+| rows to draw on open | 5 000 | 500 |
+
+**The table widget keeps what did not change.** Adding a row built the whole
+table DOM again; now rows whose text did not change keep their DOM (and the
+cell being typed in). Growing a table by a paste re-reads only the changed
+lines instead of the whole table for every added row. Dragging a row or
+column finds the drop place by measuring the grips on every mouse move, but
+the scan stops at the first grip below the pointer and the drop marks are
+only written when the drop place changes, so the layout stays clean. The
+positions are measured live (and again on mouse up) on purpose: the table
+can scroll during a drag, and a snapshot taken at the drag start would then
+name a row the scrolled distance away from the mouse.
+
+**Opening the vault reads in parallel.** The settings files, `store.json`
+and the app version, and a store plugin's `main.js` and `styles.css` do not
+depend on each other and are read at once instead of one after another.
+
+### The index, round 2
+
+20 000 notes of 2 kB, in milliseconds, measured with `index_bench` before
+and after this round:
+
+| Operation | Before | After | |
+| --- | --- | --- | --- |
+| full rebuild | 1359 | 1028 | **1.3×** |
+| re-index one note | 2.96 | 0.32 | **9×** |
+| write and re-index one note | 2.39 | 0.36 | **7×** |
+| sync (nothing changed) | 65 | 50 | |
+| remove a folder of 100 notes | 4.57 | 2.59 | |
+| 100 changes one by one | 216 | 64 | **3.4×** |
+| the same 100 changes in one batch | 20.9 | 13.9 | |
+| graph | 21 | 17 | |
+| search / tasks / tags | ~unchanged | | |
+
+**Renaming a folder only moves paths.** The rename deleted the old rows and
+read, parsed and indexed every note of the folder again, although only the
+paths change. Now the paths are moved with SQL updates; the notes below the
+destination are read only when the index does not know them yet (a rename
+out of a hidden folder), and known notes are skipped by their moment of
+change and size. Names with `%` or `_` are escaped, and a rename that only
+changes the case works too. A test compares the result with a full rebuild
+of the same vault.
+The search table holds no path of its own (see below), so a rename does not
+reach it at all. With 20 000 notes in the index the rename of a folder of 100
+notes costs 3.9 ms; while the table still carried a copy of every path the same
+rename cost up to 96 ms, and at 80 000 notes between 284 and 371 ms.
+
+**The write path prepares once.** Every tag, link and task of a note was
+written with a freshly prepared statement; the statements are cached now,
+and empty frontmatter and tag lists take a fast path. The inline scanner
+collected every text run into a `Vec<char>` (four bytes per character) just
+to look for `#`; it walks the string directly now. Ticking a task parsed
+every task of the note to find one line; only that line is parsed now.
+
+**The watcher does less per event.** The kind of an event is decided before
+the file is asked for its metadata, removals need no metadata at all, and a
+batch keeps only the last change per path, but a Created survives a
+following Modified and a Removed starts the story over (a folder moved
+into the vault is still new, its notes must be indexed; the index merges a
+raw batch by the same rules). The index reuses the metadata the watcher already
+collected instead of asking the file system again.
+
+**SQLite is tuned for a cache.** `synchronous=NORMAL` (the index can always
+be rebuilt from the files, rule 1), a larger page cache, memory temp store
+and a memory-mapped read window. The secondary indexes are dropped before a
+full rebuild and built once over the finished tables, which measured faster
+than maintaining them per row. `PRAGMA optimize` was tried and rejected: its
+statistics made the planner leave the `NOCASE` path index for folder deletes
+and backlinks (two plan tests fail). Nothing collects statistics anymore, so
+the planner decides by the shape of the indexes, which is what this schema
+is built for; a test pins that no statistics table exists.
+
+**Links are unique.** A `UNIQUE(source, target)` index (schema version 5,
+one rebuild on the first open) lets the graph read a plain covering index
+scan instead of sorting and deduplicating the whole link table.
+
+### The shell, round 2
+
+**Git state costs one process.** `git status` spawned up to eight `git`
+processes (discovery, status, branch, upstream, remote, ahead/behind, two
+branch lists) on every refresh. One `git status --porcelain=v2 --branch -z`
+now carries the changes and the branch headers, the remote is derived from
+the upstream, and the branch list is one `for-each-ref`. Unmerged paths are
+reported like before. `--untracked-files=all` is kept on purpose: `normal`
+reports untracked folders as one entry, which breaks the per-file panel.
+
+**Downloads keep their connection.** Every store download built a new HTTP
+agent and paid a full TLS handshake; one shared agent is reused now, and an
+install fetches `main.js` and `styles.css` at the same time.
+
+**Plugin processes stream in windows.** Output was sent to the webview once
+per 8 kB read; it is collected per stream over 25 ms now (nothing is lost
+when the streams switch). The exit was polled every 50 ms; the reaper waits
+on the process now, and a kill goes through the stored handle or the pid.
+
 ## The attempts
 
 ### Kept: the search row takes the rowid of its note
@@ -246,8 +430,44 @@ EXPLAIN QUERY PLAN DELETE FROM notes_fts WHERE path = 'x.md';
 The note's rowid is now written into the search row, and the row is deleted by
 that rowid. The plan of the new delete is `INDEX 0:=` — a lookup, not a walk.
 
-The search itself did not change: the rowid is a hidden column, so the query
-and its `snippet()` call are the same as before.
+### Kept: the search table keeps no copy of the path
+
+The rowid made the delete cheap, but the table still stored a copy of every
+path, and a copy has to be written: the insert of a note paid for it, and a
+folder rename had to rewrite it for every note below. Isolating the statements
+of a rename measured the batch over the four tables at 8 to 13 ms for 800 rows
+and the same batch with the rewrite of the copy added at 87 to 93 ms, so the
+copy alone costs about ten times what the real work costs.
+
+The rename of a folder of 100 notes, measured by `index_bench` on the same
+vault before and after the column went away:
+
+| Vault | With the copy | Without it |
+| --- | --- | --- |
+| 20 000 notes | 25 to 96 ms | 3.9 ms |
+| 80 000 notes | 284 to 371 ms | 14.6 ms |
+
+The path is never searched, so the column can go: `search()` reads it through
+the rowid instead.
+
+```
+SELECT notes.path, notes_fts.title, snippet(notes_fts, 1, '«', '»', ' … ', 12)
+FROM notes_fts JOIN notes ON notes.rowid = notes_fts.rowid
+WHERE notes_fts MATCH ?1 ORDER BY rank LIMIT ?2
+```
+
+The join costs nothing measurable: a search over 20 000 notes runs in 10.23 ms
+with the column and 10.22 ms with the join, and a query that matches a single
+note is below a hundredth of a millisecond either way. The file of the index
+grows by about a megabyte for the copy (measured on 20 000 notes of 2 kB with
+nothing but the notes and the search table in the file: 107 MB against 106 MB),
+because the body of a note dwarfs its path. The win is the writing, not the
+size.
+
+One trap: dropping the first column moves the others, so the body of the note
+is column 1 and not 2, and `snippet()` has to be told. A test checks the exact
+snippet text and the exact path of a hit, because a wrong column still returns
+a hit and only the text gives it away.
 
 ### Kept: a `NOCASE` index for the delete of a folder
 
@@ -279,7 +499,8 @@ rebuild only touches the notes that changed.
 
 Measured 6.01 ms → 5.75 ms for the delete at 20 000 notes. FTS5 does not build
 a usable index for such a column, so the delete still walks the table. Not
-worth the change to the schema.
+worth the change to the schema. The column itself went later, for the cost of
+writing it rather than reading it (see above).
 
 ### Rejected: a search table that takes its content from the notes table
 
@@ -320,6 +541,17 @@ so a block that moved would keep its widget. The map costs more than it
 saves: the blocks are matched by their place in the document, which needs no
 lookup at all, and the map made a keystroke slower. Not used.
 
+### Rejected: prefix indexes over two and three letters
+
+`prefix='1 2 3'` was measured before `prefix='1'` was kept. It answers the
+same searches at the same speed (4357 ms → 212 ms for the one-letter case),
+but it costs 58 % more on a rebuild (6959 ms → 10994 ms) and 45 % more on the
+file (445 MB → 648 MB), and re-indexing a batch of notes gets 74 % slower
+(1507 ms → 2630 ms with 80 000 notes). Two- and three-letter beginnings are
+already cheap enough in the plain dictionary not to need their own index: a
+search for `wor` costs 43 ms without any prefix index and 41 ms with the
+three-level one.
+
 ### Rejected: sorting the names of the tree in lower case
 
 The names of the tree could be compared in lower case instead of with a
@@ -327,6 +559,18 @@ collator. That is faster, but it is a different order: a collator puts "a"
 before "B", a comparison in lower case cannot tell them apart. The order of
 the tree is what the user sees, so the collator was kept — but only one of
 them, for all the comparisons.
+
+### Rejected: sorting the search results in the query instead of by rank
+
+FTS5 answers the search `ORDER BY rank`, which is its own BM25 score. Measured
+on a corpus where one word is in every note, the sort costs the whole query:
+0.4 ms without it and 37 ms with it, because the score of every match has to
+be known before the best fifty can be picked. Taking the first 400 matches and
+sorting only those is 4 ms, but the fifty that come out are a different set:
+not one of the fifty best overlapped. The order of the results is what makes
+the search useful, so the honest sort was kept and the cheaper wrong one
+rejected. What was kept instead is the prefix index above, which is the part
+that actually grows with the vault.
 
 ## Still open
 

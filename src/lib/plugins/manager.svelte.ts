@@ -153,6 +153,9 @@ class PluginManager {
       const saved = await readJsonRaw(ENABLED_FILE);
       this.enabled = saved && typeof saved === "object" ? (saved as Record<string, boolean>) : {};
       this.errors = {};
+      // Features load first, then plugins in their registered order: a
+      // plugin may rely on what an earlier one registered, so the order is
+      // part of the API and the loads stay one after another.
       for (const f of this.features) await this.load(f);
       for (const p of this.all) if (this.isEnabled(p.manifest.id)) await this.load(p);
       // Write the file once so it shows what is on, even before anything was changed.

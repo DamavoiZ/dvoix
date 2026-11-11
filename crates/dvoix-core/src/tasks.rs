@@ -177,6 +177,19 @@ fn fence(line: &str) -> Option<&str> {
 /// All checkbox tasks of a note, skipping frontmatter and fenced code blocks.
 pub fn extract(content: &str) -> Vec<Task> {
     let mut tasks = Vec::new();
+    for_each_task(content, None, |task| {
+        tasks.push(task);
+        true
+    });
+    tasks
+}
+
+/// Walks the checkbox tasks of a note, skipping frontmatter and fenced code
+/// blocks, and hands each one to `f`. Stops when `f` returns `false` or when
+/// the line `until` is reached (that line is still handed over when it is a
+/// task). Lines before `until` are only recognised, not parsed: a toggle
+/// needs the metadata of one line, not of every task above it.
+fn for_each_task(content: &str, until: Option<u32>, mut f: impl FnMut(Task) -> bool) {
     let mut lines = content.lines().enumerate().peekable();
 
     // Skip the frontmatter block, if any.
@@ -193,39 +206,74 @@ pub fn extract(content: &str) -> Vec<Task> {
 
     let mut open_fence: Option<&str> = None;
     for (n, line) in lines {
+        let n = n as u32;
+        // Past the target line nothing can match any more: stop instead of
+        // walking the rest of the note. A later task with the same text
+        // must never answer for the target line.
+        if until.is_some_and(|u| n > u) {
+            return;
+        }
         if let Some(f) = open_fence {
             if line.trim_start().starts_with(f) {
                 open_fence = None;
+            }
+            if until == Some(n) {
+                return; // the target line is inside a code block
             }
             continue;
         }
         if let Some(f) = fence(line) {
             open_fence = Some(f);
+            if until == Some(n) {
+                return; // the target line opens a code block
+            }
             continue;
         }
-        let Some(cb) = checkbox(line) else { continue };
+        let Some(cb) = checkbox(line) else {
+            if until == Some(n) {
+                return; // the target line is not a task
+            }
+            continue;
+        };
+        if until.is_some_and(|u| n < u) {
+            continue; // an earlier task: recognised, but not parsed
+        }
         let (text, due, priority) = parse_meta(cb.rest);
         let mut tags = Vec::new();
         markdown::scan_inline(&text, &mut tags, &mut Vec::new());
         tags.dedup();
-        tasks.push(Task {
-            line: n as u32,
+        let reached = until == Some(n);
+        if !f(Task {
+            line: n,
             done: cb.state != ' ',
             text,
             due,
             priority,
             tags,
             indent: cb.indent,
-        });
+        }) || reached
+        {
+            return;
+        }
     }
-    tasks
+}
+
+/// The task on `line`, or `None` when that line is not a task. Only that
+/// line is parsed, so a toggle does not pay for the tasks of the whole note.
+fn task_at_line(content: &str, line: u32) -> Option<Task> {
+    let mut found = None;
+    for_each_task(content, Some(line), |task| {
+        found = Some(task);
+        false
+    });
+    found
 }
 
 /// Checks or unchecks the task on `line`. Returns the new file content, or
 /// `None` if that line is not a task (any more) or its text is not `expected_text`
 /// (the file changed since the caller last looked).
 pub fn set_done(content: &str, line: u32, expected_text: &str, done: bool) -> Option<String> {
-    let task = extract(content).into_iter().find(|t| t.line == line)?;
+    let task = task_at_line(content, line)?;
     if task.text != expected_text {
         return None;
     }
@@ -308,6 +356,82 @@ mod tests {
         assert!(set_done(content, 1, "one", true).is_none());
         assert!(set_done(content, 5, "one", true).is_none());
         assert!(set_done("# no task", 0, "", true).is_none());
+    }
+
+    /// A toggle reads the metadata of its own line only: tasks above it are
+    /// recognised but not parsed, and a checkbox inside a code block is not
+    /// a task even when earlier tasks exist.
+    #[test]
+    fn toggles_a_late_task_and_respects_fences() {
+        let content = "---\ntitle: List\n---\n- [ ] first 📅 2026-12-01 ⏫ #a\n```\n- [ ] in code\n```\n- [ ] last !low #b\n";
+        // Line 7 is the last task; its text and markers are parsed.
+        let done = set_done(content, 7, "last #b", true).unwrap();
+        assert_eq!(
+            done,
+            "---\ntitle: List\n---\n- [ ] first 📅 2026-12-01 ⏫ #a\n```\n- [ ] in code\n```\n- [x] last !low #b\n"
+        );
+        // Line 5 looks like a task but sits in a code block.
+        assert!(set_done(content, 5, "in code", true).is_none());
+        // A stale text on the right line is refused.
+        assert!(set_done(content, 7, "something else", true).is_none());
+        // The earlier task still toggles, with its own metadata.
+        let first = set_done(content, 3, "first #a", true).unwrap();
+        assert!(first.contains("- [x] first 📅 2026-12-01 ⏫ #a"));
+    }
+
+    /// A YAML list item in the frontmatter that looks like a task is never
+    /// a task: not extracted, and not toggled even when a body task with
+    /// the same text exists.
+    #[test]
+    fn a_task_like_frontmatter_line_is_never_toggled() {
+        let content =
+            "---\ntitle: Shopping\nlist:\n- [ ] Buy milk\n---\n# Shopping\n- [ ] Buy milk\n";
+        // Only the body task (line 6) is extracted.
+        let tasks = extract(content);
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].line, 6);
+        assert_eq!(tasks[0].text, "Buy milk");
+
+        // The frontmatter line is refused, although its text matches the
+        // body task.
+        assert!(set_done(content, 3, "Buy milk", true).is_none());
+        // The body task toggles, and the frontmatter stays untouched.
+        let done = set_done(content, 6, "Buy milk", true).unwrap();
+        assert_eq!(
+            done,
+            "---\ntitle: Shopping\nlist:\n- [ ] Buy milk\n---\n# Shopping\n- [x] Buy milk\n"
+        );
+    }
+
+    /// The walk stops at the target line: a task below it never answers
+    /// for a line that holds no task, and a task above it is not parsed.
+    #[test]
+    fn the_walk_stops_at_the_target_line() {
+        let content = "- [ ] Buy milk\nplain line\n- [ ] Buy milk\n";
+        // Line 1 is not a task; the same text below it must not match.
+        assert!(set_done(content, 1, "Buy milk", true).is_none());
+        // A line beyond the end of the note is not a task either.
+        assert!(set_done(content, 9, "Buy milk", true).is_none());
+        // Both real tasks still toggle on their own line.
+        assert!(
+            set_done(content, 0, "Buy milk", true)
+                .unwrap()
+                .starts_with("- [x] Buy milk\n")
+        );
+        assert!(
+            set_done(content, 2, "Buy milk", true)
+                .unwrap()
+                .ends_with("- [x] Buy milk\n")
+        );
+
+        // The walk hands over nothing past the target line, and nothing
+        // before it is parsed: only the target task reaches the callback.
+        let mut seen = Vec::new();
+        for_each_task(content, Some(2), |task| {
+            seen.push(task.line);
+            true
+        });
+        assert_eq!(seen, vec![2]);
     }
 
     #[test]

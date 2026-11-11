@@ -69,17 +69,18 @@ function wrap(installed: InstalledPlugin): Plugin {
     manifest: { id: m.id, name: m.name, description: m.description, version: m.version, author: m.author },
     icon: iconComponent(undefined),
     async onload(ctx) {
-      const code = await api.readConfig(`plugins/${m.id}/main.js`);
+      // The code and the styles do not depend on each other: read both at once.
+      const [code, css] = await Promise.all([
+        api.readConfig(`plugins/${m.id}/main.js`),
+        installed.hasStyles ? api.readConfig(`plugins/${m.id}/styles.css`) : Promise.resolve(null),
+      ]);
       if (code === null) throw new Error("main.js is missing");
-      if (installed.hasStyles) {
-        const css = await api.readConfig(`plugins/${m.id}/styles.css`);
-        if (css) {
-          const style = document.createElement("style");
-          style.dataset.dvoixPlugin = m.id;
-          style.textContent = css;
-          document.head.append(style);
-          ctx.register(() => style.remove());
-        }
+      if (css) {
+        const style = document.createElement("style");
+        style.dataset.dvoixPlugin = m.id;
+        style.textContent = css;
+        document.head.append(style);
+        ctx.register(() => style.remove());
       }
       const mod = (await importModule(m.id, code)) as { default?: PluginModule };
       const def = mod.default;
@@ -115,14 +116,17 @@ class PluginStore {
 
   /** Reads `store.json` and loads every store plugin that is on. */
   async loadVault() {
-    const raw = await readJsonRaw(STORE_FILE);
+    // Independent reads run at once instead of one after another.
+    const [raw, version] = await Promise.all([readJsonRaw(STORE_FILE), getVersion().catch(() => "0.0.0")]);
     const f = (raw && typeof raw === "object" ? raw : {}) as Partial<StoreFile>;
     this.file = {
       allowCommunity: f.allowCommunity === true,
       plugins: f.plugins && typeof f.plugins === "object" ? f.plugins : {},
     };
-    this.appVersion = await getVersion().catch(() => "0.0.0");
+    this.appVersion = version;
     await this.refreshInstalled();
+    // Activations run one after another: the manager queues them anyway and
+    // a plugin may rely on the ones before it being loaded.
     for (const p of this.installed) if (this.isEnabled(p.manifest.id)) await this.activate(p);
   }
 

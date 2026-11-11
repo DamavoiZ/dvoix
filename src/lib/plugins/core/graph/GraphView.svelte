@@ -37,8 +37,10 @@
   let simNodes = new Map<string, SimNode>();
 
   const settings = $derived(graphSettings.value);
-  // Only the settings that change nodes and lines rebuild the graph (and restart the layout).
-  const modelSettings = $derived({
+  // Only the settings that change nodes and lines rebuild the graph (and
+  // restart the layout). They are taken over once the input has settled, so
+  // typing in the filter or dragging a toggle does not rebuild per step.
+  const wanted = $derived({
     links: settings.links,
     folders: settings.folders,
     tags: settings.tags,
@@ -48,7 +50,20 @@
     attachments: settings.attachments,
     unresolved: settings.unresolved,
   });
-  const model = $derived(buildGraph(data, vault.entries, modelSettings, vault.info?.name ?? "Vault"));
+  let modelSettings = $state.raw<Parameters<typeof buildGraph>[2] | undefined>(undefined);
+  let firstSettings = true;
+  $effect(() => {
+    const next = $state.snapshot(wanted);
+    if (firstSettings) {
+      // The first graph is built right away, without waiting for the debounce.
+      firstSettings = false;
+      modelSettings = next;
+      return;
+    }
+    const timer = setTimeout(() => (modelSettings = next), 200);
+    return () => clearTimeout(timer);
+  });
+  const model = $derived(buildGraph(data, vault.entries, modelSettings ?? wanted, vault.info?.name ?? "Vault"));
   /** Why the graph is missing: the data did not load, or force-graph itself is not there. */
   const error = $derived(importError ?? loadError);
 
@@ -253,6 +268,7 @@
 
     return () => {
       clearTimeout(fitTimer);
+      clearTimeout(reloadTimer);
       resize.disconnect();
       scheme.removeEventListener("change", recolor);
       graph?._destructor();
@@ -260,16 +276,38 @@
     };
   });
 
-  // Reload when files change on disk.
-  $effect(() => {
-    void vault.changes.notes.number;
+  // Reload when files change on disk: once per burst of changes, and only
+  // one load at a time (a load that was superseded waits for the next one).
+  let loadingData = false;
+  let dataAgain = false;
+  function loadData() {
+    if (loadingData) {
+      dataAgain = true;
+      return;
+    }
+    loadingData = true;
     api
       .graph()
       .then((d) => {
         data = d;
         loadError = null;
       })
-      .catch((e) => (loadError = String(e)));
+      .catch((e) => (loadError = String(e)))
+      .finally(() => {
+        loadingData = false;
+        if (dataAgain) {
+          dataAgain = false;
+          loadData();
+        }
+      });
+  }
+
+  let reloadTimer: ReturnType<typeof setTimeout> | undefined;
+  $effect(() => {
+    void vault.changes.notes.number;
+    clearTimeout(reloadTimer);
+    reloadTimer = setTimeout(loadData, 250);
+    return () => clearTimeout(reloadTimer);
   });
 
   // New nodes and lines: keep the positions of nodes that were there before,

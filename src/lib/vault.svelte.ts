@@ -10,6 +10,10 @@ import { ui } from "./ui.svelte";
 
 const SAVE_DELAY_MS = 400;
 const RECENT_MAX = 50;
+/** How long a self-written file's watcher echo is recognized as our own write. */
+const ECHO_WINDOW_MS = 5000;
+/** How many writes are remembered for the echo check (a burst stays covered). */
+const ECHO_MAX = 16;
 
 /**
  * An editor tab. `path` is null for an empty tab ("New tab") and for a tab
@@ -30,14 +34,20 @@ export interface OpenOptions {
 const VIEW_PREFIX = "dvoix://view/";
 
 /**
- * A group of changes in the vault. The number moves with every change of the
- * group, so a panel that reads it refreshes only when it has to.
+ * A group of changes in the vault. The number moves once per batch of
+ * changes from the watcher, so a panel that reads it refreshes only when it
+ * has to.
  */
 export interface ChangeGroup {
-  /** Moves with every change of this group. */
+  /** Moves with every batch of changes of this group. */
   number: number;
-  /** The path of the last change of this group. */
-  path: string;
+  /**
+   * Every distinct path of the last batch of this group, replaced wholesale
+   * with every batch. A batch can name many files, so a view that follows one
+   * file (e.g. the docked note) has to check its path against this list: one
+   * path alone would miss the note that was not last in the batch.
+   */
+  paths: string[];
 }
 
 /** True for a note: only notes are indexed, so only they change the panels of notes. */
@@ -70,19 +80,26 @@ class VaultStore {
    */
   changes = $state<{ notes: ChangeGroup; structure: ChangeGroup; files: ChangeGroup }>({
     /** A note changed: its text, its tags, its tasks and its links. */
-    notes: { number: 0, path: "" },
+    notes: { number: 0, paths: [] },
     /** A file or folder was added, removed or moved: the tree of the vault changes. */
-    structure: { number: 0, path: "" },
+    structure: { number: 0, paths: [] },
     /** Any file changed. */
-    files: { number: 0, path: "" },
+    files: { number: 0, paths: [] },
   });
   /** Moves when the list of the vault changes, so that caches know they are stale. */
   entriesVersion = $state(0);
 
-  /** The files of the vault by their path, for the lookups of links. */
+  /** The files of the vault by their path, for the lookups of links and of changes. */
   private fileByPath = $derived.by(() => {
     const map = new Map<string, VaultEntry>();
     for (const entry of this.entries) if (!entry.isDir) map.set(entry.path.toLowerCase(), entry);
+    return map;
+  });
+
+  /** The folders of the vault by their path, to recognize changes of folders. */
+  private dirByPath = $derived.by(() => {
+    const map = new Map<string, VaultEntry>();
+    for (const entry of this.entries) if (entry.isDir) map.set(entry.path.toLowerCase(), entry);
     return map;
   });
 
@@ -95,6 +112,8 @@ class VaultStore {
 
   private saveTimer: ReturnType<typeof setTimeout> | undefined;
   private refreshTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Our own recent writes, so their watcher echo does not read the file back. */
+  private selfWrites: { path: string; size: number; modified: number; at: number }[] = [];
   private unlisten: (() => void) | undefined;
   private unlistenViews: (() => void) | undefined;
   private tearingDown = false;
@@ -106,12 +125,7 @@ class VaultStore {
       // When the whole vault closes, its tabs are dropped anyway (and saved before).
       if (!this.tearingDown) void this.closeTabsWhere((t) => t.view === id);
     });
-    this.unlisten = await onVaultChanged((change) => {
-      // Hidden files are not part of `entries` (only the hidden-files plugin lists them).
-      if (!change.hidden) this.onChange(change);
-      if (change.kind === "removed") void this.closeIfGone(change.path);
-      else if (change.path === this.openPath && !this.dirty) void this.reloadOpenFile();
-    });
+    this.unlisten = await onVaultChanged((changes) => this.onVaultEvent(changes));
     const last = await api.lastVault();
     if (last) await this.open(last).catch(() => undefined);
   }
@@ -134,6 +148,7 @@ class VaultStore {
       await plugins.loadVault();
       await pluginStore.loadVault();
       this.info = info;
+      // The tabs need the list of the vault to drop vanished files: list first.
       await this.refresh();
       await this.restoreTabs();
     } catch (e) {
@@ -150,6 +165,7 @@ class VaultStore {
   /** Saves everything of the open vault and unloads its plugins. */
   private async teardown() {
     if (!this.info) return;
+    this.selfWrites = [];
     await this.flush();
     ui.unload(); // stop saving the workspace: unloading plugins (e.g. tabs) must not change it
     await flushConfig();
@@ -170,31 +186,117 @@ class VaultStore {
     this.recent = [];
   }
 
-  async refresh(changed = "") {
+  async refresh(changed: string[] = []) {
     this.entries = await api.listEntries();
     this.entriesVersion++;
     // The list of the vault was replaced, so the tree of the vault changed.
     this.note(this.changes.structure, changed);
   }
 
-  private scheduleRefresh(changed = "") {
+  /**
+   * A change the app made itself (create, move, trash): the entry list is
+   * already right, so the panels are told right away and do not wait for
+   * the watcher. The list is read again shortly after anyway: on file systems
+   * without watcher events that is the only refresh there is, and it also
+   * corrects sizes and times a rename keeps from the old entry.
+   */
+  private appliedOwnChange(paths: string[], notes: boolean) {
+    this.entriesVersion++;
+    this.note(this.changes.structure, paths);
+    this.note(this.changes.files, paths);
+    // A folder can hold notes: its own operation changes the panels of notes
+    // too, although no single note path was named.
+    if (notes) this.note(this.changes.notes, paths);
+    this.scheduleRefresh(paths);
+  }
+
+  /**
+   * Puts a new entry into the list right after the app created it, so the
+   * next name generation, the rename row and the tree see it without waiting
+   * for the watcher. Inserted where the list's order (by path) puts it; a
+   * foreign order is kept and the entry is appended.
+   */
+  private insertEntry(entry: VaultEntry) {
+    if (this.entryIndex(entry.path) >= 0) return;
+    let i = this.entries.length;
+    const key = entry.path.toLowerCase();
+    if (this.entries.every((e, n) => n === 0 || this.entries[n - 1].path.toLowerCase() <= e.path.toLowerCase())) {
+      i = this.entries.findIndex((e) => e.path.toLowerCase() > key);
+      if (i < 0) i = this.entries.length;
+    }
+    this.entries.splice(i, 0, entry);
+  }
+
+  /** The place of a path in the list, by path ignoring case; -1 when absent. */
+  private entryIndex(path: string): number {
+    const key = path.toLowerCase();
+    return this.entries.findIndex((e) => e.path.toLowerCase() === key);
+  }
+
+  /** Drops a path and everything inside it (a folder) from the list. */
+  private removeEntries(path: string) {
+    this.entries = this.entries.filter((e) => e.path !== path && !e.path.startsWith(`${path}/`));
+  }
+
+  private scheduleRefresh(changed: string[] = []) {
     clearTimeout(this.refreshTimer);
     this.refreshTimer = setTimeout(() => void this.refresh(changed), 150);
   }
 
+  /** One batch from the watcher: vanished tabs right away, the rest handed to the panels together. */
+  private onVaultEvent(changes: VaultChange[]) {
+    // Hidden files are not part of `entries` (only the hidden-files plugin lists them).
+    const visible = changes.filter((c) => !c.hidden);
+    if (visible.length) this.applyChanges(visible);
+    for (const change of changes) {
+      if (change.kind === "removed") void this.closeIfGone(change.path);
+      else if (change.path === this.openPath && !this.dirty && !this.isSelfWrite(change)) void this.reloadOpenFile();
+    }
+  }
+
   /**
-   * A file changed on disk. Only the content of a file changed in most cases,
-   * and then its entry is corrected in place: the vault is not listed again
-   * and the tree of the vault is not built again.
+   * A batch of watcher changes (a sync tool, a git checkout, our own saves)
+   * is handed to the panels as one refresh: every change group moves once
+   * per batch instead of once per file, so the panels read the index once.
    */
-  private onChange(change: VaultChange) {
-    this.note(this.changes.files, change.path);
-    // A folder can hold notes: when it comes, goes or is renamed, the panels
-    // of notes change too, although the watcher names only the folder.
-    if (isNote(change.path) || this.isFolder(change)) this.note(this.changes.notes, change.path);
-    if (change.kind === "modified" && this.patchEntry(change)) return;
-    // A file was added or removed: the vault has to be listed again.
-    this.scheduleRefresh(change.path);
+  private applyChanges(changes: VaultChange[]) {
+    // One list for the whole batch, not one per change that was not patched.
+    let listAgain = false;
+    const lastAdded: string[] = [];
+    const notePaths: string[] = [];
+    let patched = false;
+    for (const change of changes) {
+      // A folder can hold notes: when it comes, goes or is renamed, the panels
+      // of notes change too, although the watcher names only the folder.
+      if (isNote(change.path) || this.isFolder(change)) notePaths.push(change.path);
+      if (change.kind === "modified" && this.patchEntry(change)) {
+        patched = true;
+        continue;
+      }
+      // A file was added or removed: the vault has to be listed again.
+      listAgain = true;
+      lastAdded.push(change.path);
+    }
+    // The size and time of an entry changed: caches that only look at paths
+    // and names stay right, but a view of a file (e.g. an embedded image) must
+    // see the new version.
+    if (patched) this.entriesVersion++;
+    this.note(this.changes.files, changes.map((c) => c.path));
+    if (notePaths.length) this.note(this.changes.notes, notePaths);
+    if (listAgain) this.scheduleRefresh(lastAdded);
+  }
+
+  /**
+   * True when the change is the watcher's echo of a write the app made
+   * itself. The text is already on screen; reading it back would replace
+   * the editor's content for nothing on every save.
+   */
+  private isSelfWrite(change: VaultChange): boolean {
+    const entry = change.entry;
+    if (!entry) return false;
+    const now = Date.now();
+    this.selfWrites = this.selfWrites.filter((w) => now - w.at < ECHO_WINDOW_MS);
+    return this.selfWrites.some((w) => w.path === entry.path && w.size === entry.size && w.modified === entry.modified);
   }
 
   /**
@@ -205,24 +307,53 @@ class VaultStore {
   private patchEntry(change: VaultChange): boolean {
     const entry = change.entry;
     if (!entry) return false;
-    const found = this.entries.find((e) => e.path === entry.path && !e.isDir);
+    const found = this.fileByPath.get(entry.path.toLowerCase());
     if (!found) return false;
     found.size = entry.size;
     found.modified = entry.modified;
-    this.entriesVersion++;
+    // The entry stays the same object: the lookup maps built from the list
+    // stay right without building them again, and the tree does not change.
     return true;
   }
 
   /** True when the change is about a folder, also one that is already gone. */
   private isFolder(change: VaultChange): boolean {
     if (change.entry) return change.entry.isDir;
-    return this.entries.some((e) => e.isDir && e.path === change.path);
+    return this.dirByPath.has(change.path.toLowerCase());
   }
 
-  /** Notes a change in a group: the counter moves and the path is remembered. */
-  private note(group: ChangeGroup, path: string) {
+  /**
+   * An entry the app just wrote, remembered for the echo check. Only writes
+   * whose new text the editor already shows belong here (saves, moves); a
+   * helper that changes a note behind the editor (ticking a task) must not
+   * register its write, or the editor would keep the old text.
+   */
+  noteSelfWrite(entry: VaultEntry): void {
+    this.selfWrites = [{ path: entry.path, size: entry.size, modified: entry.modified, at: Date.now() }, ...this.selfWrites].slice(
+      0,
+      ECHO_MAX,
+    );
+  }
+
+  /**
+   * An entry the app just wrote, made known right away: the watcher reports
+   * it only a moment later, and the views that depend on its size and time
+   * must not wait for that.
+   */
+  private noteWritten(entry: VaultEntry): void {
+    this.noteSelfWrite(entry);
+    const found = this.fileByPath.get(entry.path.toLowerCase());
+    if (found) {
+      found.size = entry.size;
+      found.modified = entry.modified;
+      this.entriesVersion++;
+    }
+  }
+
+  /** Notes a change in a group: the counter moves and the batch is remembered. */
+  private note(group: ChangeGroup, paths: string[]) {
     group.number++;
-    group.path = path;
+    group.paths = [...new Set(paths)];
   }
 
   // ---------------------------------------------------------------- tabs
@@ -447,6 +578,11 @@ class VaultStore {
     return (this.fileByName.get(t) ?? this.fileByName.get(`${t}.md`))?.path;
   }
 
+  /** The entry of a vault path, as a lookup instead of a walk over the list. */
+  entryAt(path: string): VaultEntry | undefined {
+    return this.fileByPath.get(path.toLowerCase());
+  }
+
   /** Called by file-type views on every edit; saves shortly after typing stops. */
   update(content: string) {
     if (content === this.content) return;
@@ -462,7 +598,9 @@ class VaultStore {
     const path = this.openPath;
     const content = this.content;
     try {
-      await api.writeFile(path, content);
+      const entry = await api.writeFile(path, content);
+      // Remember our write, so its watcher echo does not read the file back.
+      this.noteWritten(entry);
       if (this.openPath === path && this.content === content) this.dirty = false;
     } catch (e) {
       this.error = `Saving failed: ${e}`;
@@ -470,9 +608,11 @@ class VaultStore {
   }
 
   private async reloadOpenFile() {
-    if (!this.openPath) return;
-    const fresh = await api.readFile(this.openPath).catch(() => null);
-    if (fresh !== null && fresh !== this.content && !this.dirty) this.content = fresh;
+    const path = this.openPath;
+    if (!path) return;
+    const fresh = await api.readFile(path).catch(() => null);
+    // The tab may have moved on while the file was read.
+    if (this.openPath === path && fresh !== null && fresh !== this.content && !this.dirty) this.content = fresh;
   }
 
   creatable(): FileType[] {
@@ -492,8 +632,11 @@ class VaultStore {
   private async createFileAt(path: string, content: string, opts: OpenOptions = {}) {
     try {
       await this.flush();
-      await api.createFile(path, content);
-      await this.refresh(path);
+      const entry = await api.createFile(path, content);
+      // The entry is known right away: a second "new note" must not compute
+      // the same name again, and the tree works without watcher events.
+      this.insertEntry(entry);
+      this.appliedOwnChange([path], isNote(path));
       await this.openFile(path, opts);
     } catch (e) {
       this.error = String(e);
@@ -506,9 +649,11 @@ class VaultStore {
     let name = "New folder";
     for (let n = 2; taken.has(`${prefix}${name}`.toLowerCase()); n++) name = `New folder ${n}`;
     try {
-      await api.createFolder(`${prefix}${name}`);
+      const entry = await api.createFolder(`${prefix}${name}`);
+      // The row exists right away, so the inline rename has something to edit.
+      this.insertEntry(entry);
+      this.appliedOwnChange([entry.path], true);
       if (parent) ui.reveal(`${prefix}${name}`);
-      await this.refresh(`${prefix}${name}`);
       return `${prefix}${name}`;
     } catch (e) {
       this.error = String(e);
@@ -532,15 +677,34 @@ class VaultStore {
     if (to === from) return;
     try {
       await this.flush();
-      await api.renameEntry(from, to);
-      ui.moved(from, to);
+      const entry = await api.renameEntry(from, to);
       const remap = (p: string) => (p === from ? to : p.startsWith(`${from}/`) ? to + p.slice(from.length) : p);
+      // The entries move with the file right away: the tree, the link lookups
+      // and the next name generation see the new paths without the watcher.
+      const movedEntries = this.entries.filter((e) => e.path === from || e.path.startsWith(`${from}/`));
+      const movedPaths = movedEntries.map((e) => e.path);
+      // The entry of the moved path comes back from the command with its real
+      // size and time; everything inside a moved folder keeps its metadata,
+      // only its path changes.
+      this.entries = this.entries.map((e) => {
+        if (e.path === from) return { ...entry, path: to, name: to.split("/").pop()! };
+        if (!e.path.startsWith(`${from}/`)) return e;
+        const path = remap(e.path);
+        return { ...e, path, name: path.split("/").pop()! };
+      });
+      // The moved file was written by us: its watcher echo must not read it
+      // back over the editor.
+      this.noteSelfWrite({ ...entry, path: to });
+      ui.moved(from, to);
       if (this.openPath) this.openPath = remap(this.openPath);
       for (const t of this.tabs) if (t.path) t.path = remap(t.path);
       this.recent = this.recent.map(remap);
       this.saveTabs();
       if (to.includes("/")) ui.reveal(to);
-      await this.refresh(to);
+      this.appliedOwnChange(
+        [...movedPaths, ...movedPaths.map(remap)],
+        movedEntries.some((e) => e.isDir || isNote(e.path)),
+      );
     } catch (e) {
       this.error = String(e);
     }
@@ -555,8 +719,14 @@ class VaultStore {
         this.dirty = false;
       }
       await api.trashEntry(path);
+      // The entry goes right away; a new note may take its name again.
+      const removed = this.entries.filter((e) => e.path === path || e.path.startsWith(`${path}/`));
+      this.removeEntries(path);
       await this.closeTabs((p) => p === path || p.startsWith(`${path}/`));
-      await this.refresh(path);
+      this.appliedOwnChange(
+        removed.length ? removed.map((e) => e.path) : [path],
+        removed.some((e) => e.isDir || isNote(e.path)),
+      );
     } catch (e) {
       this.error = String(e);
     }

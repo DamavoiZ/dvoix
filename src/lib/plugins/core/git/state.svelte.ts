@@ -25,6 +25,14 @@ class GitState {
   diff = $state<({ title: string } & GitFileDiff) | null>(null);
 
   private timer: ReturnType<typeof setInterval> | undefined;
+  private refreshTimer: ReturnType<typeof setTimeout> | undefined;
+  /** The refresh that is running right now, so a second one joins it instead of racing it. */
+  private refreshing: Promise<void> | null = null;
+  /** A refresh was asked for while one was running: run once more when it ends. */
+  private refreshAgain = false;
+  private onVisible: (() => void) | undefined;
+  /** Panels that show the state right now; the interval rests while none does. */
+  private viewers = 0;
 
   /** The repository of the vault, `null` when there is none. */
   readonly repo = $derived(this.status?.repo ?? null);
@@ -38,8 +46,50 @@ class GitState {
       0,
   );
 
-  /** Loads the state of the repository and the list of branches. */
-  async refresh() {
+  /** A panel that shows the state mounted: catch up, then keep the interval running. */
+  viewOpened() {
+    this.viewers++;
+    if (this.viewers === 1) void this.refresh();
+  }
+
+  /** The panel went away: the interval may rest now. */
+  viewClosed() {
+    this.viewers = Math.max(0, this.viewers - 1);
+  }
+
+  /** True while polling makes sense: a panel shows the state and the window is looked at. */
+  private get watched(): boolean {
+    return this.viewers > 0 && !document.hidden;
+  }
+
+  /** Loads the state of the repository and the list of branches, shortly after the last request. */
+  scheduleRefresh(delay = 300) {
+    clearTimeout(this.refreshTimer);
+    this.refreshTimer = setTimeout(() => void this.refresh(), delay);
+  }
+
+  /**
+   * Loads the state of the repository and the list of branches. Only one
+   * load runs at a time: requests that come in while it runs are collected
+   * into one more load afterwards, so a burst of changes does not stack
+   * `git status` calls.
+   */
+  refresh(): Promise<void> {
+    if (this.refreshing) {
+      this.refreshAgain = true;
+      return this.refreshing;
+    }
+    this.refreshing = this.loadStatus().finally(() => {
+      this.refreshing = null;
+      if (this.refreshAgain) {
+        this.refreshAgain = false;
+        void this.refresh();
+      }
+    });
+    return this.refreshing;
+  }
+
+  private async loadStatus() {
     try {
       this.status = await api.gitStatus();
       this.error = null;
@@ -156,7 +206,15 @@ class GitState {
     this.stop();
     if (!gitSettings.value.autoRefresh) return;
     const seconds = Math.max(5, gitSettings.value.refreshSeconds);
-    this.timer = setInterval(() => void this.refresh(), seconds * 1000);
+    // Only while a panel shows the state and the window is looked at;
+    // coming back (or opening the panel) catches up right away.
+    this.timer = setInterval(() => {
+      if (this.watched) void this.refresh();
+    }, seconds * 1000);
+    this.onVisible = () => {
+      if (this.watched) void this.refresh();
+    };
+    document.addEventListener("visibilitychange", this.onVisible);
   }
 
   /** Stops the automatic refresh of the state. */
@@ -165,11 +223,19 @@ class GitState {
       clearInterval(this.timer);
       this.timer = undefined;
     }
+    clearTimeout(this.refreshTimer);
+    this.refreshTimer = undefined;
+    this.refreshAgain = false;
+    if (this.onVisible) {
+      document.removeEventListener("visibilitychange", this.onVisible);
+      this.onVisible = undefined;
+    }
   }
 
   /** Forgets everything, e.g. when the vault is closed. */
   reset() {
     this.stop();
+    this.viewers = 0;
     this.status = null;
     this.branches = [];
     this.error = null;
