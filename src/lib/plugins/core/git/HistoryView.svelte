@@ -35,12 +35,19 @@
   }
 
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let firstLoad = true;
   $effect(() => {
     // A change on disk makes a new commit, the history grows. A burst of
-    // changes loads it once, after the changes have settled.
+    // changes loads it once, after the changes have settled. The first open
+    // loads right away, so "No commits yet" does not flash while waiting.
     void vault.changes.files.number;
     clearTimeout(timer);
-    timer = setTimeout(() => void load(), 300);
+    if (firstLoad) {
+      firstLoad = false;
+      void load();
+    } else {
+      timer = setTimeout(() => void load(), 300);
+    }
     return () => clearTimeout(timer);
   });
 

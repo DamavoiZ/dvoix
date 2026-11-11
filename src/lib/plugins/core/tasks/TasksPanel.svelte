@@ -62,16 +62,17 @@
 
   /** What the filter looks for in a task, computed once per load and not per query. */
   const haystacks = $derived(tasks.map((t) => `${t.text}\n${t.noteTitle}\n${t.tags.map((tag) => `#${tag}`).join(" ")}`.toLowerCase()));
+  /** Only the tags: a query with a leading "#" searches tag substrings ("#ork" finds "work"). */
+  const tagHays = $derived(tasks.map((t) => t.tags.join(" ").toLowerCase()));
 
   const visible = $derived.by(() => {
     const q = query.trim().toLowerCase();
-    const plain = q.replace(/^#/, "");
     return tasks.filter((t, i) => {
       if (show === "open" && t.done) return false;
       if (show === "done" && !t.done) return false;
       if (!q) return true;
-      const hay = haystacks[i];
-      return hay.includes(q) || (plain !== q && hay.includes(`#${plain}`));
+      // "#ork" matches the tag "work"; plain text matches text, title and tags.
+      return q.startsWith("#") ? tagHays[i].includes(q.slice(1)) : haystacks[i].includes(q);
     });
   });
 
@@ -134,8 +135,9 @@
   async function toggle(task: TaskItem) {
     const was = task.done;
     task.done = !was;
-    // Undo the optimistic tick only when this toggle is the one that failed.
-    if (!(await toggleTask(task))) task.done = was;
+    // The target state goes to the file explicitly: `task.done` is already
+    // flipped here, so deriving the payload from it would send the old state.
+    if (!(await toggleTask(task, !was))) task.done = was;
   }
 
   function dueClass(t: TaskItem): string {

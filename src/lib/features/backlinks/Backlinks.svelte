@@ -11,17 +11,46 @@
 
   let backlinks = $state<NoteSummary[]>([]);
   let limit = $state(PAGE);
+  /** The note the shown links belong to; a switch drops them right away. */
+  let shownFor = $state("");
+  /** Drops answers that arrive after a newer request. */
+  let generation = 0;
+  let lastPath = "";
   let timer: ReturnType<typeof setTimeout> | undefined;
   $effect(() => {
     void vault.changes.notes.number;
     const p = path;
-    limit = PAGE;
-    // Once per batch of changes, not once per changed note.
+    const switched = p !== lastPath;
+    lastPath = p;
+    if (switched) {
+      // Another note: the old links and the expanded list must not stay on
+      // screen while the new ones load. An autosave of the same note keeps
+      // both, so "more" stays open while typing.
+      generation++;
+      backlinks = [];
+      limit = PAGE;
+      shownFor = p;
+    }
+    const run = generation;
+    const fetch = () => {
+      if (fileTypeFor(p)?.id !== "markdown") {
+        backlinks = [];
+        return;
+      }
+      api
+        .backlinks(p)
+        .then((b) => {
+          if (run === generation) backlinks = b;
+        })
+        .catch(() => {
+          if (run === generation) backlinks = [];
+        });
+    };
+    // Once per batch of changes, not once per changed note; a switch loads
+    // right away so the new note's links appear without the debounce delay.
     clearTimeout(timer);
-    timer = setTimeout(() => {
-      if (fileTypeFor(p)?.id === "markdown") api.backlinks(p).then((b) => (backlinks = b)).catch(() => (backlinks = []));
-      else backlinks = [];
-    }, 150);
+    if (switched) fetch();
+    else timer = setTimeout(fetch, 150);
     return () => clearTimeout(timer);
   });
 
@@ -29,7 +58,7 @@
   const hiddenCount = $derived(backlinks.length - shown.length);
 </script>
 
-{#if backlinks.length}
+{#if shownFor === path && backlinks.length}
   <footer class="border-t border-zinc-800 px-4 py-2 text-xs text-zinc-500">
     Linked from:
     {#each shown as b (b.path)}

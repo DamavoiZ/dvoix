@@ -110,14 +110,20 @@ export function compareTasks(a: TaskItem, b: TaskItem): number {
 }
 
 /**
- * Checks/unchecks a task in its file. Pending edits are saved first so nothing
- * is lost. True when the file was written; the watcher reports the change and
- * the panels refresh from it, so the vault is not listed again here.
+ * Sets a task's checkbox to the state `done` in its file. Pending edits are
+ * saved first so nothing is lost. True when the file was written; the watcher
+ * reports the change and the panels refresh from it, so the vault is not
+ * listed again here. The target state is passed explicitly: the caller may
+ * flip its row optimistically before the write, so `task.done` is no longer
+ * a safe source for it.
  */
-export async function toggleTask(task: TaskItem): Promise<boolean> {
+export async function toggleTask(task: TaskItem, done: boolean): Promise<boolean> {
   try {
     await vault.flush();
-    await api.setTaskDone(task.path, task.line, task.text, !task.done);
+    const entry = await api.setTaskDone(task.path, task.line, task.text, done);
+    // Our own write: its watcher echo must not read the file back into the
+    // editor or make a panel undo the tick before the reload arrives.
+    vault.noteSelfWrite(entry);
     return true;
   } catch (e) {
     vault.error = String(e);
