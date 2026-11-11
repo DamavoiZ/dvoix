@@ -354,10 +354,14 @@ impl Index {
     }
 
     /// Moves the notes of a folder to its new name, after the folder was
-    /// renamed on disk. Their content does not change, only their paths, so
-    /// the paths are rewritten in SQL instead of reading and parsing every
-    /// note again. Titles need no refresh: a folder rename keeps every file
-    /// name, so a title that falls back to the file stem stays correct.
+    /// renamed on disk. The content of the notes does not change, only their
+    /// paths, so the rows that exist are rewritten in SQL instead of reading
+    /// and parsing every note again. Titles need no refresh: a folder rename
+    /// keeps every file name, so a title that falls back to the file stem
+    /// stays correct. The notes below the destination are read anyway (with
+    /// the skip of `reindex_folder`), so a rename out of a hidden folder,
+    /// whose notes were never indexed, brings them in without waiting for a
+    /// watcher report.
     ///
     /// The prefixes are matched case-sensitively (`substr`, not LIKE, which
     /// is case-insensitive in SQLite): a sibling folder that differs only in
@@ -365,7 +369,7 @@ impl Index {
     /// its rows. A case-only rename still works: its rows match the source
     /// prefix exactly, and they are kept out of the stale rows of the
     /// destination.
-    pub fn move_folder(&mut self, _vault: &Vault, from: &str, to: &str) -> Result<()> {
+    pub fn move_folder(&mut self, vault: &Vault, from: &str, to: &str) -> Result<()> {
         let tx = self.conn.transaction()?;
         // The notes of the folder are collected first: one range search on
         // the NOCASE index (the substr check is a filter on its rows).
@@ -448,6 +452,13 @@ impl Index {
             task_path.execute(params![new_path, path])?;
         }
         drop((note_path, tag_path, link_source, task_path));
+        // The source may have had no rows at all: a hidden folder (`.drafts`
+        // -> `drafts`) was never indexed, so there is nothing to rewrite.
+        // Reading the destination directly brings its notes in even when no
+        // watcher event ever arrives. Notes whose rows were just rewritten
+        // are skipped by their moment of change and size (see
+        // `reindex_folder`), so the SQL-only move is not parsed again.
+        reindex_folder(&tx, vault, to)?;
         tx.commit()?;
         self.writes += 1;
         Ok(())
@@ -485,30 +496,51 @@ impl Index {
         // Created followed by Modified stays Created (like `merged_kind`
         // in the watcher): a folder that was moved in is reported as
         // created and then modified, and only the created report makes the
-        // index read its notes. Walking backwards keeps the last change of
-        // every path, and the reverse afterwards restores the arrival
-        // order, which matters when a folder and a note inside it both
-        // changed.
-        let mut seen: HashSet<&str> = HashSet::with_capacity(changes.len());
+        // index read its notes. A Removed resets the story: only reports
+        // after it can make the path created again, so Removed -> Created
+        // -> Modified ends Created and Created -> Removed ends Removed.
+        // Walking backwards keeps the last report of every path (its kind
+        // is replaced by the merged one) and knows the reports before it,
+        // so the merged kind follows the same rules as `merged_kind`. The
+        // reverse afterwards restores the arrival order, which matters
+        // when a folder and a note inside it both changed.
         let mut unique: Vec<&VaultChange> = Vec::with_capacity(changes.len());
-        // The paths whose merged kind is Created although the kept (last)
-        // report says Modified. A Removed ends the story: only reports
-        // after it can make the path created again.
-        let mut created: HashSet<&str> = HashSet::new();
+        // The merged kind of every kept report while walking backwards.
+        // The last report is the starting point; a Created before a kept
+        // Modified turns the kind into Created, any other earlier report
+        // is outdated (its state was overwritten by the kept one). A
+        // Removed ends the story: reports before it belong to the old
+        // life of the path and cannot change the merged kind anymore.
+        let mut kinds: HashMap<&str, ChangeKind> = HashMap::with_capacity(changes.len());
+        let mut reset: HashSet<&str> = HashSet::new();
         for change in changes.iter().rev() {
-            match change.kind {
-                ChangeKind::Created => {
-                    created.insert(change.path.as_str());
-                }
-                ChangeKind::Removed => {
-                    created.remove(change.path.as_str());
-                }
-                ChangeKind::Modified => {}
+            let path = change.path.as_str();
+            // A Removed ends the story for everything before it, whether
+            // it is the kept report or an earlier one.
+            if change.kind == ChangeKind::Removed {
+                reset.insert(path);
             }
-            if seen.insert(change.path.as_str()) {
-                unique.push(change);
+            if let Some(kind) = kinds.get_mut(path) {
+                if !reset.contains(path)
+                    && change.kind == ChangeKind::Created
+                    && *kind == ChangeKind::Modified
+                {
+                    *kind = ChangeKind::Created;
+                }
+                continue;
             }
+            kinds.insert(path, change.kind);
+            unique.push(change);
         }
+        // The paths whose merged kind is Created although the kept (last)
+        // report says Modified.
+        let created: HashSet<&str> = unique
+            .iter()
+            .filter(|c| {
+                c.kind == ChangeKind::Modified && kinds[c.path.as_str()] == ChangeKind::Created
+            })
+            .map(|c| c.path.as_str())
+            .collect();
         unique.reverse();
         let actions = self.actions_for(vault, &unique, &created)?;
         if actions.is_empty() {
@@ -521,44 +553,7 @@ impl Index {
                 Action::ReindexFolder(path) => {
                     // A folder that appeared (moved or renamed into place)
                     // brings its notes; the watcher reports only the folder.
-                    // What the index already knows about the notes below it,
-                    // so a note whose moment of change and size are unchanged
-                    // is not read again: after an in-app rename `move_folder`
-                    // rewrote the paths in SQL, and this report must not
-                    // parse every note a second time.
-                    let known: HashMap<String, (i64, i64)> = {
-                        let mut stmt = tx.prepare_cached(
-                            "SELECT path, modified, size FROM notes WHERE path LIKE ?1 ESCAPE '\\'",
-                        )?;
-                        let rows = stmt.query_map([prefix_pattern(&format!("{path}/"))], |r| {
-                            Ok((
-                                r.get::<_, String>(0)?,
-                                (r.get::<_, i64>(1)?, r.get::<_, i64>(2)?),
-                            ))
-                        })?;
-                        let mut map = HashMap::new();
-                        for row in rows {
-                            let (path, state) = row?;
-                            map.insert(path, state);
-                        }
-                        map
-                    };
-                    for entry in vault
-                        .files_below(path)?
-                        .iter()
-                        .filter(|e| is_indexable(&e.path))
-                    {
-                        let state = (entry.modified as i64, entry.size as i64);
-                        if known.get(&entry.path) == Some(&state) {
-                            continue; // the note did not change
-                        }
-                        let Ok(content) = vault.read(&entry.path) else {
-                            continue;
-                        };
-                        let parsed = markdown::parse(&content, stem(&entry.path));
-                        delete_note(&tx, &entry.path)?;
-                        write_note(&tx, entry, &parsed, &tasks::extract(&content))?;
-                    }
+                    reindex_folder(&tx, vault, path)?;
                 }
                 Action::Reindex(path, entry) => {
                     // The entry was already stat'ed while deciding the
@@ -980,6 +975,48 @@ fn prefix_pattern(prefix: &str) -> String {
     }
     out.push('%');
     out
+}
+
+/// Reads the notes below a folder into the index. What the index already
+/// knows about them is kept: a note whose moment of change and size are
+/// unchanged is not read again, so after an in-app rename (`move_folder`
+/// rewrote the paths in SQL) neither the watcher report nor the move itself
+/// parses every note a second time.
+fn reindex_folder(tx: &rusqlite::Transaction, vault: &Vault, path: &str) -> Result<()> {
+    let known: HashMap<String, (i64, i64)> = {
+        let mut stmt = tx.prepare_cached(
+            "SELECT path, modified, size FROM notes WHERE path LIKE ?1 ESCAPE '\\'",
+        )?;
+        let rows = stmt.query_map([prefix_pattern(&format!("{path}/"))], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                (r.get::<_, i64>(1)?, r.get::<_, i64>(2)?),
+            ))
+        })?;
+        let mut map = HashMap::new();
+        for row in rows {
+            let (path, state) = row?;
+            map.insert(path, state);
+        }
+        map
+    };
+    for entry in vault
+        .files_below(path)?
+        .iter()
+        .filter(|e| is_indexable(&e.path))
+    {
+        let state = (entry.modified as i64, entry.size as i64);
+        if known.get(&entry.path) == Some(&state) {
+            continue; // the note did not change
+        }
+        let Ok(content) = vault.read(&entry.path) else {
+            continue;
+        };
+        let parsed = markdown::parse(&content, stem(&entry.path));
+        delete_note(tx, &entry.path)?;
+        write_note(tx, entry, &parsed, &tasks::extract(&content))?;
+    }
+    Ok(())
 }
 
 /// Takes a note out of the index, and everything below it when it is a
@@ -2378,6 +2415,64 @@ mod tests {
         assert_eq!(index.dump(), fresh.dump());
     }
 
+    /// A hidden folder renamed to a visible name is indexed by the move
+    /// itself, without any watcher event: on a file system that reports no
+    /// changes the notes must still be found until the vault is opened
+    /// again. The destination is read directly, exactly like the Created
+    /// report of the watcher would.
+    #[test]
+    fn a_hidden_folder_rename_indexes_without_a_watcher_event() {
+        let (dir, vault) = sample_vault();
+        std::fs::create_dir_all(dir.path().join(".drafts/deep")).unwrap();
+        std::fs::write(
+            dir.path().join(".drafts/deep/idea.md"),
+            "# Idea\nAn ideanote. #draft\n- [ ] A task",
+        )
+        .unwrap();
+        let mut index = Index::for_vault(&vault).unwrap();
+        index.rebuild(&vault).unwrap();
+        assert!(index.search("ideanote", 10).unwrap().is_empty());
+
+        vault.rename(".drafts", "drafts").unwrap();
+        index.move_folder(&vault, ".drafts", "drafts").unwrap();
+
+        assert_eq!(
+            index.search("ideanote", 10).unwrap()[0].path,
+            "drafts/deep/idea.md"
+        );
+        assert_eq!(index.notes_with_tag("draft").unwrap().len(), 1);
+        assert_eq!(index.tasks().unwrap().len(), 1);
+        assert_eq!(index.counts().unwrap(), (3, 3));
+        let mut fresh = Index::open_in_memory().unwrap();
+        fresh.rebuild(&vault).unwrap();
+        assert_eq!(index.dump(), fresh.dump());
+    }
+
+    /// Renaming a visible folder to a dot-name takes its notes out even
+    /// though the move now reads the destination: a hidden destination is
+    /// never indexed, the moved rows are deleted and nothing is read back
+    /// in.
+    #[test]
+    fn a_visible_folder_renamed_to_a_dot_name_stays_out() {
+        let (_dir, vault) = sample_vault();
+        vault
+            .write("projects/gamma.md", "# Gamma\nA gammanote.")
+            .unwrap();
+        let mut index = Index::for_vault(&vault).unwrap();
+        index.rebuild(&vault).unwrap();
+        assert_eq!(index.counts().unwrap(), (3, 3));
+
+        vault.rename("projects", ".drafts").unwrap();
+        index.move_folder(&vault, "projects", ".drafts").unwrap();
+
+        assert_eq!(index.counts().unwrap(), (1, 1));
+        assert!(index.search("gammanote", 10).unwrap().is_empty());
+        assert!(index.search("links", 10).unwrap().is_empty());
+        let mut fresh = Index::open_in_memory().unwrap();
+        fresh.rebuild(&vault).unwrap();
+        assert_eq!(index.dump(), fresh.dump());
+    }
+
     /// A folder that is moved in is reported as created and then modified
     /// while its notes land in it. The batch must still read the notes of
     /// the folder: the Created report may not be lost to the Modified one.
@@ -2407,6 +2502,128 @@ mod tests {
             "moved/deep/new.md"
         );
         assert_eq!(index.counts().unwrap(), (3, 3));
+    }
+
+    /// A folder that was taken out and put back in one batch: Removed ends
+    /// the old story, the Created after it starts a new one, and the
+    /// Modified that follows while its notes land in it may not turn the
+    /// Created into a plain Modified (see `merged_kind` in the watcher).
+    /// The notes below the folder must be indexed although the last report
+    /// about the folder says only modified.
+    #[test]
+    fn a_folder_removed_then_created_then_modified_in_one_batch_is_indexed() {
+        let (dir, vault) = sample_vault();
+        let mut index = Index::for_vault(&vault).unwrap();
+        index.rebuild(&vault).unwrap();
+
+        std::fs::create_dir_all(dir.path().join("landing/deep")).unwrap();
+        std::fs::write(
+            dir.path().join("landing/deep/new.md"),
+            "# New\nA landingnote.",
+        )
+        .unwrap();
+        assert!(index.search("landingnote", 10).unwrap().is_empty());
+
+        let change = |kind| VaultChange {
+            kind,
+            path: "landing".into(),
+            hidden: false,
+            entry: None,
+        };
+        index
+            .apply_changes(
+                &vault,
+                &[
+                    change(ChangeKind::Removed),
+                    change(ChangeKind::Created),
+                    change(ChangeKind::Modified),
+                ],
+            )
+            .unwrap();
+
+        assert_eq!(
+            index.search("landingnote", 10).unwrap()[0].path,
+            "landing/deep/new.md"
+        );
+        assert_eq!(index.counts().unwrap(), (3, 3));
+        let mut fresh = Index::open_in_memory().unwrap();
+        fresh.rebuild(&vault).unwrap();
+        assert_eq!(index.dump(), fresh.dump());
+    }
+
+    /// Created -> Removed ends Removed: a folder that appeared and was
+    /// taken out again in the same batch leaves nothing behind, the Created
+    /// before the Removed may not survive it.
+    #[test]
+    fn a_folder_created_then_removed_in_one_batch_stays_out() {
+        let (dir, vault) = sample_vault();
+        let mut index = Index::for_vault(&vault).unwrap();
+        index.rebuild(&vault).unwrap();
+
+        std::fs::create_dir_all(dir.path().join("fleeting")).unwrap();
+        std::fs::write(
+            dir.path().join("fleeting/note.md"),
+            "# Fleeting\nA fleetingnote.",
+        )
+        .unwrap();
+        assert!(index.search("fleetingnote", 10).unwrap().is_empty());
+
+        // The folder is gone again before the batch arrives.
+        std::fs::remove_dir_all(dir.path().join("fleeting")).unwrap();
+        let change = |kind| VaultChange {
+            kind,
+            path: "fleeting".into(),
+            hidden: false,
+            entry: None,
+        };
+        index
+            .apply_changes(
+                &vault,
+                &[change(ChangeKind::Created), change(ChangeKind::Removed)],
+            )
+            .unwrap();
+
+        assert!(index.search("fleetingnote", 10).unwrap().is_empty());
+        assert_eq!(index.counts().unwrap(), (2, 2));
+    }
+
+    /// Created -> Removed -> Modified ends Modified: the Removed resets
+    /// the story, so the Created before it may not survive into the
+    /// Modified after it (see `merged_kind` in the watcher). A plain
+    /// Modified about an existing folder does not re-read its notes, so a
+    /// note that appeared below it in the same batch stays out until a
+    /// Created report or the next sync brings it in.
+    #[test]
+    fn a_folder_created_removed_modified_in_one_batch_stays_modified() {
+        let (dir, vault) = sample_vault();
+        let mut index = Index::for_vault(&vault).unwrap();
+        index.rebuild(&vault).unwrap();
+
+        std::fs::create_dir_all(dir.path().join("churn")).unwrap();
+        std::fs::write(dir.path().join("churn/note.md"), "# Churn\nA churnnote.").unwrap();
+        assert!(index.search("churnnote", 10).unwrap().is_empty());
+
+        let change = |kind| VaultChange {
+            kind,
+            path: "churn".into(),
+            hidden: false,
+            entry: None,
+        };
+        index
+            .apply_changes(
+                &vault,
+                &[
+                    change(ChangeKind::Created),
+                    change(ChangeKind::Removed),
+                    change(ChangeKind::Modified),
+                ],
+            )
+            .unwrap();
+
+        // The merged kind is Modified, not Created: no ReindexFolder was
+        // queued, so the note below the folder was not read.
+        assert!(index.search("churnnote", 10).unwrap().is_empty());
+        assert_eq!(index.counts().unwrap(), (2, 2));
     }
 
     /// The watcher report after an in-app folder rename must not undo the
