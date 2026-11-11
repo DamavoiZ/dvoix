@@ -158,6 +158,20 @@ fn main() {
     let (elapsed, ()) = time(|| index.remove("folder50").expect("the folder is removed"));
     row("remove a folder of 100 notes", elapsed);
 
+    // The rename of a folder: the paths of its notes move in the index
+    // without the notes being read again (see `move_folder`). Twice, because
+    // the first one can still be busy with the write ahead log of the
+    // rebuild (see the batches below).
+    for folder in ["folder0", "folder1"] {
+        let to = format!("renamed-{folder}");
+        let (elapsed, ()) = time(|| {
+            index
+                .move_folder(&vault, folder, &to)
+                .expect("the folder is moved")
+        });
+        row(&format!("rename a folder of 100 notes ({folder})"), elapsed);
+    }
+
     // A burst of changes, like a git checkout: 100 notes at once.
     let changes: Vec<VaultChange> = (0..100)
         .map(|i| VaultChange {
