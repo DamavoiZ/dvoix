@@ -30,8 +30,25 @@ export function parseEmbed(inner: string): { target: string; width?: number } {
 }
 
 // One blob URL per file and version; a changed file (same path, newer
-// modification time) gets a new URL and the old one is released.
-const cache = new Map<string, { modified: number; url: Promise<string> }>();
+// modification time) gets a new URL and the old one is released. `size` is
+// the pixel size of the image, known once it has been loaded once.
+const cache = new Map<string, { modified: number; url: Promise<string>; size?: { width: number; height: number } }>();
+
+/**
+ * The height an embedded image takes at a drawn width, once its file has
+ * been loaded once. The live preview uses it to reserve the height before
+ * the image is drawn: without it the line grows when the image arrives and
+ * the text under the viewport jumps while scrolling.
+ */
+export function embeddedImageHeight(target: string, drawnWidth: number): number | undefined {
+  const path = vault.resolveLink(target);
+  const size = path ? cache.get(path)?.size : undefined;
+  if (!size || size.width <= 0) return undefined;
+  // Like the CSS of the image (`max-width: 100%`): a wide image is scaled
+  // down to the line, and its height with it.
+  const width = Math.min(drawnWidth, size.width);
+  return Math.round((size.height / size.width) * width);
+}
 
 /** A URL the webview can show for an image in the vault, or null if it is missing. */
 export async function attachmentUrl(target: string): Promise<string | null> {
@@ -50,18 +67,38 @@ export async function attachmentUrl(target: string): Promise<string | null> {
   return url.catch(() => null);
 }
 
-/** An `<img>` for an embedded image; it shows the file name until (or if not) loaded. */
-export function embedImage(target: string, width?: number): HTMLElement {
+/**
+ * An `<img>` for an embedded image; it shows the file name until (or if not)
+ * loaded. `onload` is called with the element once the image has its size,
+ * so the caller can react to the height the line really takes.
+ */
+export function embedImage(target: string, width?: number, onload?: (img: HTMLImageElement) => void): HTMLElement {
   const img = document.createElement("img");
   img.className = "dvoix-embed-image";
   img.alt = target;
   img.draggable = false;
   if (width) img.style.width = `${width}px`;
-  void attachmentUrl(target).then((url) => {
-    if (url) img.src = url;
-    else {
+  const loadedFrom = attachmentUrl(target);
+  void loadedFrom.then((url) => {
+    if (!url) {
       img.replaceWith(Object.assign(document.createElement("span"), { className: "dvoix-embed-missing", textContent: target }));
+      return;
     }
+    img.addEventListener(
+      "load",
+      () => {
+        const path = vault.resolveLink(target);
+        const hit = path ? cache.get(path) : undefined;
+        // Remember the size on the entry this image was loaded from, not on
+        // whatever the cache holds now: the file may have changed since.
+        if (hit?.url === loadedFrom && img.naturalWidth > 0) {
+          hit.size = { width: img.naturalWidth, height: img.naturalHeight };
+        }
+        onload?.(img);
+      },
+      { once: true },
+    );
+    img.src = url;
   });
   return img;
 }
