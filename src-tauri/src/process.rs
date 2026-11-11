@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, TryRecvError};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -27,16 +27,52 @@ pub enum ProcessEvent {
 }
 
 /// A running program. The reaper thread waits for the exit while holding
-/// the lock of `child`; `kill` therefore asks for the lock with `try_lock`
-/// and, when the reaper holds it, signals the program by its id instead
-/// (see `signal_kill`). The exit is noticed at once, without polling.
+/// the lock of `child`; `kill` therefore never waits for that lock. It reads
+/// [`Running::state`] instead, which names the program only until the reaper
+/// has reaped its exit. The exit is noticed at once, without polling.
 struct Running {
-    /// The process id, kept next to the handle so a kill needs no lock.
-    pid: u32,
-    /// Set once the exit was reaped, so a kill never signals a process id
-    /// that the system may have handed out again in the meantime.
-    exited: AtomicBool,
+    /// What a kill needs to end the program, and whether the exit has been
+    /// reaped already. The reaper sets `exited` and clears the target under
+    /// this lock immediately after `wait()` returns, that is right after the
+    /// reap: a kill that still finds a target therefore always names a child
+    /// that has not been reaped, whose id the system cannot have handed out
+    /// again yet.
+    state: Mutex<ReapState>,
     child: Mutex<Child>,
+}
+
+/// The kill target of a running program, taken under [`Running::state`].
+#[derive(Default)]
+struct ReapState {
+    /// Set once `wait()` has reaped the exit. A kill after this never
+    /// signals anything.
+    exited: bool,
+    /// `None` once the exit was reaped.
+    target: Option<KillTarget>,
+}
+
+/// What a kill needs to end the program without the child handle, which the
+/// reaper holds in its blocking `wait()`.
+#[derive(Clone)]
+struct KillTarget {
+    /// The process id. A kill takes it under the state lock before the
+    /// reaper marks the reap, so at that moment the child is unreaped and
+    /// the id still names our program. On Linux the pidfd below closes even
+    /// the small window between taking the target and sending the signal;
+    /// the id fallback on the other systems keeps that window when a kill
+    /// races the program's natural end.
+    pid: u32,
+    /// A pidfd on Linux: it names exactly this process, so a signal through
+    /// it can never reach a recycled id, even one sent late. `None` on older
+    /// kernels and on the other systems. Shared because a kill takes a copy
+    /// of the target while the reaper may already be done with the child.
+    #[cfg(target_os = "linux")]
+    pidfd: Option<Arc<PidFd>>,
+    /// When the process was created, as the system counts it (100ns units
+    /// since 1601 on Windows). Lets a kill check that an id still names our
+    /// program and not one that got the id after ours ended.
+    #[cfg(windows)]
+    created: Option<u64>,
 }
 
 #[derive(Default)]
@@ -119,9 +155,12 @@ impl Processes {
         drop(tx);
 
         let id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
+        let target = kill_target(&child);
         let child = Arc::new(Running {
-            pid: child.id(),
-            exited: AtomicBool::new(false),
+            state: Mutex::new(ReapState {
+                exited: false,
+                target: Some(target),
+            }),
             child: Mutex::new(child),
         });
         self.running
@@ -132,14 +171,22 @@ impl Processes {
         let this = Arc::clone(self);
         thread::spawn(move || {
             // A blocking wait: the exit is noticed at once and a running
-            // program costs no wakeups at all. The lock stays held while
-            // waiting; `kill` does not need it (see `Running`).
+            // program costs no wakeups at all. The child lock stays held
+            // while waiting; `kill` only needs the state lock (see `Running`).
             let status = match child.child.lock() {
                 Ok(mut c) => {
                     let status = c.wait().ok();
-                    // The exit is marked before the lock is freed, so a kill
-                    // that cannot take the lock knows the id is still ours.
-                    child.exited.store(true, Ordering::SeqCst);
+                    // `wait()` has reaped the exit, so the process id may be
+                    // handed out again from now on. The state lock makes the
+                    // marking atomic against `kill`: a kill either saw the
+                    // target before this section (and signals the id that
+                    // was still ours then), or it sees `exited` afterwards
+                    // and signals nothing. The section is only two stores,
+                    // so a kill never waits noticeably for it.
+                    if let Ok(mut state) = child.state.lock() {
+                        state.exited = true;
+                        state.target = None;
+                    }
                     status
                 }
                 Err(_) => None,
@@ -160,22 +207,15 @@ impl Processes {
     pub fn kill(&self, id: u32) {
         let child = self.running.lock().ok().and_then(|r| r.get(&id).cloned());
         let Some(child) = child else { return };
-        if child.exited.load(Ordering::SeqCst) {
-            return;
-        }
-        match child.child.try_lock() {
-            // The reaper is not waiting: kill through the handle as before.
-            Ok(mut c) => {
-                let _ = c.kill();
-            }
-            // The reaper holds the lock in `wait()`: the program has not
-            // been reaped yet, so its id is still its own. Signal it by the
-            // id; the wait returns with the exit right away.
-            Err(_) => {
-                if !child.exited.load(Ordering::SeqCst) {
-                    signal_kill(child.pid);
-                }
-            }
+        // One short critical section for the check and the target: the
+        // reaper marks the reap under the same lock, so a target that is
+        // still here belongs to a child that has not been reaped yet.
+        let target = match child.state.lock() {
+            Ok(state) if !state.exited => state.target.clone(),
+            _ => None,
+        };
+        if let Some(target) = target {
+            signal_kill(&target);
         }
     }
 
@@ -191,31 +231,149 @@ impl Processes {
     }
 }
 
-/// Ends a program by its process id while the reaper holds the handle in
-/// `wait()`. On unix SIGKILL, like `Child::kill`; on Windows
-/// `TerminateProcess`, the same call `Child::kill` makes.
+/// Gathers what a kill needs while the child is freshly spawned and cannot
+/// have been reaped yet, so the process id still names our program.
+fn kill_target(child: &Child) -> KillTarget {
+    KillTarget {
+        pid: child.id(),
+        #[cfg(target_os = "linux")]
+        pidfd: PidFd::open(child.id()),
+        #[cfg(windows)]
+        created: creation_time(child.id()),
+    }
+}
+
+/// Ends a program while the reaper holds the handle in `wait()`. The target
+/// was taken before the exit was marked as reaped (see [`Running::state`]).
+/// On unix SIGKILL, like `Child::kill`; on Windows `TerminateProcess`, the
+/// same call `Child::kill` makes.
 #[cfg(unix)]
-fn signal_kill(pid: u32) {
+fn signal_kill(target: &KillTarget) {
+    // The pidfd names exactly our process: even a signal that arrives after
+    // the reap can never reach a program that got the id in the meantime.
+    // A pidfd signal that fails (the process is gone, or the kernel has no
+    // pidfds) falls through to the id, which is safe while the child is
+    // unreaped.
+    #[cfg(target_os = "linux")]
+    if let Some(pidfd) = &target.pidfd
+        && pidfd.send_sigkill()
+    {
+        return;
+    }
     // SAFETY: `kill` only sends a signal to the given process id and touches
-    // no memory. The id was checked against `exited` right before, so it
-    // still belongs to our program.
+    // no memory. The target was taken under the state lock before the reaper
+    // marked the exit, so the id named our program then. Without a pidfd a
+    // kill that races the natural end can land just after the reap; that
+    // residual window is what the pidfd closes on Linux.
     unsafe {
-        libc::kill(pid as libc::pid_t, libc::SIGKILL);
+        libc::kill(target.pid as libc::pid_t, libc::SIGKILL);
     }
 }
 
 #[cfg(windows)]
-fn signal_kill(pid: u32) {
+fn signal_kill(target: &KillTarget) {
     use windows_sys::Win32::Foundation::CloseHandle;
-    use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_TERMINATE, TerminateProcess};
-    // SAFETY: the handle comes from `OpenProcess` and is closed again below;
-    // the id was checked against `exited` right before.
+    use windows_sys::Win32::System::Threading::{
+        GetProcessTimes, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_TERMINATE,
+        TerminateProcess,
+    };
+    // SAFETY: every handle comes from `OpenProcess` and is closed again. The
+    // id alone is not enough on Windows: it can be handed out again while
+    // our (zombie) process handle still exists. The creation time therefore
+    // confirms that the id still names our program before it is ended.
     unsafe {
-        let handle = OpenProcess(PROCESS_TERMINATE, 0, pid);
-        if !handle.is_null() {
-            TerminateProcess(handle, 1);
-            CloseHandle(handle);
+        let handle = OpenProcess(
+            PROCESS_TERMINATE | PROCESS_QUERY_LIMITED_INFORMATION,
+            0,
+            target.pid,
+        );
+        if handle.is_null() {
+            return;
         }
+        if let Some(created) = target.created {
+            let mut creation = std::mem::zeroed();
+            let mut exit = std::mem::zeroed();
+            let mut kernel = std::mem::zeroed();
+            let mut user = std::mem::zeroed();
+            let ok = GetProcessTimes(handle, &mut creation, &mut exit, &mut kernel, &mut user) != 0;
+            let ticks = ((creation.dwHighDateTime as u64) << 32) | creation.dwLowDateTime as u64;
+            if !ok || ticks != created {
+                // The id belongs to another program now; ours has ended.
+                CloseHandle(handle);
+                return;
+            }
+        }
+        TerminateProcess(handle, 1);
+        CloseHandle(handle);
+    }
+}
+
+/// The creation time of a freshly spawned process, in the 100ns units of
+/// `FILETIME`. `None` when it cannot be read; the kill then relies on the
+/// state lock alone, as it does on unix.
+#[cfg(windows)]
+fn creation_time(pid: u32) -> Option<u64> {
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::System::Threading::{
+        GetProcessTimes, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+    // SAFETY: the handle comes from `OpenProcess` and is closed again; the
+    // out parameters are valid `FILETIME` storage.
+    unsafe {
+        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if handle.is_null() {
+            return None;
+        }
+        let mut creation = std::mem::zeroed();
+        let mut exit = std::mem::zeroed();
+        let mut kernel = std::mem::zeroed();
+        let mut user = std::mem::zeroed();
+        let ok = GetProcessTimes(handle, &mut creation, &mut exit, &mut kernel, &mut user) != 0;
+        CloseHandle(handle);
+        ok.then(|| ((creation.dwHighDateTime as u64) << 32) | creation.dwLowDateTime as u64)
+    }
+}
+
+/// An owned pidfd (Linux 5.3+): a descriptor that names one specific process
+/// for as long as it is open, independent of its process id. The syscalls are
+/// called through libc directly so no new dependency is needed; on kernels
+/// without them `open` returns `None` and the kill falls back to the id,
+/// which is safe while the child is unreaped (see [`signal_kill`]).
+#[cfg(target_os = "linux")]
+struct PidFd(std::os::fd::OwnedFd);
+
+#[cfg(target_os = "linux")]
+impl PidFd {
+    fn open(pid: u32) -> Option<Arc<Self>> {
+        use std::os::fd::FromRawFd;
+        // SAFETY: `pidfd_open` only takes the id and flags; on success the
+        // returned descriptor is fresh and owned, on failure nothing is
+        // created. `OwnedFd` closes it again on drop.
+        let fd = unsafe { libc::syscall(libc::SYS_pidfd_open, pid as libc::pid_t, 0u32) };
+        if fd < 0 {
+            return None;
+        }
+        Some(Arc::new(Self(unsafe {
+            std::os::fd::OwnedFd::from_raw_fd(fd as i32)
+        })))
+    }
+
+    /// Sends SIGKILL through the descriptor. True when the signal was sent;
+    /// a process that already exited reports ESRCH, which is fine.
+    fn send_sigkill(&self) -> bool {
+        use std::os::fd::AsRawFd;
+        // SAFETY: the descriptor is owned and open; the remaining arguments
+        // are null and zero, so no siginfo is read by the kernel.
+        let sent = unsafe {
+            libc::syscall(
+                libc::SYS_pidfd_send_signal,
+                self.0.as_raw_fd(),
+                libc::SIGKILL,
+                std::ptr::null_mut::<libc::siginfo_t>(),
+                0u32,
+            )
+        };
+        sent == 0
     }
 }
 
@@ -517,5 +675,102 @@ mod tests {
             events.last().map(String::as_str),
             Some(r#"{"event":"exit","data":null}"#)
         );
+    }
+
+    /// Once the exit has been reaped, the process id may belong to another
+    /// program already. A kill arriving then must not signal anything: the
+    /// state is marked under the lock the kill reads, not after it.
+    #[test]
+    fn a_kill_after_the_reap_signals_nothing() {
+        let spec = SpawnSpec {
+            command: "sh".into(),
+            args: vec!["-c".into(), "sleep 0.1".into()],
+            stdin: None,
+            env: HashMap::new(),
+        };
+        let (processes, id, rx) = run(spec);
+        let entry = processes
+            .running
+            .lock()
+            .expect("running")
+            .get(&id)
+            .cloned()
+            .expect("entry");
+        // The program ends on its own; wait until the reaper has marked the
+        // reap. The wait releases the lock so the reaper can take it.
+        let mut state = entry.state.lock().expect("state");
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !state.exited {
+            assert!(Instant::now() < deadline, "the exit was never marked");
+            let (guard, _) = std::sync::Condvar::new()
+                .wait_timeout(state, Duration::from_millis(5))
+                .expect("wait");
+            state = guard;
+        }
+        assert!(
+            state.target.is_none(),
+            "a reaped child keeps no kill target"
+        );
+        drop(state);
+        // The late kill must signal nothing: the marked state stops it (or
+        // the entry is already gone). The program's own exit still arrives.
+        processes.kill(id);
+        assert_eq!(
+            collect(&rx).last().map(String::as_str),
+            Some(r#"{"event":"exit","data":0}"#)
+        );
+    }
+
+    /// Many kills racing against the natural end of short programs: every
+    /// exit must still be reported, and the kills must end running programs
+    /// without blocking on the reaper's wait.
+    #[test]
+    fn kills_racing_the_exit_stay_prompt_and_report_every_exit() {
+        for i in 0u64..16 {
+            let spec = SpawnSpec {
+                command: "sh".into(),
+                args: vec!["-c".into(), format!("sleep 0.0{}", i % 4)],
+                stdin: None,
+                env: HashMap::new(),
+            };
+            let (processes, id, rx) = run(spec);
+            thread::sleep(Duration::from_millis((i % 8) * 5));
+            let start = Instant::now();
+            processes.kill(id);
+            assert!(
+                start.elapsed() < Duration::from_secs(5),
+                "kill {i} blocked on the reaper"
+            );
+            let events = collect(&rx);
+            let last = events.last().map(String::as_str).unwrap_or_default();
+            assert!(
+                last == r#"{"event":"exit","data":0}"# || last == r#"{"event":"exit","data":null}"#,
+                "run {i} did not report an exit: {last}"
+            );
+        }
+    }
+
+    /// On Linux the kill goes through a pidfd when the kernel has one: it
+    /// names exactly our process, so even a late signal cannot reach a
+    /// recycled id.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_pidfd_names_only_its_own_process() {
+        let mut child = Command::new("sleep")
+            .arg("30")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn");
+        let pidfd = PidFd::open(child.id()).expect("pidfd on a modern kernel");
+        assert!(pidfd.send_sigkill());
+        let status = child.wait().expect("wait");
+        assert!(
+            !status.success(),
+            "the signal should have ended the program"
+        );
+        // After the reap the descriptor still names the old process only;
+        // sending again fails with ESRCH instead of reaching a new one.
+        assert!(!pidfd.send_sigkill());
     }
 }

@@ -58,7 +58,9 @@ pub struct RepoInfo {
     pub branch: String,
     /// Branch the current one is pushed to, e.g. `origin/main`.
     pub upstream: Option<String>,
-    /// Name of the remote, usually `origin`.
+    /// Name of the remote push and pull work with: the remote of the
+    /// upstream branch, or the first remote of the repository when there is
+    /// no upstream (see [`pick_remote`]).
     pub remote: Option<String>,
     /// Commits that are not pushed yet.
     pub ahead: u32,
@@ -246,10 +248,12 @@ pub fn status(vault: &Vault) -> Result<GitStatus> {
         }
     }
 
-    // The status does not name the remote, but the upstream does: its first
-    // part is the remote it is fetched from (`origin/main` -> `origin`).
-    // That is the remote push and pull use, and it costs no extra call of git.
-    info.remote = remote_of(info.upstream.as_deref());
+    // The status does not name the remote, but push and pull have a clear
+    // choice: the remote of the upstream branch when there is one, the first
+    // remote of the repository otherwise. The status reports the same choice
+    // (see `pick_remote`); only without an upstream does it cost one extra
+    // call of git (`git remote`).
+    info.remote = pick_remote(&repo.root, info.upstream.as_deref());
 
     Ok(GitStatus {
         repo: Some(info),
@@ -264,6 +268,23 @@ pub fn status(vault: &Vault) -> Result<GitStatus> {
 fn remote_of(upstream: Option<&str>) -> Option<String> {
     let (remote, _) = upstream?.split_once('/')?;
     Some(remote.to_string())
+}
+
+/// The remote push and pull work with: the remote of the upstream branch
+/// when there is one, otherwise the first remote of the repository. The
+/// status and the push/pull defaults both go through this helper, so the
+/// panel never names a different remote than the one a push would use.
+fn pick_remote(root: &Path, upstream: Option<&str>) -> Option<String> {
+    remote_of(upstream).or_else(|| first_remote(root))
+}
+
+/// The first entry of `git remote`, `None` when the repository has none.
+fn first_remote(root: &Path) -> Option<String> {
+    git_optional(root, &["remote"])?
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .map(str::to_string)
 }
 
 /// Reads one `# ` header of `status --porcelain=v2 --branch`: the branch (or
@@ -543,7 +564,11 @@ pub fn push(vault: &Vault) -> Result<String> {
     let repo = Repo::of(vault)?;
     let info = repo_info(&repo)?;
     let args: Vec<&str> = match (&info.upstream, &info.remote) {
+        // With an upstream, git pushes to its remote by default, which is
+        // exactly the remote `pick_remote` chose for the status.
         (Some(_), _) => vec!["push"],
+        // Without one, the first remote gets the branch and becomes its
+        // upstream, the same remote the status names.
         (None, Some(remote)) => vec!["push", "-u", remote, &info.branch],
         (None, None) => {
             return Err(Error::Git("There is no remote to push to.".into()));
@@ -668,11 +693,9 @@ fn repo_info(repo: &Repo) -> Result<RepoInfo> {
     )
     .map(|s| s.trim().to_string())
     .filter(|s| !s.is_empty());
-    let remote = git(&repo.root, &["remote"])?
-        .lines()
-        .next()
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty());
+    // The same choice the status reports: the upstream's remote first, the
+    // first remote of the repository as a fallback.
+    let remote = pick_remote(&repo.root, upstream.as_deref());
     let (ahead, behind) = match upstream {
         Some(_) => {
             // "<commits only on the remote>\t<commits only here>"
@@ -910,6 +933,19 @@ mod tests {
         git(dir.path(), &["config", "user.email", "dvoix@example.com"]).expect("config");
         fs::write(dir.path().join("note.md"), "# Note\n").expect("write");
         (dir, vault)
+    }
+
+    /// Registers a bare repository as a remote, so no network is needed. The
+    /// directory must outlive its use; dropping it removes the remote's repo.
+    fn add_bare_remote(root: &Path, name: &str) -> tempfile::TempDir {
+        let remote = tempdir().expect("temp dir");
+        git(remote.path(), &["init", "--bare", "--initial-branch=main"]).expect("init");
+        git(
+            root,
+            &["remote", "add", name, &remote.path().to_string_lossy()],
+        )
+        .expect("remote");
+        remote
     }
 
     #[test]
@@ -1286,8 +1322,8 @@ mod tests {
         assert_eq!(state.staged[0].status, "M");
     }
 
-    /// The remote is taken from the upstream, so the status needs no extra
-    /// call of git for it.
+    /// The remote is the first part of the upstream name; only the fallback
+    /// of `pick_remote` needs a call of git.
     #[test]
     fn the_remote_is_the_first_part_of_the_upstream() {
         assert_eq!(
@@ -1296,5 +1332,107 @@ mod tests {
         );
         assert_eq!(remote_of(Some("main")).as_deref(), None);
         assert_eq!(remote_of(None).as_deref(), None);
+    }
+
+    /// `pick_remote` prefers the upstream's remote and only asks git for the
+    /// first remote when there is no upstream to name one.
+    #[test]
+    fn pick_remote_prefers_the_upstream_and_falls_back_to_the_first() {
+        if !git_available() {
+            return;
+        }
+        let (dir, _vault) = vault_with_repo();
+        // With an upstream the answer needs no call of git: even a path that
+        // is no repository gives the upstream's remote.
+        assert_eq!(
+            pick_remote(Path::new("/no/such/repo"), Some("upstream/main")).as_deref(),
+            Some("upstream")
+        );
+        // Without remotes there is nothing to name.
+        assert_eq!(pick_remote(dir.path(), None), None);
+        let _backup = add_bare_remote(dir.path(), "backup");
+        let _origin = add_bare_remote(dir.path(), "origin");
+        assert_eq!(pick_remote(dir.path(), None).as_deref(), Some("backup"));
+        assert_eq!(
+            pick_remote(dir.path(), Some("origin/main")).as_deref(),
+            Some("origin")
+        );
+        // An upstream without a remote part (a local branch) falls back too.
+        assert_eq!(
+            pick_remote(dir.path(), Some("main")).as_deref(),
+            Some("backup")
+        );
+    }
+
+    /// Without any remote the status names none, and so do the push/pull
+    /// defaults.
+    #[test]
+    fn a_repository_without_remotes_names_none() {
+        if !git_available() {
+            return;
+        }
+        let (_dir, vault) = vault_with_repo();
+        commit(&vault, "First", true).expect("commit");
+        let state = status(&vault).expect("status");
+        assert!(state.repo.expect("repo").remote.is_none());
+        let info = repo_info(&Repo::of(&vault).expect("repo")).expect("info");
+        assert!(info.remote.is_none());
+    }
+
+    /// With two remotes and the upstream on the second one, the status, the
+    /// push/pull defaults and a real push all agree on that remote, not on
+    /// the first entry of `git remote`.
+    #[test]
+    fn status_and_push_agree_on_the_remote_of_the_upstream() {
+        if !git_available() {
+            return;
+        }
+        let (dir, vault) = vault_with_repo();
+        commit(&vault, "First", true).expect("commit");
+        // `backup` sorts before `origin`, so the first entry of `git remote`
+        // is not the remote of the upstream.
+        let backup = add_bare_remote(dir.path(), "backup");
+        let origin = add_bare_remote(dir.path(), "origin");
+        assert_eq!(
+            git(dir.path(), &["remote"])
+                .expect("remotes")
+                .lines()
+                .next(),
+            Some("backup")
+        );
+
+        // Without an upstream, the status names the first remote, the same
+        // one a first push would use.
+        let state = status(&vault).expect("status");
+        let repo = state.repo.expect("repo");
+        assert!(repo.upstream.is_none());
+        assert_eq!(repo.remote.as_deref(), Some("backup"));
+        let info = repo_info(&Repo::of(&vault).expect("repo")).expect("info");
+        assert_eq!(info.remote.as_deref(), Some("backup"));
+
+        // The upstream points at the second remote: both name it now.
+        git(dir.path(), &["push", "-u", "origin", "main"]).expect("push");
+        let state = status(&vault).expect("status");
+        let repo = state.repo.expect("repo");
+        assert_eq!(repo.upstream.as_deref(), Some("origin/main"));
+        assert_eq!(repo.remote.as_deref(), Some("origin"));
+        let info = repo_info(&Repo::of(&vault).expect("repo")).expect("info");
+        assert_eq!(info.remote.as_deref(), Some("origin"));
+
+        // A push through the app follows the upstream: the commit lands on
+        // `origin`, and `backup` stays empty. A pull uses the same remote.
+        fs::write(dir.path().join("second.md"), "# Second\n").expect("write");
+        commit(&vault, "Second", true).expect("commit");
+        push(&vault).expect("push");
+        pull(&vault).expect("pull");
+        let head = git(dir.path(), &["rev-parse", "HEAD"]).expect("rev-parse");
+        let on_origin = git(origin.path(), &["rev-parse", "main"]).expect("origin main");
+        assert_eq!(on_origin.trim(), head.trim());
+        let on_backup =
+            git_raw(backup.path(), &["rev-parse", "--verify", "main"]).expect("git runs");
+        assert!(
+            !on_backup.status.success(),
+            "the first remote must stay untouched"
+        );
     }
 }
