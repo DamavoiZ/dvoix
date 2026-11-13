@@ -7,7 +7,7 @@ A desktop app for notes, project management, tracking, and whatever comes later.
 ## What already works
 
 - Pick a vault folder; the one you opened last is loaded again at startup
-- Sidebar like Obsidian: a narrow icon bar on the far left (Files, Search, Tags, Tasks, Projects), next to it the panel, resizable by dragging and collapsible by clicking the active icon
+- Sidebar like Obsidian: a narrow icon bar on the far left (Files, Search, Tags, Tasks), next to it the panel, resizable by dragging and collapsible by clicking the active icon
 - Right sidebar: a narrow icon bar on the far right with the outline of the open note and other panels next to it, resizable by dragging its edge. The button in the title row, next to the window buttons, shows and hides it (Ctrl/Cmd + ] does the same). A note is docked into it by dragging its tab from the tab bar into the column, and the panels are rearranged by dragging their header
 - Custom title bar on Windows and Linux: no bright system frame; the tab bar and the top row of the sidebar move the window (double-click maximizes); minimize, maximize and close sit on the right next to the tabs. Narrow, dark scrollbars everywhere in the app
 - The file explorer sorts naturally: `2 - Notes` comes before `10 - Archive`
@@ -26,13 +26,12 @@ A desktop app for notes, project management, tracking, and whatever comes later.
 - Changes from outside (VS Code, sync tools, git) show up in the app immediately
 - Full-text search, tag overview and backlinks ("Linked from")
 - Tasks: ordinary Markdown checkboxes in any note, optionally with a due date and priority. In the editor they are always clickable; the task overview in the sidebar collects all tasks of the vault (grouped by due date or by note)
-- Projects: notes with `type: project` in the frontmatter, with status, due date and progress from their checkboxes, in a dedicated project list
 - Graph view (Ctrl/Cmd + G or the network icon in the icon bar) in its own tab: notes as dots, connected by links, by their folders (folders as their own nodes) and/or by shared tags (tags as nodes or as direct lines). Adjustable: filters (`projects #idea -archive`), single notes, attachments and missing notes on/off, colors by folder or tag, size by number of connections, arrows, line width, the zoom level from which titles appear, and the layout forces. Click opens the note in a new tab; hovering highlights the neighbors
-- Basic functions are always on: file explorer, search, tags, backlinks, link suggestions, clickable checkboxes, quick switcher, tabs and views. Optional functions are core plugins that can each be turned off in the settings (gear icon at the bottom of the icon bar, or Ctrl/Cmd + ,): tasks, projects, canvas, graph, Git, the right sidebar and hidden files (folders such as `.obsidian`, off at first)
+- Basic functions are always on: file explorer, search, tags, backlinks, link suggestions, clickable checkboxes, quick switcher, tabs and views. Optional functions are core plugins that can each be turned off in the settings (gear icon at the bottom of the icon bar, or Ctrl/Cmd + ,): tasks, canvas, graph, the right sidebar and hidden files (folders such as `.obsidian`, off at first)
 - Plugin store in the settings: search, install, update and remove additional plugins. Official plugins work immediately; community plugins only after a separate switch with a warning (see "Plugin store" below)
 - Settings: editor (line length, line numbers, spellcheck), appearance (font sizes), a list of all keyboard shortcuts, and separate options per feature or plugin
 - All settings of a vault live inside the vault under `.dvoix/` (see below), so they move along when you copy or sync the folder
-- Git: the vault is versioned with the system's `git` program. A panel in the sidebar shows what changed (staged, changed, untracked); you can stage single files, discard changes, commit (Ctrl/Cmd + Enter), switch and create branches, and push and pull. A separate tab shows the history with the files per commit and the diff
+- Projects and Git are official plugins in the plugin store: [dvoix-projects](https://github.com/dvoi-dev/dvoix-projects) and [dvoix-git](https://github.com/dvoi-dev/dvoix-git)
 - First custom file type: `.canvas` in the open [JSON Canvas format](https://jsoncanvas.org) (move cards, double-click creates a card)
 
 ## Tech stack
@@ -40,7 +39,7 @@ A desktop app for notes, project management, tracking, and whatever comes later.
 | Layer | Technology |
 | --- | --- |
 | App shell | [Tauri 2](https://v2.tauri.app), `ureq` (downloads for the plugin store) |
-| Core (Rust) | `notify` (file watcher), `pulldown-cmark` + `serde_yaml_ng` (Markdown & frontmatter), `rusqlite` with FTS5 (index & search), `git` (the system program, for the Git plugin) |
+| Core (Rust) | `notify` (file watcher), `pulldown-cmark` + `serde_yaml_ng` (Markdown & frontmatter), `rusqlite` with FTS5 (index & search) |
 | Frontend | Svelte 5, TypeScript, Vite, Tailwind CSS 4, [force-graph](https://github.com/vasturiano/force-graph) (graph view on canvas) |
 | Editor | CodeMirror 6 |
 
@@ -51,8 +50,6 @@ crates/dvoix-core/      Rust core without Tauri, testable on its own
   src/vault.rs          reading/writing in the vault, paths always relative and checked
   src/markdown.rs       frontmatter, title, tags, links, headings, search text, HTML for the reading view
   src/tasks.rs          read and toggle checkbox tasks
-  src/project.rs        frontmatter schema for projects
-  src/git.rs            Git commands for the vault (via the system's git program)
   src/store.rs          plugin store: plugin list, manifest.json, installing into .dvoix/plugins/
   src/index.rs          SQLite index in <vault>/.dvoix/index.sqlite (cache only)
   src/watcher.rs        reports changes on disk
@@ -169,7 +166,7 @@ This makes the plugin appear in the settings for turning it on and off, "Create 
 
 For projects and tracking, frontmatter is the building block: `status: active`, `due: 2026-12-01` etc. end up in the index and can be queried with `notes_where("status", "active")`.
 
-## Tasks and projects
+## Tasks
 
 A task is a checkbox in any note. The due date and priority sit directly in the line; the emoji syntax is the same as in the Obsidian Tasks plugin:
 
@@ -184,42 +181,9 @@ A task is a checkbox in any note. The due date and priority sit directly in the 
 | Due date | `📅 2026-12-01` or `due:2026-12-01` |
 | Priority | `!high` `!medium` `!low` (German `!hoch` `!mittel` `!niedrig` also work) or ⏫ 🔼 🔽 |
 
-A project is a note with this frontmatter; its tasks are the checkboxes in it:
+Ticking a task in the task overview changes exactly that one line in the file.
 
-```yaml
----
-type: project          # or: projekt (German alias)
-status: active         # idea | active | waiting | done | cancelled
-due: 2026-12-01        # optional
-start: 2026-11-01      # optional
-priority: high         # optional: high | medium | low
-area: Work             # optional, free-form
----
-```
-
-German values (`aktiv`, `wartend`, `erledigt`, `hoch`, ...) are still accepted, so existing vaults keep working. Ticking a task in the task overview changes exactly that one line in the file.
-
-## Git
-
-The Git plugin versions the vault through the `git` program, which must be installed on the computer (e.g. Git for Windows, macOS or Linux). The core has no extra Rust component for this: `crates/dvoix-core/src/git.rs` calls `git` and translates its output. It is a core plugin like the others and can be turned off in the settings.
-
-The panel in the sidebar shows what changed:
-
-| Group | Meaning |
-| --- | --- |
-| Staged | changes that go into the next commit |
-| Changed | changes to the file that are not staged yet |
-| Untracked | files that git does not know yet |
-
-Files can be staged one by one, unstaged, discarded (untracked files are deleted in that case) and viewed as a diff. The commit takes the staged changes; if nothing is staged, all changes go in (can be turned off in the settings). Branches can be switched and created in the panel, plus push and pull.
-
-The history (Ctrl/Cmd + Shift + H) shows the latest commits; expanded, each commit lists its changed files, and a click on one shows the diff.
-
-The diff shows the old version on the left and the new one on the right; both scroll together. Changed lines are highlighted in color (red removed, green new), and the changed characters within them are stronger. Long unchanged sections are collapsed and can be opened with a click. At the top right you can switch to "Inline": then everything is in one column, removed lines above the new ones. The plugin remembers this choice in `.dvoix/plugins/git/data.json`.
-
-Files that dvoix itself keeps rewriting stay out of Git: the search index (`.dvoix/index.sqlite`), the open tabs (`.dvoix/workspace.json`) and the temporary files while saving (`*.dvoix-tmp`). They do not appear in the list of changes and are not included by "stage all". The other settings in `.dvoix/` are versioned as usual. Notes with Windows line endings (CRLF) keep them when saved, so that not every line changes.
-
-If the vault sits in a folder of a larger repository, files outside the vault stay invisible: only what is in the vault is staged and committed. It is also important that `user.name` and `user.email` are set; otherwise git reports at commit time that it does not know the author.
+Projects (notes with `type: project` in the frontmatter) and Git are store plugins since they left the app; their repositories describe them: [dvoix-projects](https://github.com/dvoi-dev/dvoix-projects), [dvoix-git](https://github.com/dvoi-dev/dvoix-git). A vault that had one of them on as a core plugin shows a hint once to install it from the store.
 
 ## Development
 

@@ -3,7 +3,7 @@
 dvoix has two kinds of plugins:
 
 - **Core features** are built into the app and always on (file explorer, search, tags, backlinks, tabs, …). They live in `src/lib/features/`.
-- **Core plugins** are built into the app (tasks, projects, graph, Git, …) and can be turned off in the settings under "Core plugins". They live in `src/lib/plugins/core/`.
+- **Core plugins** are built into the app (tasks, canvas, graph, …) and can be turned off in the settings under "Core plugins". They live in `src/lib/plugins/core/`.
 - **Store plugins** are installed when needed via **Settings → Plugin store**. They then live in the vault under `.dvoix/plugins/<id>/`. There are **official** plugins (maintained by dvoix, always installable) and **community plugins** (by others, only after the switch "Allow community plugins").
 
 This page describes store plugins. A complete example is in [`hello/`](hello/).
@@ -34,7 +34,7 @@ The **tag of the release is the version** from `manifest.json`, without a `v` in
 }
 ```
 
-- `id`: lowercase, `a-z0-9-`, never change it. It is the folder name in `.dvoix/plugins/<id>/` and must match the `id` in the plugin directory. IDs of core features and core plugins (`tabs`, `tasks`, `git`, …) are reserved.
+- `id`: lowercase, `a-z0-9-`, never change it. It is the folder name in `.dvoix/plugins/<id>/` and must match the `id` in the plugin directory. IDs of core features and core plugins (`tabs`, `tasks`, `graph`, …) are reserved.
 - `version`: `Major.Minor.Patch`, numbers only.
 - `minAppVersion`: the oldest dvoix version the plugin runs on (optional).
 - `permissions`: what the plugin needs from the API:
@@ -78,10 +78,11 @@ Views are `mount(el, props)` functions: they draw into an empty element and opti
 | `addOverlay({ id, mount })` | element on the top layer (dialogs) |
 | `registerView({ id, label, icon, mount })` | own view in a tab, open with `dvoix.openView(id)` |
 | `registerFileType({ id, label, extensions, icon, template, mount })` | new file type; `props` has `path`, `content`, `onchange(text)`, `onopen(path)`, `update(props)` is called when the file changes on disk |
-| `registerEditorExtension(ext)` | CodeMirror extension, built with `dvoix.lib.codemirror.state` / `.view` (same instance as the editor) |
+| `registerEditorExtension(ext)` | CodeMirror extension, built with `dvoix.lib.codemirror.state` / `.view` (same instance as the editor); `dvoix.lib.codemirror.merge` is `@codemirror/merge` for diff views |
 | `addSettingTab({ mount })` | own page in the settings |
 | `loadData(defaults)` / `saveData(data)` | settings in `.dvoix/plugins/<id>/data.json` |
 | `vault.list()`, `vault.read(path)`, `vault.write(path, text)`, `vault.openFile(path)` | files, paths relative to the vault |
+| `vault.onChange(fn)` | needs `vault:read`; `fn(paths)` gets the vault-relative paths of every batch of changes on disk (own saves, sync, git, other editors); returns the unsubscribe |
 | `register(fn)` | `fn` runs when the plugin is switched off |
 | `workspace.activeFile()` | vault-relative path of the file in the active tab, `null` for views and empty tabs |
 | `process.spawn({ command, args, stdin, env, onStdout, onStderr, onExit })` | needs `process`; see below |

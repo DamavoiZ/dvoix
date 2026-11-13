@@ -14,7 +14,6 @@ use serde::Serialize;
 
 use crate::Result;
 use crate::markdown::{self, ParsedNote};
-use crate::project::{self, ProjectMeta};
 use crate::tasks::{self, Task};
 use crate::vault::{Vault, VaultEntry};
 use crate::watcher::{ChangeKind, VaultChange};
@@ -114,20 +113,6 @@ pub struct TaskItem {
     pub note_title: String,
     #[serde(flatten)]
     pub task: Task,
-}
-
-/// A project note with its frontmatter fields and how many of its tasks are done.
-#[derive(Debug, Clone, Serialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct ProjectSummary {
-    pub path: String,
-    pub title: String,
-    #[serde(flatten)]
-    pub meta: ProjectMeta,
-    pub open_tasks: u32,
-    pub done_tasks: u32,
-    /// Earliest due date among the open tasks, if any.
-    pub next_due: Option<String>,
 }
 
 /// A note as a node of the graph view.
@@ -775,45 +760,6 @@ impl Index {
         Ok(items)
     }
 
-    /// All notes with `type: project` in their frontmatter, with task progress.
-    pub fn projects(&self) -> Result<Vec<ProjectSummary>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT n.path, n.title, n.frontmatter,
-                    COALESCE(SUM(t.done = 0), 0), COALESCE(SUM(t.done = 1), 0),
-                    MIN(CASE WHEN t.done = 0 THEN t.due END)
-             FROM notes n LEFT JOIN tasks t ON t.path = n.path
-             WHERE lower(json_extract(n.frontmatter, '$.type')) IN ('projekt', 'project')
-             GROUP BY n.path ORDER BY n.title",
-        )?;
-        let rows = stmt.query_map([], |r| {
-            let fm: String = r.get(2)?;
-            Ok((
-                r.get::<_, String>(0)?,
-                r.get::<_, String>(1)?,
-                fm,
-                r.get(3)?,
-                r.get(4)?,
-                r.get(5)?,
-            ))
-        })?;
-        let mut projects = Vec::new();
-        for row in rows {
-            let (path, title, fm, open_tasks, done_tasks, next_due) = row?;
-            let fm: serde_json::Value = serde_json::from_str(&fm).unwrap_or_default();
-            if let Some(meta) = project::from_frontmatter(&fm) {
-                projects.push(ProjectSummary {
-                    path,
-                    title,
-                    meta,
-                    open_tasks,
-                    done_tasks,
-                    next_due,
-                });
-            }
-        }
-        Ok(projects)
-    }
-
     /// All notes with their tags, and all links between files, for the graph view.
     pub fn graph(&self) -> Result<GraphData> {
         let mut data = GraphData::default();
@@ -1249,7 +1195,7 @@ mod tests {
     }
 
     #[test]
-    fn tasks_and_projects() {
+    fn tasks() {
         let (_dir, vault) = sample_vault();
         vault
             .write(
@@ -1268,16 +1214,10 @@ mod tests {
         assert_eq!(tasks[1].task.line, 6);
         assert_eq!(tasks[3].task.priority, Some(tasks::Priority::High));
 
-        let projects = index.projects().unwrap();
-        assert_eq!(projects.len(), 1);
-        let p = &projects[0];
-        assert_eq!((p.open_tasks, p.done_tasks), (2, 1));
-        assert_eq!(p.next_due.as_deref(), Some("2026-11-15"));
-        assert_eq!(p.meta.due.as_deref(), Some("2026-12-01"));
 
         tasks::set_done_in_vault(&vault, "projects/umzug.md", 6, "Boxes", true).unwrap();
         index.update(&vault, "projects/umzug.md").unwrap();
-        assert_eq!(index.projects().unwrap()[0].done_tasks, 2);
+        assert!(index.tasks().unwrap().iter().any(|t| t.task.text == "Boxes" && t.task.done));
         assert!(
             tasks::set_done_in_vault(&vault, "projects/umzug.md", 6, "Something else", false)
                 .is_err()
@@ -1285,7 +1225,6 @@ mod tests {
 
         index.remove("projects").unwrap();
         assert_eq!(index.tasks().unwrap().len(), 1);
-        assert!(index.projects().unwrap().is_empty());
     }
 
     #[test]

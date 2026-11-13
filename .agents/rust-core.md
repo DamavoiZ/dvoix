@@ -8,7 +8,6 @@
 ## Rules in the core
 
 - Every file access goes through `Vault` (`vault.rs`). Paths come in vault-relative with `/` and are checked with `Vault::resolve`. Never build paths yourself.
-- Git lives in `git.rs` and calls the system's `git` program (no extra Rust component). The working directory is always `Vault::root()`, never a path from the frontend.
 - Write only through `Vault::write` (atomic), or `create`, `rename`, `trash`. Deleting means moving to `.trash/`, never deleting for good.
 - `.dvoix/` files through `read_config`/`write_config`/`config_path`, not through `write`.
 - Folders and files starting with `.` are never indexed and never appear in `Vault::list` (`Vault::is_ignored`, `index::is_indexable`). This stays so. Only the "Hidden files" plugin may show them, via `Vault::list_hidden`. The watcher reports them with `hidden: true` and drops `.git`/`.dvoix` entirely.

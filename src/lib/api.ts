@@ -56,72 +56,6 @@ export interface TaskItem {
   indent: number;
 }
 
-export type ProjectStatus = "active" | "waiting" | "idea" | "done" | "cancelled";
-
-/** A note with `type: project` in its frontmatter (see `crates/dvoix-core/src/project.rs`). */
-export interface ProjectSummary {
-  path: string;
-  title: string;
-  status: ProjectStatus;
-  due: string | null;
-  start: string | null;
-  priority: Priority | null;
-  area: string | null;
-  openTasks: number;
-  doneTasks: number;
-  nextDue: string | null;
-}
-
-/** One file with changes (see `git::ChangedFile` in `crates/dvoix-core/src/git.rs`). */
-export interface GitChangedFile {
-  /** Path relative to the vault root. */
-  path: string;
-  /** Letter of the change: "M", "A", "D", "R" or "?" for files git does not know yet. */
-  status: string;
-}
-
-/** The repository the vault is in (see `git::RepoInfo`). */
-export interface GitRepoInfo {
-  root: string;
-  branch: string;
-  upstream: string | null;
-  remote: string | null;
-  ahead: number;
-  behind: number;
-  vaultIsRoot: boolean;
-}
-
-/** The state of the repository (see `git::GitStatus`). */
-export interface GitStatus {
-  /** `null` when the vault is not inside a repository. */
-  repo: GitRepoInfo | null;
-  staged: GitChangedFile[];
-  unstaged: GitChangedFile[];
-  untracked: GitChangedFile[];
-}
-
-/** One commit of the history (see `git::Commit`). */
-export interface GitCommit {
-  id: string;
-  shortId: string;
-  author: string;
-  date: string;
-  message: string;
-}
-
-/** One branch (see `git::Branch`). */
-export interface GitBranch {
-  name: string;
-  remote: boolean;
-  current: boolean;
-}
-
-/** The two versions of a file that a diff compares (see `git::FileDiff`). */
-export interface GitFileDiff {
-  old: string;
-  new: string;
-}
-
 export interface VaultChange {
   kind: "created" | "modified" | "removed";
   path: string;
@@ -225,29 +159,12 @@ export const api = {
   backlinks: (path: string) => invoke<NoteSummary[]>("backlinks", { path }),
   graph: () => invoke<GraphData>("graph"),
   tasks: () => invoke<TaskItem[]>("tasks"),
-  projects: () => invoke<ProjectSummary[]>("projects"),
   setTaskDone: (path: string, line: number, text: string, done: boolean) =>
     invoke<VaultEntry>("set_task_done", { path, line, text, done }),
   readConfig: (path: string) => invoke<string | null>("read_config", { path }),
   writeConfig: (path: string, content: string) => invoke<void>("write_config", { path, content }),
   rebuildIndex: () => invoke<number>("rebuild_index"),
 
-  gitStatus: () => invoke<GitStatus>("git_status"),
-  gitStage: (paths: string[]) => invoke<void>("git_stage", { paths }),
-  gitUnstage: (paths: string[]) => invoke<void>("git_unstage", { paths }),
-  gitStageAll: () => invoke<void>("git_stage_all"),
-  gitDiscard: (path: string, untracked: boolean) => invoke<void>("git_discard", { path, untracked }),
-  gitCommit: (message: string, stageAll: boolean) => invoke<string>("git_commit", { message, stageAll }),
-  gitLog: (limit: number) => invoke<GitCommit[]>("git_log", { limit }),
-  gitCommitFiles: (id: string) => invoke<string[]>("git_commit_files", { id }),
-  gitBranches: () => invoke<GitBranch[]>("git_branches"),
-  gitCheckout: (name: string) => invoke<void>("git_checkout", { name }),
-  gitCreateBranch: (name: string) => invoke<void>("git_create_branch", { name }),
-  gitPush: () => invoke<string>("git_push"),
-  gitPull: () => invoke<string>("git_pull"),
-  gitInit: () => invoke<void>("git_init"),
-  gitDiff: (path: string, staged: boolean, commit: string | null) =>
-    invoke<GitFileDiff>("git_diff", { path, staged, commit }),
 
   storeRegistry: () => invoke<RegistryEntry[]>("store_registry"),
   storeLatestManifest: (repo: string) => invoke<StoreManifest>("store_latest_manifest", { repo }),

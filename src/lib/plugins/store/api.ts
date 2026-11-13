@@ -11,6 +11,7 @@
 //   installing and keep honest plugins to what they declared.
 import * as cmState from "@codemirror/state";
 import * as cmView from "@codemirror/view";
+import * as cmMerge from "@codemirror/merge";
 import type { Extension } from "@codemirror/state";
 import { api, type PluginPermission, type StoreManifest, type VaultEntry } from "../../api";
 import { vault } from "../../vault.svelte";
@@ -83,6 +84,12 @@ export interface DvoixPluginApi {
     /** Needs `vault:write`. Creates the file if it does not exist. */
     write(path: string, content: string): Promise<void>;
     openFile(path: string): Promise<void>;
+    /**
+     * Needs `vault:read`. Calls `fn` with the vault-relative paths of every
+     * batch of changes on disk (the app's own saves, sync tools, git, other
+     * editors). Returns the unsubscribe; it also ends with the plugin.
+     */
+    onChange(fn: (paths: string[]) => void): Dispose;
   };
   /** Needs `process`. Runs a program in the vault folder, see `ProcessSpec`. */
   process: { spawn(spec: ProcessSpec): ProcessHandle };
@@ -91,8 +98,8 @@ export interface DvoixPluginApi {
     activeFile(): string | null;
   };
   openView(id: string): Promise<void>;
-  /** The app's own CodeMirror, so editor extensions fit the editor. */
-  lib: { codemirror: { state: typeof cmState; view: typeof cmView } };
+  /** The app's own CodeMirror (incl. `@codemirror/merge` for diffs), so extensions fit the editor. */
+  lib: { codemirror: { state: typeof cmState; view: typeof cmView; merge: typeof cmMerge } };
 }
 
 export const PERMISSION_LABELS: Record<PluginPermission, string> = {
@@ -167,6 +174,12 @@ export function createApi(ctx: PluginContext, manifest: StoreManifest): DvoixPlu
         await (exists ? api.writeFile(path, content) : api.createFile(path, content));
       },
       openFile: (path) => vault.openFile(path),
+      onChange: (fn) => {
+        need("vault:read");
+        const off = vault.onChanges(fn);
+        ctx.register(off);
+        return off;
+      },
     },
     process: {
       spawn: (spec) => {
@@ -209,6 +222,6 @@ export function createApi(ctx: PluginContext, manifest: StoreManifest): DvoixPlu
       activeFile: () => vault.activeTab?.path ?? null,
     },
     openView: (id) => vault.openViewTab(own(id)),
-    lib: { codemirror: { state: cmState, view: cmView } },
+    lib: { codemirror: { state: cmState, view: cmView, merge: cmMerge } },
   };
 }

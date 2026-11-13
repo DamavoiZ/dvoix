@@ -1,5 +1,5 @@
 // Shared helpers for the task and project panels: dates, labels, toggling.
-import { api, type Priority, type ProjectStatus, type TaskItem } from "./api";
+import { api, type Priority, type TaskItem } from "./api";
 import { vault } from "./vault.svelte";
 import { reveal } from "./reveal.svelte";
 
@@ -81,22 +81,6 @@ export const priorityClass: Record<Priority, string> = {
   high: "text-red-400",
   medium: "text-amber-400",
   low: "text-sky-400",
-};
-
-export const statusLabels: Record<ProjectStatus, string> = {
-  active: "Active",
-  waiting: "Waiting",
-  idea: "Idea",
-  done: "Done",
-  cancelled: "Cancelled",
-};
-
-export const statusClass: Record<ProjectStatus, string> = {
-  active: "bg-emerald-500/15 text-emerald-300",
-  waiting: "bg-amber-500/15 text-amber-300",
-  idea: "bg-sky-500/15 text-sky-300",
-  done: "bg-zinc-700/60 text-zinc-400",
-  cancelled: "bg-zinc-800 text-zinc-500 line-through",
 };
 
 /** Sort: overdue/soonest first, undated last, then by priority. */

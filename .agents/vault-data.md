@@ -25,12 +25,12 @@ The files in the vault are the only source of truth. Users also edit them with o
 - Document new files here in the README section "The `.dvoix/` folder" and in the header comment of `src/lib/config.ts`.
 - Do not rename keys. If a format has to change, take over old values when loading (migration), do not discard them.
 
-## Tasks and projects
+## Tasks
 
 - Task = Markdown checkbox `- [ ]` / `- [x]` in any note.
 - Due date: `📅 2026-12-01` or `due:2026-12-01`. Priority: `!high` `!medium` `!low` (German `!hoch` `!mittel` `!niedrig` are still accepted) or ⏫ 🔼 🔽. Keep it compatible with the Obsidian Tasks plugin.
-- Project = note with `type: project` (or the German alias `projekt`) in the frontmatter, fields `status`, `due`, `start`, `priority`, `area`. English and German values are both accepted (`project.rs`). New projects are written with the English values.
-- New fields or spellings: parser in the Rust core (`tasks.rs`, `project.rs`) with tests, TS types in `api.ts`, a table in the README.
+- Projects (`type: project` in the frontmatter) are defined by the store plugin `dvoi-dev/dvoix-projects`.
+- New fields or spellings: parser in the Rust core (`tasks.rs`) with tests, TS types in `api.ts`, a table in the README.
 
 ## New data kinds (tracking etc.)
 
