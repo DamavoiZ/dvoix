@@ -6,8 +6,8 @@
 //! window (on Windows it stays white until the work is done).
 
 use dvoix_core::{
-    GraphData, HiddenFilter, NoteSummary, RenderedNote, SearchHit, TaskItem,
-    VaultEntry, index::TagCount, markdown, tasks,
+    GraphData, HiddenFilter, NoteSummary, RenderedNote, SearchHit, TaskItem, VaultEntry,
+    index::TagCount, markdown, tasks,
 };
 use serde::Serialize;
 use tauri::{AppHandle, State};
@@ -15,7 +15,6 @@ use tauri::{AppHandle, State};
 use crate::{AppState, VaultHandle, Workspace, http, settings};
 
 use dvoix_core::store::{self, InstalledPlugin, PluginFiles, PluginManifest, RegistryEntry};
-
 
 type CmdResult<T> = Result<T, String>;
 

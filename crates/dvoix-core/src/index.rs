@@ -1214,10 +1214,15 @@ mod tests {
         assert_eq!(tasks[1].task.line, 6);
         assert_eq!(tasks[3].task.priority, Some(tasks::Priority::High));
 
-
         tasks::set_done_in_vault(&vault, "projects/umzug.md", 6, "Boxes", true).unwrap();
         index.update(&vault, "projects/umzug.md").unwrap();
-        assert!(index.tasks().unwrap().iter().any(|t| t.task.text == "Boxes" && t.task.done));
+        assert!(
+            index
+                .tasks()
+                .unwrap()
+                .iter()
+                .any(|t| t.task.text == "Boxes" && t.task.done)
+        );
         assert!(
             tasks::set_done_in_vault(&vault, "projects/umzug.md", 6, "Something else", false)
                 .is_err()
