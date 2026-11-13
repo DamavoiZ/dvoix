@@ -4,6 +4,7 @@
 import type { Extension } from "@codemirror/state";
 import { readJsonRaw, readJson, writeJson } from "../config";
 import { registerFileType } from "../filetypes";
+import { vault } from "../vault.svelte";
 import type {
   CommandSpec,
   Dispose,
@@ -24,6 +25,12 @@ import type {
 
 /** Which core plugins are on, by id. Like Obsidian's `core-plugins.json`. */
 const ENABLED_FILE = "core-plugins.json";
+
+/** Former core plugins that moved to the plugin store (same id there). */
+const MOVED_TO_STORE = [
+  { id: "git", name: "Git" },
+  { id: "projects", name: "Projects" },
+];
 
 export interface Command extends CommandSpec {
   /** `<plugin-id>:<command-id>` */
@@ -158,8 +165,16 @@ class PluginManager {
       // part of the API and the loads stay one after another.
       for (const f of this.features) await this.load(f);
       for (const p of this.all) if (this.isEnabled(p.manifest.id)) await this.load(p);
+      // Git and Projects used to be core plugins and are store plugins now.
+      // A vault that had one of them on gets a hint once; dropping the keys
+      // below keeps it from coming back.
+      const moved = MOVED_TO_STORE.filter((m) => this.enabled[m.id] === true).map((m) => m.name);
+      if (moved.length) {
+        vault.error = `${moved.join(" and ")} ${moved.length > 1 ? "are" : "is"} now in the plugin store. Install ${moved.length > 1 ? "them" : "it"} under Settings → Plugin store.`;
+      }
+      const hadMoved = MOVED_TO_STORE.some((m) => m.id in this.enabled);
       // Write the file once so it shows what is on, even before anything was changed.
-      if (!saved) this.saveEnabled();
+      if (!saved || hadMoved) this.saveEnabled();
     });
   }
 
@@ -241,6 +256,7 @@ class PluginManager {
     const out: Record<string, boolean> = { ...this.enabled };
     // Vaults from before a plugin became a core feature may still list it here.
     for (const f of this.features) delete out[f.manifest.id];
+    for (const m of MOVED_TO_STORE) delete out[m.id];
     for (const p of this.all) out[p.manifest.id] = this.isEnabled(p.manifest.id);
     writeJson(ENABLED_FILE, out);
   }

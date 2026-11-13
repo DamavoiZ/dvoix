@@ -110,6 +110,17 @@ class VaultStore {
     return map;
   });
 
+  /** Called with the paths of every batch of changes, for store plugins (`dvoix.vault.onChange`). */
+  private changeListeners = new Set<(paths: string[]) => void>();
+
+  /** Calls `fn` with the vault-relative paths of every batch of changes; returns the unsubscribe. */
+  onChanges(fn: (paths: string[]) => void): () => void {
+    this.changeListeners.add(fn);
+    return () => {
+      this.changeListeners.delete(fn);
+    };
+  }
+
   private saveTimer: ReturnType<typeof setTimeout> | undefined;
   private refreshTimer: ReturnType<typeof setTimeout> | undefined;
   /** Our own recent writes, so their watcher echo does not read the file back. */
@@ -284,6 +295,15 @@ class VaultStore {
     this.note(this.changes.files, changes.map((c) => c.path));
     if (notePaths.length) this.note(this.changes.notes, notePaths);
     if (listAgain) this.scheduleRefresh(lastAdded);
+    const paths = [...new Set(changes.map((c) => c.path))];
+    for (const fn of this.changeListeners) {
+      // A broken plugin must not stop the app's own panels from updating.
+      try {
+        fn(paths);
+      } catch (e) {
+        console.error(e);
+      }
+    }
   }
 
   /**

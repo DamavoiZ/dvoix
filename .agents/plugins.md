@@ -5,7 +5,7 @@ Every function of dvoix hooks into the app through the `PluginContext`. The API 
 ## Core feature, core plugin or store plugin?
 
 - **Core feature** (`src/lib/features/`): basic note and editor functions that every vault needs: file explorer, search, tags, backlinks, link suggestions, clickable checkboxes, quick switcher, tabs, views (read/edit/source). Always loaded, no switch in the settings. If turning it off would make dvoix feel broken as a note app, it is a core feature.
-- **Core plugin** (`src/lib/plugins/core/`): optional functions that ship with the app and are closely tied to it (hidden files, tasks with overview and due dates, projects, canvas, graph, Git). Can be turned off under Settings → Core plugins.
+- **Core plugin** (`src/lib/plugins/core/`): optional functions that ship with the app and are closely tied to it (hidden files, tasks with overview and due dates, canvas, graph). Projects and Git are store plugins (`dvoi-dev/dvoix-projects`, `dvoi-dev/dvoix-git`). Can be turned off under Settings → Core plugins.
 - **Store plugin**: everything extra that not everyone wants (e.g. kanban, tracking). Its own repository with releases, an entry in `registry.json` of `dvoi-dev/dvoix-plugins`. Guide in `docs/plugins/README.md`.
 
 ## Plugin store (`src/lib/plugins/store/`)

@@ -141,9 +141,6 @@ fn main() {
     let (elapsed, tasks) = time(|| index.tasks().expect("the tasks are read"));
     row(&format!("tasks ({} tasks)", tasks.len()), elapsed);
 
-    let (elapsed, projects) = time(|| index.projects().expect("the projects are read"));
-    row(&format!("projects ({} projects)", projects.len()), elapsed);
-
     let (elapsed, graph) = time(|| index.graph().expect("the graph is read"));
     row(
         &format!(
