@@ -240,10 +240,21 @@ class PluginStore {
     );
   }
 
-  /** The registry entry of an installed plugin, by the repository it came from. */
+  /**
+   * The registry entry of an installed plugin, by the repository it came from.
+   * GitHub names are case-insensitive, so the match is too. An official entry
+   * also matches when the repo moved (e.g. from a user account into the
+   * `dvoi-dev` org): official repos are only ever `dvoi-dev`, so this cannot
+   * hand the plugin to a stranger. A community plugin whose repo changed stays
+   * without updates until it is reinstalled.
+   */
   entryFor(id: string): RegistryEntry | undefined {
-    const repo = this.file.plugins[id]?.repo;
-    return this.registry?.find((e) => e.id === id && (!repo || e.repo === repo));
+    const repo = this.file.plugins[id]?.repo?.toLowerCase();
+    const forId = this.registry?.filter((e) => e.id === id) ?? [];
+    return (
+      forId.find((e) => !repo || e.repo.toLowerCase() === repo) ??
+      forId.find((e) => e.channel === "official")
+    );
   }
 
   async install(entry: RegistryEntry) {
