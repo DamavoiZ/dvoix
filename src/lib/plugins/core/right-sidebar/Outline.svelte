@@ -49,16 +49,16 @@
 </script>
 
 {#if !path}
-  <p class="px-4 py-3 text-xs text-zinc-600">Open a note to see its outline.</p>
+  <p class="px-4 py-3 text-xs text-zinc-500">Open a note to see its outline.</p>
 {:else if !entries.length}
-  <p class="px-4 py-3 text-xs text-zinc-600">This note has no headings.</p>
+  <p class="px-4 py-3 text-xs text-zinc-500">This note has no headings.</p>
 {:else}
-  <ul class="py-1">
+  <ul class="px-1.5 py-1.5">
     {#each entries as entry, index (entry.heading.line)}
       <li>
         <button
-          class="block w-full truncate py-1 pr-3 text-left text-sm text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-100"
-          style:padding-left="{10 + entry.depth * 12}px"
+          class="block w-full truncate rounded-md py-1 pr-2.5 text-left text-sm text-zinc-400 transition-colors hover:bg-zinc-800/60 hover:text-zinc-100"
+          style:padding-left="{8 + entry.depth * 12}px"
           title={entry.heading.text}
           onclick={() => jump(entry.heading, index)}
         >

@@ -68,7 +68,7 @@
 {#snippet badge(channel: RegistryEntry["channel"])}
   {#if channel === "official"}
     <span class="inline-flex items-center gap-1 rounded bg-violet-500/15 px-1.5 py-px text-[10px] font-medium text-violet-300">
-      <BadgeCheck size={11} /> Offiziell
+      <BadgeCheck size={11} /> Official
     </span>
   {:else}
     <span class="inline-flex items-center gap-1 rounded bg-zinc-800 px-1.5 py-px text-[10px] font-medium text-zinc-400">
@@ -91,9 +91,9 @@
         onclick={() => {
           confirmCommunity = false;
           void pluginStore.setAllowCommunity(true);
-        }}>Verstanden, einschalten</button
+        }}>Understood, enable</button
       >
-      <button class={btn} onclick={() => (confirmCommunity = false)}>Abbrechen</button>
+      <button class={btn} onclick={() => (confirmCommunity = false)}>Cancel</button>
     </div>
   </div>
 {/snippet}
@@ -104,7 +104,7 @@
   {@const blocked = entry.channel === "community" && !pluginStore.file.allowCommunity}
   {@const busy = pluginStore.busy[id]}
   <div class="py-3">
-    <button class="mb-3 inline-flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-200" onclick={() => (selected = null)}>
+    <button class="mb-3 inline-flex items-center gap-1 text-xs text-zinc-400 transition-colors hover:text-zinc-200" onclick={() => (selected = null)}>
       <ArrowLeft size={13} /> Back
     </button>
     <div class="flex items-center gap-2">
@@ -116,7 +116,7 @@
       {#if latest} · Version {latest.version}{/if}
       {#if installed} · installed: {installed.version}{/if}
     </div>
-    <p class="mt-3 text-sm text-zinc-300">{entry.description}</p>
+    <p class="mt-3 text-sm leading-relaxed text-zinc-300">{entry.description}</p>
 
     <div class="mt-4 text-[11px] font-medium tracking-wide text-zinc-500 uppercase">Permissions</div>
     {#if !latest}
@@ -147,7 +147,7 @@
           disabled={!!busy || !latest || pluginStore.needsNewerApp(latest) || pluginStore.clashesWithCore(id)}
           onclick={() => pluginStore.install(entry)}
         >
-          <Download size={13} /> Installieren
+          <Download size={13} /> Install
         </button>
       {:else}
         {#if pluginStore.hasUpdate(id)}
@@ -169,7 +169,7 @@
   <div class="flex items-center gap-2 pt-3">
     <button class={tabBtn(tab === "browse")} onclick={() => (tab = "browse")}>Browse</button>
     <button class={tabBtn(tab === "installed")} onclick={() => (tab = "installed")}>
-      Installiert ({pluginStore.installed.length})
+      Installed ({pluginStore.installed.length})
     </button>
     <div class="flex-1"></div>
     {#if tab === "browse"}
@@ -192,9 +192,9 @@
   {#if confirmCommunity}{@render communityWarning()}{/if}
 
   {#if tab === "browse"}
-    <label class="mt-3 flex items-center gap-2 rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 focus-within:border-violet-500">
+    <label class="mt-3 flex items-center gap-2 rounded-md border border-zinc-700/80 bg-zinc-950 px-2.5 py-1.5 focus-within:border-violet-500">
       <Search size={14} class="text-zinc-500" />
-      <input class="flex-1 bg-transparent text-sm text-zinc-200 outline-none" placeholder="Search plugins" bind:value={query} />
+      <input class="flex-1 bg-transparent text-sm text-zinc-200 outline-none placeholder:text-zinc-500" placeholder="Search plugins …" bind:value={query} />
     </label>
     {#if pluginStore.loadingRegistry && !pluginStore.registry}
       <p class="py-4 text-xs text-zinc-500">Loading plugin list …</p>
@@ -203,23 +203,23 @@
     {:else if !results.length}
       <p class="py-4 text-xs text-zinc-500">{query ? "No plugin found." : "No plugins in the list yet."}</p>
     {:else}
-      <ul class="py-2">
+      <ul class="space-y-1 py-2">
         {#each results as e (e.id)}
           <li>
             <button
-              class="flex w-full items-start gap-3 rounded-md px-2 py-2.5 text-left hover:bg-zinc-800/60"
+              class="flex w-full items-start gap-3 rounded-lg border border-transparent px-2.5 py-2.5 text-left transition-colors hover:border-zinc-800 hover:bg-zinc-800/50"
               onclick={() => (selected = e.id)}
             >
               <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-2">
-                  <span class="truncate text-sm text-zinc-100">{e.name}</span>
+                  <span class="truncate text-sm font-medium text-zinc-100">{e.name}</span>
                   {@render badge(e.channel)}
                 </div>
-                <div class="mt-0.5 line-clamp-2 text-xs text-zinc-500">{e.description}</div>
-                <div class="mt-0.5 text-[11px] text-zinc-600">by {e.author}</div>
+                <div class="mt-0.5 line-clamp-2 text-xs text-zinc-400">{e.description}</div>
+                <div class="mt-0.5 text-[11px] text-zinc-500">by {e.author}</div>
               </div>
-              <span class="shrink-0 pt-0.5 text-[11px] text-zinc-500">
-                {#if pluginStore.hasUpdate(e.id)}Update{:else if pluginStore.isInstalled(e.id)}Installiert{/if}
+              <span class="shrink-0 pt-0.5 text-[11px] font-medium {pluginStore.hasUpdate(e.id) ? 'text-violet-300' : 'text-zinc-500'}">
+                {#if pluginStore.hasUpdate(e.id)}Update{:else if pluginStore.isInstalled(e.id)}Installed{/if}
               </span>
             </button>
           </li>

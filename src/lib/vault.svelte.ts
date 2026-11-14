@@ -30,8 +30,14 @@ export interface OpenOptions {
   newTab?: boolean;
 }
 
+export interface HistoryEntry {
+  path: string | null;
+  view?: string;
+}
+
 /** How a view tab is stored in `workspace.json`; `//` never occurs in a vault path. */
 const VIEW_PREFIX = "dvoix://view/";
+const HISTORY_MAX = 100;
 
 /**
  * A group of changes in the vault. The number moves once per batch of
@@ -72,6 +78,17 @@ class VaultStore {
   content = $state("");
   dirty = $state(false);
   error = $state<string | null>(null);
+  private navHistory = $state<HistoryEntry[]>([]);
+  private navIndex = $state(-1);
+  private navigatingHistory = false;
+
+  get canGoBack(): boolean {
+    return this.navIndex > 0;
+  }
+
+  get canGoForward(): boolean {
+    return this.navIndex >= 0 && this.navIndex < this.navHistory.length - 1;
+  }
   /**
    * What changed in the vault. Every group has a counter that moves only for
    * the changes that can change what it shows, so a panel refreshes only when
@@ -195,6 +212,8 @@ class VaultStore {
     this.openView = null;
     this.tabs = [];
     this.recent = [];
+    this.navHistory = [];
+    this.navIndex = -1;
   }
 
   async refresh(changed: string[] = []) {
@@ -509,7 +528,53 @@ class VaultStore {
       this.recent = [path, ...this.recent.filter((p) => p !== path)].slice(0, RECENT_MAX);
       ui.reveal(path);
     }
+    if (!this.navigatingHistory && (path !== null || view !== null)) {
+      const next: HistoryEntry = { path, view: view ?? undefined };
+      const cur = this.navHistory[this.navIndex];
+      if (!cur || cur.path !== next.path || cur.view !== next.view) {
+        this.navHistory = [...this.navHistory.slice(0, this.navIndex + 1), next].slice(-HISTORY_MAX);
+        this.navIndex = this.navHistory.length - 1;
+      }
+    }
     this.saveTabs();
+  }
+
+  /** Navigates back in the file/view history of this vault session. */
+  async goBack() {
+    await this.navigateHistory(-1);
+  }
+
+  /** Navigates forward in the file/view history of this vault session. */
+  async goForward() {
+    await this.navigateHistory(1);
+  }
+
+  private async navigateHistory(delta: -1 | 1) {
+    let idx = this.navIndex + delta;
+    while (idx >= 0 && idx < this.navHistory.length) {
+      const entry = this.navHistory[idx];
+      if (entry.view && plugins.view(entry.view)) {
+        this.navIndex = idx;
+        this.navigatingHistory = true;
+        try {
+          await this.openViewTab(entry.view);
+        } finally {
+          this.navigatingHistory = false;
+        }
+        return;
+      }
+      if (entry.path && this.entryAt(entry.path)) {
+        this.navIndex = idx;
+        this.navigatingHistory = true;
+        try {
+          await this.openFile(entry.path);
+        } finally {
+          this.navigatingHistory = false;
+        }
+        return;
+      }
+      idx += delta;
+    }
   }
 
   private saveTabs() {
@@ -541,6 +606,17 @@ class VaultStore {
   /** Closes the tabs whose file matches `gone` (deleted, or inside a deleted folder). */
   private async closeTabs(gone: (path: string) => boolean) {
     this.recent = this.recent.filter((p) => !gone(p));
+    const kept: HistoryEntry[] = [];
+    let newIndex = -1;
+    for (let i = 0; i < this.navHistory.length; i++) {
+      const h = this.navHistory[i];
+      if (h.path && gone(h.path)) continue;
+      const prev = kept[kept.length - 1];
+      if (!prev || prev.path !== h.path || prev.view !== h.view) kept.push(h);
+      if (i <= this.navIndex) newIndex = kept.length - 1;
+    }
+    this.navHistory = kept;
+    this.navIndex = newIndex;
     await this.closeTabsWhere((t) => !!t.path && gone(t.path));
   }
 
@@ -719,6 +795,7 @@ class VaultStore {
       if (this.openPath) this.openPath = remap(this.openPath);
       for (const t of this.tabs) if (t.path) t.path = remap(t.path);
       this.recent = this.recent.map(remap);
+      this.navHistory = this.navHistory.map((h) => (h.path ? { ...h, path: remap(h.path) } : h));
       this.saveTabs();
       if (to.includes("/")) ui.reveal(to);
       this.appliedOwnChange(

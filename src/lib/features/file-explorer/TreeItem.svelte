@@ -76,7 +76,7 @@
 </script>
 
 <div
-  class="group flex h-7 items-center gap-1 rounded-md pr-2 text-[13px] {active
+  class="group flex h-7 items-center gap-1 rounded-md pr-2 text-[13px] transition-colors {active
     ? 'bg-zinc-800 text-zinc-50'
     : 'text-zinc-300 hover:bg-zinc-800/60'} {dropTarget && entry.isDir ? 'ring-1 ring-violet-500 ring-inset' : ''}"
   style:padding-left="{0.5 + depth * 1}rem"
@@ -96,13 +96,13 @@
 >
   <span class="flex w-4 shrink-0 justify-center text-zinc-500">
     {#if entry.isDir}
-      <ChevronRight size={14} class="transition-transform {expanded ? 'rotate-90' : ''}" />
+      <ChevronRight size={14} class="transition-transform duration-150 {expanded ? 'rotate-90' : ''}" />
     {/if}
   </span>
 
   {#if renaming}
     <input
-      class="h-6 w-full rounded bg-zinc-950 px-1.5 outline-1 outline-violet-500"
+      class="h-6 w-full rounded bg-zinc-950 px-1.5 text-zinc-100 outline-1 outline-violet-500"
       use:startEdit
       oninput={(e) => (draft = e.currentTarget.value)}
       onblur={finishRename}
@@ -117,7 +117,7 @@
     }}>
       <span class="truncate" class:font-medium={entry.isDir} class:opacity-60={hidden}>{label}</span>
       {#if badge}
-        <span class="shrink-0 rounded bg-zinc-800 px-1 py-px text-[9px] font-semibold tracking-wider text-zinc-400">{badge}</span>
+        <span class="shrink-0 rounded bg-zinc-800/90 px-1.5 py-px text-[10px] font-medium tracking-wider text-zinc-400">{badge}</span>
       {/if}
     </button>
   {/if}

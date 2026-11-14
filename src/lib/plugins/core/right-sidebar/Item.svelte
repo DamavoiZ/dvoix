@@ -47,12 +47,13 @@
     value.items = next;
     rightSidebarSettings.save();
   }
+  let dragOver = $state(false);
 </script>
 
-<div class="border-b border-zinc-800 last:border-b-0">
+<div class="border-b border-zinc-800 last:border-b-0 {dragOver ? 'bg-violet-500/5 ring-1 ring-violet-500/60 ring-inset' : ''}">
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <header
-    class="flex h-8 items-center gap-1.5 pr-1.5 pl-3 text-xs text-zinc-400 select-none {dragging === itemKey(item)
+    class="flex h-8 cursor-grab items-center gap-1.5 border-b border-zinc-800/50 bg-zinc-950/30 pr-1.5 pl-3 text-xs font-medium text-zinc-400 select-none active:cursor-grabbing {dragging === itemKey(item)
       ? 'opacity-40'
       : ''}"
     draggable="true"
@@ -61,12 +62,18 @@
       e.dataTransfer?.setData(PANEL_DRAG, itemKey(item));
       if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
     }}
-    ondragend={ondragend}
+    ondragend={() => {
+      dragOver = false;
+      ondragend();
+    }}
     ondragover={(e) => {
       if (!e.dataTransfer?.types.includes(PANEL_DRAG)) return;
       e.preventDefault();
+      if (dragging !== itemKey(item)) dragOver = true;
     }}
+    ondragleave={() => (dragOver = false)}
     ondrop={(e) => {
+      dragOver = false;
       if (!e.dataTransfer?.types.includes(PANEL_DRAG)) return;
       e.preventDefault();
       drop();
@@ -80,7 +87,7 @@
     {/if}
     <span class="truncate" title={item.kind === "note" ? item.id : name}>{name}</span>
     <button
-      class="ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
+      class="ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-200"
       title="Remove from sidebar"
       aria-label="Remove from sidebar"
       onclick={close}

@@ -122,13 +122,15 @@
 
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
-          class="absolute top-0 -left-1 z-10 h-full w-2 cursor-col-resize {resizing ? 'bg-violet-500/40' : 'hover:bg-violet-500/20'}"
+          class="group/resize absolute top-0 -left-1 z-10 flex h-full w-2 cursor-col-resize justify-center"
           onpointerdown={startResize}
           ondblclick={() => {
             rightSidebarSettings.value.width = WIDTH_DEFAULT;
             rightSidebarSettings.save();
           }}
-        ></div>
+        >
+          <div class="h-full w-px transition-colors {resizing ? 'bg-violet-500' : 'bg-transparent group-hover/resize:bg-violet-500/50'}"></div>
+        </div>
       </aside>
     {/if}
 
@@ -139,14 +141,17 @@
       {#each panels as panel (panel.id)}
         {@const active = isOpen(panel.id)}
         <button
-          class="flex h-8 w-8 items-center justify-center rounded-md transition-colors {active
-            ? 'bg-zinc-800 text-zinc-100'
+          class="relative flex h-8 w-8 items-center justify-center rounded-md transition-colors {active
+            ? 'bg-zinc-800/90 text-zinc-100'
             : 'text-zinc-500 hover:bg-zinc-800/60 hover:text-zinc-200'}"
           title={panel.label}
           aria-label={panel.label}
           aria-pressed={active}
           onclick={() => toggle(panel.id)}
         >
+          {#if active}
+            <span class="absolute top-1.5 -right-1.5 bottom-1.5 w-0.5 rounded-l bg-violet-500"></span>
+          {/if}
           <panel.icon size={18} strokeWidth={1.75} />
         </button>
       {/each}

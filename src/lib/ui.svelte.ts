@@ -132,6 +132,16 @@ class UiStore {
     this.save();
   }
 
+  /** Expands `folder` and all of its parent folders and shows the file tree. */
+  revealFolder(folder: string) {
+    if (!folder) return;
+    const parts = folder.split("/");
+    for (let i = 1; i <= parts.length; i++) this.expanded.add(parts.slice(0, i).join("/"));
+    this.panel = DEFAULT_PANEL;
+    this.panelOpen = true;
+    this.save();
+  }
+
   collapseAll() {
     this.expanded.clear();
     this.save();

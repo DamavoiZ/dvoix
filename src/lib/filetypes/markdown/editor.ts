@@ -19,6 +19,7 @@ import { classHighlighter, styleTags, tags as t } from "@lezer/highlight";
 import { livePreview } from "./livePreview";
 import { parseFrontmatter } from "./frontmatter";
 import { openLink } from "./propertiesWidget.svelte";
+import { editorStatus } from "../../editorStatus.svelte";
 
 const WIKILINK = /\[\[([^\]\n]+)\]\]/g;
 
@@ -102,25 +103,33 @@ const highlight = HighlightStyle.define([
   { tag: t.strong, fontWeight: "700" },
   { tag: t.emphasis, fontStyle: "italic" },
   { tag: t.strikethrough, textDecoration: "line-through" },
-  { tag: [t.link, t.url], color: "#a78bfa" },
-  { tag: t.monospace, fontFamily: "var(--font-mono)", color: "#fbbf24" },
-  { tag: t.quote, color: "#a1a1aa", fontStyle: "italic" },
-  { tag: [t.processingInstruction, t.meta, t.contentSeparator], color: "#71717a" },
+  { tag: [t.link, t.url], color: "var(--editor-link)" },
+  { tag: t.monospace, fontFamily: "var(--font-mono)", color: "var(--editor-code)" },
+  { tag: t.quote, color: "var(--editor-quote)", fontStyle: "italic" },
+  { tag: [t.processingInstruction, t.meta, t.contentSeparator], color: "var(--editor-meta)" },
 ]);
 
-const theme = EditorView.theme(
-  {
-    "&": { color: "#e4e4e7", backgroundColor: "transparent", fontSize: "var(--editor-font-size, 15px)" },
-    ".cm-content": { maxWidth: "var(--editor-max-width, 48rem)", margin: "0 auto", padding: "2rem 1.5rem", lineHeight: "1.7", caretColor: "#a78bfa" },
-    ".cm-scroller": { fontFamily: "var(--font-sans)" },
-    ".cm-activeLine": { backgroundColor: "rgba(255,255,255,0.03)" },
-    ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": { backgroundColor: "rgba(167,139,250,0.3) !important" },
-    ".cm-cursor": { borderLeftColor: "#a78bfa" },
-    ".cm-gutters": { backgroundColor: "transparent", border: "none", color: "#52525b" },
-    ".cm-wikilink": { color: "#a78bfa", textDecoration: "underline", textDecorationColor: "rgba(167,139,250,0.4)", cursor: "pointer" },
+const theme = EditorView.theme({
+  "&": { color: "var(--editor-text)", backgroundColor: "transparent", fontSize: "var(--editor-font-size, 15px)" },
+  ".cm-content": {
+    maxWidth: "var(--editor-max-width, 48rem)",
+    margin: "0 auto",
+    padding: "2rem 0",
+    lineHeight: "1.7",
+    caretColor: "var(--editor-link)",
   },
-  { dark: true },
-);
+  ".cm-scroller": { fontFamily: "var(--editor-font-family, var(--font-sans))", padding: "0 1.5rem" },
+  ".cm-activeLine": { backgroundColor: "var(--editor-active-line)" },
+  ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": { backgroundColor: "var(--editor-selection) !important" },
+  ".cm-cursor": { borderLeftColor: "var(--editor-link)" },
+  ".cm-gutters": { backgroundColor: "transparent", border: "none", color: "var(--editor-gutter)" },
+  ".cm-wikilink": {
+    color: "var(--editor-link)",
+    textDecoration: "underline",
+    textDecorationColor: "var(--editor-link-underline)",
+    cursor: "pointer",
+  },
+});
 
 export interface EditorOptions {
   parent: HTMLElement;
@@ -148,6 +157,12 @@ export function setLivePreview(view: EditorView, on: boolean): void {
   view.dispatch({ effects: preview.reconfigure(on ? livePreview() : []) });
 }
 
+function reportCursor(state: EditorState): void {
+  const head = state.selection.main.head;
+  const line = state.doc.lineAt(head);
+  editorStatus.setCursor(line.number, head - line.from + 1);
+}
+
 export function createMarkdownEditor({ parent, doc, onchange, onlink, extensions = [] }: EditorOptions): EditorView {
   // The cursor starts below the properties: at the very start it would be
   // inside them, and the live preview would show the YAML instead.
@@ -155,7 +170,7 @@ export function createMarkdownEditor({ parent, doc, onchange, onlink, extensions
   const text = doc.replace(/\r\n?/g, "\n");
   const fm = parseFrontmatter(text);
   const start = fm ? text.indexOf("\n", fm.to) + 1 || text.length : 0;
-  return new EditorView({
+  const view = new EditorView({
     parent,
     state: EditorState.create({
       doc,
@@ -178,6 +193,7 @@ export function createMarkdownEditor({ parent, doc, onchange, onlink, extensions
         preview.of([]),
         EditorView.updateListener.of((u) => {
           if (u.docChanged) onchange(u.state.doc.toString());
+          if (u.docChanged || u.selectionSet) reportCursor(u.state);
         }),
         EditorView.domEventHandlers({
           mousedown(event, view) {
@@ -193,6 +209,8 @@ export function createMarkdownEditor({ parent, doc, onchange, onlink, extensions
       ],
     }),
   });
+  reportCursor(view.state);
+  return view;
 }
 
 /** Replaces the document (e.g. after the file changed on disk) without losing the editor. */

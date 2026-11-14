@@ -16,7 +16,7 @@
     ].sort((a, b) => a.order - b.order),
   );
 
-  const btn = "flex h-8 w-8 items-center justify-center rounded-md transition-colors";
+  const btn = "relative flex h-8 w-8 items-center justify-center rounded-md transition-colors";
   const idle = "text-zinc-500 hover:bg-zinc-800/60 hover:text-zinc-200";
 </script>
 
@@ -24,23 +24,28 @@
   {#each items as item (item.key)}
     {@const active = !!item.panel && ui.panelOpen && ui.panel === item.panel}
     <button
-      class="{btn} {active ? 'bg-zinc-800 text-zinc-100' : idle}"
+      class="{btn} {active ? 'bg-zinc-800/90 text-zinc-100' : idle}"
       title={item.label}
       aria-label={item.label}
       aria-pressed={item.panel ? active : undefined}
       onclick={() => (item.panel ? ui.togglePanel(item.panel) : item.action?.())}
     >
+      {#if active}
+        <span class="absolute top-1.5 bottom-1.5 -left-1.5 w-0.5 rounded-r bg-violet-500"></span>
+      {/if}
       <item.icon size={18} strokeWidth={1.75} />
     </button>
   {/each}
 
   <div class="flex-1"></div>
 
+  <div class="my-1 h-px w-5 bg-zinc-800/80"></div>
+
   <button class="{btn} {idle}" title="Open another vault" aria-label="Open another vault" onclick={() => vault.close()}>
     <ArrowLeftRight size={18} strokeWidth={1.75} />
   </button>
   <button
-    class="{btn} {ui.modal === SETTINGS ? 'bg-zinc-800 text-zinc-100' : idle}"
+    class="{btn} {ui.modal === SETTINGS ? 'bg-zinc-800/90 text-zinc-100' : idle}"
     title="Settings (Ctrl+,)"
     aria-label="Settings"
     onclick={() => ui.toggleModal(SETTINGS)}

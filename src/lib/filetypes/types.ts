@@ -28,6 +28,8 @@ export interface FileType {
   icon: Component;
   /** The view that shows and edits the file. */
   view: Component<FileViewProps>;
+  /** Optional controls placed in the file pane header (e.g. view mode switcher). */
+  headerActions?: Component<{ path: string }>;
   /** Content for a freshly created file. Omit if users can't create this type from the app. */
   template?: (name: string) => string;
 }

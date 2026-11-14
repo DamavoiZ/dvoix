@@ -3,6 +3,8 @@
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-serif: Georgia, Cambria, "Times New Roman", ui-serif, serif;
+  --font-system: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 /* The window itself never scrolls, only panels and the editor do. Without
@@ -21,16 +23,154 @@ body {
   overflow: clip;
 }
 
-/* The app is dark only. Native parts drawn by the system (the popup of a
-   <select>, form controls) follow this, together with "theme": "Dark" in the
-   Tauri window config, which makes GTK on Linux use its dark variant. */
+/* Themes & accent colors override Tailwind's neutral (zinc) and accent (violet)
+   CSS variables plus semantic tokens for CodeMirror, prose, and canvases. */
 :root {
   color-scheme: dark;
+  --surface-subtle: rgba(255, 255, 255, 0.03);
+  --editor-text: var(--color-zinc-200);
+  --editor-active-line: rgba(255, 255, 255, 0.03);
+  --editor-gutter: var(--color-zinc-600);
+  --editor-code: #fbbf24;
+  --editor-quote: var(--color-zinc-400);
+  --editor-meta: var(--color-zinc-500);
+  --editor-selection: color-mix(in srgb, var(--color-violet-400) 28%, transparent);
+  --editor-link: var(--color-violet-400);
+  --editor-link-underline: color-mix(in srgb, var(--color-violet-400) 40%, transparent);
+}
+
+:root[data-theme="midnight"] {
+  color-scheme: dark;
+  --color-zinc-950: #050507;
+  --color-zinc-900: #0b0b10;
+  --color-zinc-800: #1a1a22;
+  --color-zinc-700: #272732;
+  --color-zinc-600: #525263;
+  --color-zinc-500: #7a7a8c;
+  --color-zinc-400: #a3a3b5;
+  --color-zinc-300: #d1d1de;
+  --color-zinc-200: #e7e7f0;
+  --color-zinc-100: #f4f4fa;
+  --color-zinc-50: #fafafa;
+}
+
+:root[data-theme="slate"] {
+  color-scheme: dark;
+  --color-zinc-950: #0b1120;
+  --color-zinc-900: #0f172a;
+  --color-zinc-800: #1e293b;
+  --color-zinc-700: #334155;
+  --color-zinc-600: #475569;
+  --color-zinc-500: #64748b;
+  --color-zinc-400: #94a3b8;
+  --color-zinc-300: #cbd5e1;
+  --color-zinc-200: #e2e8f0;
+  --color-zinc-100: #f1f5f9;
+  --color-zinc-50: #f8fafc;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --color-zinc-950: #ffffff;
+  --color-zinc-900: #f4f4f6;
+  --color-zinc-800: #e4e4e7;
+  --color-zinc-700: #d4d4d8;
+  --color-zinc-600: #a1a1aa;
+  --color-zinc-500: #71717a;
+  --color-zinc-400: #52525b;
+  --color-zinc-300: #3f3f46;
+  --color-zinc-200: #27272a;
+  --color-zinc-100: #18181b;
+  --color-zinc-50: #09090b;
+  --surface-subtle: rgba(0, 0, 0, 0.035);
+  --editor-active-line: rgba(0, 0, 0, 0.035);
+  --editor-code: #b45309;
+  --editor-selection: color-mix(in srgb, var(--color-violet-500) 20%, transparent);
+}
+
+:root[data-accent="sky"] {
+  --color-violet-300: #7dd3fc;
+  --color-violet-400: #38bdf8;
+  --color-violet-500: #0ea5e9;
+  --color-violet-600: #0284c7;
+  --color-violet-700: #0369a1;
+}
+:root[data-accent="emerald"] {
+  --color-violet-300: #6ee7b7;
+  --color-violet-400: #34d399;
+  --color-violet-500: #10b981;
+  --color-violet-600: #059669;
+  --color-violet-700: #047857;
+}
+:root[data-accent="rose"] {
+  --color-violet-300: #fda4af;
+  --color-violet-400: #fb7185;
+  --color-violet-500: #f43f5e;
+  --color-violet-600: #e11d48;
+  --color-violet-700: #be123c;
+}
+:root[data-accent="amber"] {
+  --color-violet-300: #fcd34d;
+  --color-violet-400: #fbbf24;
+  --color-violet-500: #f59e0b;
+  --color-violet-600: #d97706;
+  --color-violet-700: #b45309;
+}
+
+/* On light surfaces, accent text uses deeper shades for crisp contrast. */
+:root[data-theme="light"] {
+  --color-violet-300: #6d28d9;
+  --color-violet-400: #7c3aed;
+}
+:root[data-theme="light"][data-accent="sky"] {
+  --color-violet-300: #0369a1;
+  --color-violet-400: #0284c7;
+}
+:root[data-theme="light"][data-accent="emerald"] {
+  --color-violet-300: #047857;
+  --color-violet-400: #059669;
+}
+:root[data-theme="light"][data-accent="rose"] {
+  --color-violet-300: #be123c;
+  --color-violet-400: #e11d48;
+}
+:root[data-theme="light"][data-accent="amber"] {
+  --color-violet-300: #b45309;
+  --color-violet-400: #d97706;
+  --color-violet-600: #b45309;
 }
 
 body {
   @apply bg-zinc-950 text-zinc-200 antialiased;
-  font-family: var(--font-sans);
+  font-family: var(--app-font-sans, var(--font-sans));
+}
+
+@layer base {
+  button:not(:disabled),
+  [role="tab"],
+  [role="menuitem"],
+  [role="option"] {
+    cursor: pointer;
+  }
+
+  button:focus-visible,
+  [role="tab"]:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--color-violet-500) 70%, transparent);
+    outline-offset: -2px;
+  }
+
+  kbd {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid color-mix(in srgb, var(--color-zinc-700) 80%, transparent);
+    border-radius: 0.25rem;
+    background-color: var(--color-zinc-800);
+    padding: 0.1rem 0.375rem;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    line-height: 1.1;
+    color: var(--color-zinc-300);
+  }
 }
 
 /* Checkboxes are drawn by the app, not the system: WebKitGTK and WebView2
@@ -121,6 +261,40 @@ input[type="checkbox"]:disabled {
 .tok-deleted,
 .tok-invalid {
   color: var(--color-red-400);
+}
+
+:root[data-theme="light"] .tok-string,
+:root[data-theme="light"] .tok-inserted {
+  color: #047857;
+}
+:root[data-theme="light"] .tok-string2 {
+  color: #0f766e;
+}
+:root[data-theme="light"] .tok-number,
+:root[data-theme="light"] .tok-bool,
+:root[data-theme="light"] .tok-atom,
+:root[data-theme="light"] .tok-literal {
+  color: #b45309;
+}
+:root[data-theme="light"] .tok-variableName.tok-definition,
+:root[data-theme="light"] .tok-propertyName.tok-definition,
+:root[data-theme="light"] .tok-macroName {
+  color: #0369a1;
+}
+:root[data-theme="light"] .tok-typeName,
+:root[data-theme="light"] .tok-className,
+:root[data-theme="light"] .tok-namespace {
+  color: #be123c;
+}
+:root[data-theme="light"] .tok-propertyName {
+  color: #0284c7;
+}
+:root[data-theme="light"] .tok-variableName2 {
+  color: #c2410c;
+}
+:root[data-theme="light"] .tok-deleted,
+:root[data-theme="light"] .tok-invalid {
+  color: #dc2626;
 }
 
 .cm-editor {
@@ -225,7 +399,7 @@ input[type="checkbox"]:disabled {
 }
 .cm-lp-table th {
   font-weight: 600;
-  background-color: rgba(255, 255, 255, 0.03);
+  background-color: var(--surface-subtle);
 }
 /* The padding sits on the editable part, so a click anywhere in a cell lands in it. */
 .cm-lp-cell {
@@ -339,7 +513,7 @@ input[type="checkbox"]:disabled {
 .cm-lp-table-add {
   border-radius: 4px;
   color: var(--color-zinc-500);
-  background-color: rgba(255, 255, 255, 0.03);
+  background-color: var(--surface-subtle);
   font-size: 0.8rem;
   line-height: 1;
   opacity: 0;
@@ -366,15 +540,111 @@ input[type="checkbox"]:disabled {
 .cm-lp-table code {
   font-family: var(--font-mono);
   font-size: 0.92em;
-  color: var(--color-amber-400);
+  color: var(--editor-code);
 }
 .cm-lp-link {
-  color: var(--color-violet-400);
+  color: var(--editor-link);
 }
 .cm-lp-frontmatter {
   font-family: var(--font-mono);
   font-size: 0.9em;
   color: var(--color-zinc-500);
+}
+
+/* Callout blocks in live preview and reading view. */
+:root {
+  --callout-note: var(--color-sky-400);
+  --callout-tip: var(--color-emerald-400);
+  --callout-important: var(--color-violet-400);
+  --callout-warning: var(--color-amber-400);
+  --callout-caution: var(--color-red-400);
+}
+:root[data-theme="light"] {
+  --callout-note: #0284c7;
+  --callout-tip: #059669;
+  --callout-important: #7c3aed;
+  --callout-warning: #d97706;
+  --callout-caution: #dc2626;
+}
+
+.cm-lp-callout {
+  border-left: 3px solid var(--callout-color, var(--callout-note));
+  background-color: color-mix(in srgb, var(--callout-color, var(--callout-note)) 9%, transparent);
+  padding-inline: 0.9rem !important;
+}
+.cm-lp-callout-first {
+  border-top-right-radius: 0.5rem;
+  padding-top: 0.45rem;
+}
+.cm-lp-callout-last {
+  border-bottom-right-radius: 0.5rem;
+  padding-bottom: 0.45rem;
+}
+.cm-lp-callout-note {
+  --callout-color: var(--callout-note);
+}
+.cm-lp-callout-tip {
+  --callout-color: var(--callout-tip);
+}
+.cm-lp-callout-important {
+  --callout-color: var(--callout-important);
+}
+.cm-lp-callout-warning {
+  --callout-color: var(--callout-warning);
+}
+.cm-lp-callout-caution {
+  --callout-color: var(--callout-caution);
+}
+.cm-lp-callout-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 600;
+  color: var(--callout-color, var(--callout-note));
+}
+.cm-lp-callout-badge svg {
+  width: 0.95em;
+  height: 0.95em;
+  flex-shrink: 0;
+}
+.cm-lp-callout-title {
+  font-weight: 600;
+  color: var(--callout-color, var(--callout-note));
+}
+
+/* Floating selection formatting toolbar in the markdown editor. */
+.cm-tooltip.cm-selection-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid var(--color-zinc-700);
+  background-color: var(--color-zinc-900);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+}
+.cm-selection-toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 6px;
+  border-radius: 5px;
+  color: var(--color-zinc-300);
+  font-size: 12px;
+  font-weight: 600;
+  transition: background-color 0.1s, color 0.1s;
+}
+.cm-selection-toolbar-btn:hover {
+  background-color: var(--color-zinc-800);
+  color: var(--color-zinc-100);
+}
+.cm-selection-toolbar-sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 2px;
+  background-color: var(--color-zinc-800);
 }
 
 /* Slim scrollbars in the app's colors instead of the light system ones with
@@ -441,10 +711,11 @@ input[type="checkbox"]:disabled {
 /* The reading view and the notes docked in the right sidebar. The markdown is
    inserted as HTML, so these rules have to be global. */
 .reading .reading-inner {
-  max-width: 48rem;
+  max-width: var(--editor-max-width, 48rem);
   margin: 0 auto;
 }
 .reading .prose {
+  font-family: var(--editor-font-family, var(--font-sans));
   font-size: 1rem;
   line-height: 1.75;
   color: var(--color-zinc-200);
@@ -530,6 +801,46 @@ input[type="checkbox"]:disabled {
   border-left: 3px solid var(--color-zinc-700);
   color: var(--color-zinc-400);
 }
+.reading .prose blockquote.callout {
+  margin: 0 0 1em;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  border-left: 3px solid var(--callout-color, var(--callout-note));
+  background: color-mix(in srgb, var(--callout-color, var(--callout-note)) 9%, transparent);
+  color: var(--color-zinc-200);
+}
+.reading .prose blockquote.callout-note {
+  --callout-color: var(--callout-note);
+}
+.reading .prose blockquote.callout-tip {
+  --callout-color: var(--callout-tip);
+}
+.reading .prose blockquote.callout-important {
+  --callout-color: var(--callout-important);
+}
+.reading .prose blockquote.callout-warning {
+  --callout-color: var(--callout-warning);
+}
+.reading .prose blockquote.callout-caution {
+  --callout-color: var(--callout-caution);
+}
+.reading .prose .callout-title {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.35rem;
+  font-size: 0.9em;
+  font-weight: 650;
+  color: var(--callout-color, var(--callout-note));
+}
+.reading .prose .callout-title svg {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+}
+.reading .prose blockquote.callout > :last-child {
+  margin-bottom: 0;
+}
 .reading .prose code {
   font-family: var(--font-mono);
   font-size: 0.85em;
@@ -550,12 +861,41 @@ input[type="checkbox"]:disabled {
 .reading .prose pre[data-language]::before {
   content: attr(data-language);
   position: absolute;
-  top: 0.4rem;
-  right: 0.7rem;
+  top: 0.45rem;
+  right: 2.35rem;
   font-family: var(--font-mono);
   font-size: 0.7rem;
   color: var(--color-zinc-500);
   text-transform: lowercase;
+}
+.reading .prose pre .dvoix-code-copy {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.45rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 0.35rem;
+  border: 1px solid var(--color-zinc-800);
+  background: var(--color-zinc-950);
+  color: var(--color-zinc-400);
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s, border-color 0.15s;
+}
+.reading .prose pre:hover .dvoix-code-copy,
+.reading .prose pre .dvoix-code-copy:focus-visible,
+.reading .prose pre .dvoix-code-copy.copied {
+  opacity: 1;
+}
+.reading .prose pre .dvoix-code-copy:hover {
+  border-color: var(--color-zinc-700);
+  color: var(--color-zinc-100);
+}
+.reading .prose pre .dvoix-code-copy.copied {
+  color: var(--color-emerald-400);
+  border-color: color-mix(in srgb, var(--color-emerald-500) 45%, transparent);
 }
 .reading .prose pre code {
   padding: 0;

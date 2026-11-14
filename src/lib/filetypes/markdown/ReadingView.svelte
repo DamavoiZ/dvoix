@@ -7,6 +7,7 @@
   import Properties from "./Properties.svelte";
   import { applyChange, parseFrontmatter } from "./frontmatter";
   import { highlightCodeBlocks } from "./codeHighlight";
+  import { enhanceReading } from "./enhanceReading";
   import { embedImage, isImage, parseEmbed } from "../../attachments";
   import { reveal } from "../../reveal.svelte";
 
@@ -23,7 +24,10 @@
   // Code blocks are colored after the HTML is in place; `{@html}` replaces
   // them on every render, so this runs again for each new HTML.
   $effect(() => {
-    if (prose && rendered) void highlightCodeBlocks(prose);
+    if (prose && rendered) {
+      enhanceReading(prose);
+      void highlightCodeBlocks(prose);
+    }
   });
 
   // `![[photo.png]]` comes from the core as a link with `data-embed`; images

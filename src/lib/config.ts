@@ -2,7 +2,7 @@
 // `.obsidian/`. Everything that belongs to a vault lives there:
 //
 //   .dvoix/app.json                 editor settings
-//   .dvoix/appearance.json          font size and other looks
+//   .dvoix/appearance.json          theme, accent color, fonts and font sizes
 //   .dvoix/core-plugins.json        which core plugins are on ({ "tasks": true, ... })
 //   .dvoix/workspace.json           open tabs, side panel, expanded folders
 //   .dvoix/plugins/<id>/data.json   settings of one plugin

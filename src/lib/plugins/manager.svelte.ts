@@ -20,6 +20,7 @@ import type {
   RibbonActionSpec,
   RightSidebarSpec,
   SettingTabSpec,
+  StatusBarItemSpec,
   ViewSpec,
 } from "./types";
 
@@ -72,6 +73,7 @@ class PluginManager {
   private commandList = $state.raw<Command[]>([]);
   private footerList = $state.raw<(FileFooterSpec & Owned)[]>([]);
   private headerList = $state.raw<(PaneHeaderSpec & Owned)[]>([]);
+  private statusBarList = $state.raw<(StatusBarItemSpec & Owned)[]>([]);
   private overlayList = $state.raw<(OverlaySpec & Owned)[]>([]);
   private settingList = $state.raw<(SettingTabSpec & Owned)[]>([]);
   private viewList = $state.raw<(ViewSpec & Owned)[]>([]);
@@ -90,6 +92,8 @@ class PluginManager {
   commands = $derived(this.commandList);
   fileFooters = $derived(byOrder(this.footerList));
   paneHeaders = $derived(byOrder(this.headerList));
+  statusBarLeft = $derived(byOrder(this.statusBarList.filter((s) => s.align !== "right")));
+  statusBarRight = $derived(byOrder(this.statusBarList.filter((s) => s.align === "right")));
   overlays = $derived(this.overlayList);
   settingTabs = $derived(this.settingList);
   views = $derived(this.viewList);
@@ -346,6 +350,8 @@ class PluginManager {
         addTo(() => this.footerList, (v) => (this.footerList = v), { ...footer, pluginId }, (f) => f.id),
       addPaneHeader: (header) =>
         addTo(() => this.headerList, (v) => (this.headerList = v), { ...header, pluginId }, (h) => h.id),
+      addStatusBarItem: (item) =>
+        addTo(() => this.statusBarList, (v) => (this.statusBarList = v), { ...item, pluginId }, (s) => s.id),
       addOverlay: (overlay) =>
         addTo(() => this.overlayList, (v) => (this.overlayList = v), { ...overlay, pluginId }, (o) => o.id),
       addSettingTab: (tab) =>
@@ -379,7 +385,14 @@ function matches(h: Hotkey, e: KeyboardEvent): boolean {
 export function hotkeyLabel(h: Hotkey): string {
   const mac = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
   const parts = [h.mod && (mac ? "Cmd" : "Ctrl"), h.shift && "Shift", h.alt && "Alt"].filter(Boolean) as string[];
-  const names: Record<string, string> = { pagedown: "Page Down", pageup: "Page Up", tab: "Tab", ",": "," };
+  const names: Record<string, string> = {
+    pagedown: "Page Down",
+    pageup: "Page Up",
+    tab: "Tab",
+    ",": ",",
+    arrowleft: "Left",
+    arrowright: "Right",
+  };
   parts.push(names[h.key.toLowerCase()] ?? h.key.toUpperCase());
   return parts.join("+");
 }

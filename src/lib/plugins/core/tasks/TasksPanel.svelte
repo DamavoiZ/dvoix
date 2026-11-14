@@ -1,7 +1,7 @@
 <script lang="ts">
   // All checkbox tasks of the vault, grouped by due date or by note.
   import { SvelteMap } from "svelte/reactivity";
-  import { Flag } from "@lucide/svelte";
+  import { Flag, Search, X } from "@lucide/svelte";
   import { api, type TaskItem } from "../../../api";
   import { vault } from "../../../vault.svelte";
   import {
@@ -147,15 +147,28 @@
   }
 
   const segment = (active: boolean) =>
-    `rounded px-2 py-0.5 ${active ? "bg-zinc-700 text-zinc-100" : "text-zinc-400 hover:text-zinc-200"}`;
+    `rounded px-2 py-0.5 transition-colors ${active ? "bg-zinc-700 text-zinc-100" : "text-zinc-400 hover:text-zinc-200"}`;
 </script>
 
-<div class="flex flex-col gap-2 px-3 pb-2 text-xs">
-  <input
-    class="w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-sm outline-none placeholder:text-zinc-600 focus:border-violet-500"
-    placeholder="Filter tasks …"
-    bind:value={query}
-  />
+<div class="flex flex-col gap-2 px-3 pt-2.5 pb-2 text-xs">
+  <label class="flex items-center gap-2 rounded-md border border-zinc-700/80 bg-zinc-950 px-2.5 py-1.5 focus-within:border-violet-500">
+    <Search size={14} class="shrink-0 text-zinc-500" />
+    <input
+      class="min-w-0 flex-1 bg-transparent text-sm text-zinc-200 outline-none placeholder:text-zinc-500"
+      placeholder="Filter tasks …"
+      bind:value={query}
+    />
+    {#if query}
+      <button
+        type="button"
+        class="rounded p-0.5 text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-200"
+        aria-label="Clear filter"
+        onclick={() => (query = "")}
+      >
+        <X size={13} />
+      </button>
+    {/if}
+  </label>
   <div class="flex items-center justify-between gap-2">
     <div class="flex rounded-md bg-zinc-800/60 p-0.5" role="group" aria-label="Show">
       <button class={segment(show === "open")} onclick={() => setShow("open")}>Open {openCount}</button>
@@ -169,7 +182,7 @@
   </div>
 </div>
 
-<div class="flex-1 overflow-y-auto px-1 pb-4">
+<div class="flex-1 overflow-y-auto px-1.5 pb-4">
   {#each sections as section (section.key)}
     <section class="mb-2">
       <h3 class="flex items-center justify-between px-2 pt-2 pb-1 text-xs font-medium {section.tone ?? 'text-zinc-400'}">
@@ -178,12 +191,12 @@
         {:else}
           <span>{section.label}</span>
         {/if}
-        <span class="text-zinc-600">{section.items.length}</span>
+        <span class="text-zinc-500">{section.items.length}</span>
       </h3>
       <ul>
         {#each shownOf(section) as task (`${task.path}:${task.line}`)}
           <li
-            class="group flex items-start gap-2 rounded px-2 py-1 hover:bg-zinc-800/70"
+            class="group flex items-start gap-2 rounded-md px-2 py-1 transition-colors hover:bg-zinc-800/70"
             style:padding-left={group === "note" ? `${0.5 + Math.min(task.indent, 12) * 0.25}rem` : undefined}
           >
             <input

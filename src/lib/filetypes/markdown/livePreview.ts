@@ -14,12 +14,14 @@ import {
 } from "@codemirror/view";
 import { embedImage, embeddedImageHeight, isImage, parseEmbed } from "../../attachments";
 import { SCROLL_SETTLE_MS } from "../../editorScroll";
+import { createCalloutIcon, resolveCallout, type CalloutKind } from "./callouts";
 import { parseFrontmatter } from "./frontmatter";
 import { PropertiesWidget } from "./propertiesWidget.svelte";
 import { TableWidget, focusTable } from "./tableWidget";
 
 /** `[[wikilinks]]` are not markdown, so they are found with a regex. */
 const WIKILINK = /\[\[[^\]\n]+\]\]/g;
+const CALLOUT_HEADER = /^(\s*>\s*\[!([a-zA-Z-]+)\])(?:[ \t]+(.*))?$/;
 
 /** A range of markdown syntax that is hidden while the cursor is elsewhere. */
 interface Hide {
@@ -60,6 +62,33 @@ class RuleWidget extends WidgetType {
   }
 }
 
+/** Icon (and fallback title) replacing `> [!TYPE]` on a callout's first line. */
+class CalloutBadgeWidget extends WidgetType {
+  constructor(
+    readonly kind: CalloutKind,
+    readonly label?: string,
+  ) {
+    super();
+  }
+  eq(other: CalloutBadgeWidget) {
+    return other.kind === this.kind && other.label === this.label;
+  }
+  toDOM() {
+    const el = document.createElement("span");
+    el.className = "cm-lp-callout-badge";
+    el.appendChild(createCalloutIcon(this.kind));
+    if (this.label) {
+      const span = document.createElement("span");
+      span.textContent = this.label;
+      el.appendChild(span);
+    }
+    return el;
+  }
+  ignoreEvent() {
+    return true;
+  }
+}
+
 /** An embedded image (`![[photo.png]]`), shown in place of its source. */
 class ImageWidget extends WidgetType {
   constructor(
@@ -81,8 +110,8 @@ class ImageWidget extends WidgetType {
    * image comes into view. Unknown size: -1, CodeMirror measures the DOM.
    */
   get estimatedHeight() {
-    // The text of a line is inset by 1.5rem on each side (`editor.ts`).
-    const lineWidth = Math.max(1, this.view.contentDOM.clientWidth - 48);
+    // The text inside `.cm-line` is inset by 6px left + 2px right (`editor.ts` / CodeMirror base theme).
+    const lineWidth = Math.max(1, this.view.contentDOM.clientWidth - 8);
     return embeddedImageHeight(this.target, this.width ?? lineWidth) ?? -1;
   }
   toDOM(view: EditorView) {
@@ -96,6 +125,12 @@ class ImageWidget extends WidgetType {
 interface Embed extends Hide {
   target: string;
   width?: number;
+}
+
+/** A callout header badge decoration range. */
+interface CalloutBadge extends Hide {
+  kind: CalloutKind;
+  label?: string;
 }
 
 /** The lines the cursor is on: their syntax stays visible. */
@@ -166,6 +201,7 @@ function collectSyntax(
   rules: Hide[],
   lineClasses: { from: number; class: string }[],
   marks: { from: number; to: number; class: string }[],
+  badges: CalloutBadge[],
 ): void {
   /** Hides a marker and the space behind it. */
   const hide = (from: number, to: number, withSpace = false) => {
@@ -229,9 +265,31 @@ function collectSyntax(
         case "HorizontalRule":
           rules.push({ from, to, priority: 1 });
           break;
-        case "Blockquote":
-          addLineClasses(state, lineClasses, Math.max(from, range.from), Math.min(to, range.to), "cm-lp-quote");
+        case "Blockquote": {
+          const firstLine = state.doc.lineAt(from);
+          const match = firstLine.text.match(CALLOUT_HEADER);
+          if (match) {
+            const info = resolveCallout(match[2]);
+            addCalloutLines(state, lineClasses, from, to, range, info.kind);
+            if (firstLine.from >= range.from && firstLine.from <= range.to) {
+              const customTitle = match[3]?.trim();
+              if (customTitle) {
+                const markerEnd = firstLine.from + match[1].length;
+                badges.push({ from: firstLine.from, to: markerEnd, priority: 3, kind: info.kind });
+                hides.push({ from: firstLine.from, to: markerEnd, priority: 3 });
+                if (markerEnd < firstLine.to) {
+                  marks.push({ from: markerEnd, to: firstLine.to, class: "cm-lp-callout-title" });
+                }
+              } else {
+                badges.push({ from: firstLine.from, to: firstLine.to, priority: 3, kind: info.kind, label: info.defaultTitle });
+                hides.push({ from: firstLine.from, to: firstLine.to, priority: 3 });
+              }
+            }
+          } else {
+            addLineClasses(state, lineClasses, Math.max(from, range.from), Math.min(to, range.to), "cm-lp-quote");
+          }
           break;
+        }
         case "FencedCode":
         case "CodeBlock":
           addCodeLines(state, lineClasses, from, to, range);
@@ -258,6 +316,30 @@ function addLineClasses(
     lineClasses.push({ from: line.from, class: className });
     if (line.to >= to) break;
     pos = line.to + 1;
+  }
+}
+
+/**
+ * Marks the lines of a callout block, first and last extra, so the callout
+ * renders as one rounded tinted container.
+ */
+function addCalloutLines(
+  state: EditorState,
+  lineClasses: { from: number; class: string }[],
+  from: number,
+  to: number,
+  range: Range,
+  kind: CalloutKind,
+): void {
+  const first = state.doc.lineAt(from).number;
+  const last = state.doc.lineAt(Math.max(from, to - 1)).number;
+  const start = Math.max(first, state.doc.lineAt(range.from).number);
+  const end = Math.min(last, state.doc.lineAt(range.to).number);
+  for (let n = start; n <= end; n++) {
+    let className = `cm-lp-callout cm-lp-callout-${kind}`;
+    if (n === first) className += " cm-lp-callout-first";
+    if (n === last) className += " cm-lp-callout-last";
+    lineClasses.push({ from: state.doc.line(n).from, class: className });
   }
 }
 
@@ -295,10 +377,11 @@ function buildDecorations(view: EditorView, ranges: Range[] = visibleLines(view)
   const lineClasses: { from: number; class: string }[] = [];
   const marks: { from: number; to: number; class: string }[] = [];
   const images: Embed[] = [];
+  const badges: CalloutBadge[] = [];
 
   for (const range of ranges) {
     collectWikilinks(state, range, hides, images);
-    collectSyntax(state, range, hides, bullets, rules, lineClasses, marks);
+    collectSyntax(state, range, hides, bullets, rules, lineClasses, marks, badges);
   }
 
   // Ranges must not overlap. The first one wins, and a longer range comes
@@ -317,7 +400,12 @@ function buildDecorations(view: EditorView, ranges: Range[] = visibleLines(view)
     // The line of the cursor keeps its syntax.
     if (active.has(state.doc.lineAt(h.from).number)) continue;
     const image = images.find((i) => i.from === h.from && i.to === h.to);
-    const widget = image ? new ImageWidget(image.target, image.width, view) : undefined;
+    const badge = badges.find((b) => b.from === h.from && b.to === h.to);
+    const widget = image
+      ? new ImageWidget(image.target, image.width, view)
+      : badge
+        ? new CalloutBadgeWidget(badge.kind, badge.label)
+        : undefined;
     replaces.push({ from: h.from, to: h.to, deco: Decoration.replace(widget ? { widget } : {}) });
   }
   for (const b of bullets) {

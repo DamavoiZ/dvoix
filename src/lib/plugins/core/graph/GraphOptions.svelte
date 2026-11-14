@@ -119,6 +119,6 @@
   </section>
 
   <button class="rounded-md px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200" onclick={reset}>
-    Standard wiederherstellen
+    Reset to defaults
   </button>
 </div>
