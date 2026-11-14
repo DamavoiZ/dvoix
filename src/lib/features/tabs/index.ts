@@ -27,5 +27,19 @@ export const tabsFeature: Plugin = {
       hotkeys: [{ mod: true, shift: true, key: "Tab" }, { mod: true, key: "PageUp" }],
       run: () => vault.cycleTab(-1),
     });
+    ctx.addCommand({
+      id: "back",
+      name: "Navigate back",
+      hotkeys: [{ alt: true, key: "ArrowLeft" }],
+      when: () => vault.canGoBack,
+      run: () => vault.goBack(),
+    });
+    ctx.addCommand({
+      id: "forward",
+      name: "Navigate forward",
+      hotkeys: [{ alt: true, key: "ArrowRight" }],
+      when: () => vault.canGoForward,
+      run: () => vault.goForward(),
+    });
   },
 };

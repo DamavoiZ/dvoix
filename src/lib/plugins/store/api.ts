@@ -58,6 +58,7 @@ export interface DvoixPluginApi {
   addRightSidebar(spec: { id: string; order?: number; mount: MountFn; toggle?: MountFn }): Dispose;
   addFileFooter(spec: { id: string; order?: number; mount: MountFn<{ path: string }> }): Dispose;
   addPaneHeader(spec: { id: string; order?: number; mount: MountFn }): Dispose;
+  addStatusBarItem(spec: { id: string; align?: "left" | "right"; order?: number; mount: MountFn }): Dispose;
   addOverlay(spec: { id: string; mount: MountFn }): Dispose;
   /** A view in a tab; open it with `openView(id)`. */
   registerView(spec: { id: string; label: string; icon?: string; mount: MountFn }): Dispose;
@@ -139,6 +140,8 @@ export function createApi(ctx: PluginContext, manifest: StoreManifest): DvoixPlu
     addCommand: (s) => ctx.addCommand(s),
     addFileFooter: (s) => ctx.addFileFooter({ id: own(s.id), order: s.order, component: mountComponent(s.mount) }),
     addPaneHeader: (s) => ctx.addPaneHeader({ id: own(s.id), order: s.order, component: mountComponent(s.mount) }),
+    addStatusBarItem: (s) =>
+      ctx.addStatusBarItem({ id: own(s.id), align: s.align, order: s.order, component: mountComponent(s.mount) }),
     addOverlay: (s) => ctx.addOverlay({ id: own(s.id), component: mountComponent(s.mount) }),
     registerView: (s) =>
       ctx.registerView({ id: own(s.id), label: s.label, icon: iconComponent(s.icon), component: mountComponent(s.mount) }),

@@ -5,6 +5,7 @@
   import { api, type RenderedNote } from "../../../api";
   import { embedImage, isImage, parseEmbed } from "../../../attachments";
   import { highlightCodeBlocks } from "../../../filetypes/markdown/codeHighlight";
+  import { enhanceReading } from "../../../filetypes/markdown/enhanceReading";
   import { parseFrontmatter } from "../../../filetypes/markdown/frontmatter";
   import { vault } from "../../../vault.svelte";
 
@@ -32,7 +33,10 @@
   // Code blocks are colored after the HTML is in place; `{@html}` replaces
   // them on every render, so this runs again for each new HTML.
   $effect(() => {
-    if (prose && rendered) void highlightCodeBlocks(prose);
+    if (prose && rendered) {
+      enhanceReading(prose);
+      void highlightCodeBlocks(prose);
+    }
   });
 
   // `![[photo.png]]` comes from the core as a link with `data-embed`; images

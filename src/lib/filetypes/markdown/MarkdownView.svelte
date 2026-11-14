@@ -2,13 +2,13 @@
   import { onMount, untrack } from "svelte";
   import { EditorView, lineNumbers } from "@codemirror/view";
   import type { Extension } from "@codemirror/state";
-  import { BookOpen, Code, Pencil } from "@lucide/svelte";
   import type { FileViewProps } from "../types";
   import { createMarkdownEditor, revealLine, setDoc, setExtensions, setLivePreview } from "./editor";
   import ReadingView from "./ReadingView.svelte";
+  import { editorStatus } from "../../editorStatus.svelte";
   import { reveal } from "../../reveal.svelte";
   import { plugins } from "../../plugins/manager.svelte";
-  import { settings, type ViewMode } from "../../settings.svelte";
+  import { settings } from "../../settings.svelte";
 
   let { path, content, onchange, onopen }: FileViewProps = $props();
 
@@ -36,6 +36,7 @@
     if (mode === "read") {
       view?.destroy();
       view = undefined;
+      editorStatus.clear();
       return;
     }
     if (!host || view) return;
@@ -83,7 +84,10 @@
     showRequestedLine();
   });
 
-  onMount(() => () => view?.destroy());
+  onMount(() => () => {
+    view?.destroy();
+    editorStatus.clear();
+  });
 
   /** Gives an edited note back the line endings of the file, so only the edited lines change on disk. */
   function withLineEndings(doc: string): string {
@@ -95,14 +99,6 @@
     const target = reveal.take(path);
     if (target) revealLine(view, target.line);
   }
-
-  function setMode(next: ViewMode) {
-    settings.app.viewMode = next;
-    settings.saveApp();
-  }
-
-  const modeButton =
-    "rounded p-1 transition-colors hover:bg-zinc-800 hover:text-zinc-200";
 </script>
 
 <div class="relative h-full">
@@ -111,39 +107,4 @@
   {:else}
     <div class="h-full overflow-hidden" bind:this={host}></div>
   {/if}
-
-  <!-- The three ways to show a note, like in Obsidian. -->
-  <div class="pointer-events-none absolute top-1.5 right-3 z-10">
-    <div
-      class="pointer-events-auto flex items-center gap-0.5 rounded-lg border border-zinc-800 bg-zinc-900/90 p-0.5 shadow-lg"
-    >
-      <button
-        class="{modeButton} {mode === 'read' ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500'}"
-        title="Read (Ctrl+E)"
-        aria-label="Lesen"
-        aria-pressed={mode === "read"}
-        onclick={() => setMode("read")}
-      >
-        <BookOpen size={14} />
-      </button>
-      <button
-        class="{modeButton} {mode === 'edit' ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500'}"
-        title="Edit (Ctrl+E)"
-        aria-label="Edit"
-        aria-pressed={mode === "edit"}
-        onclick={() => setMode("edit")}
-      >
-        <Pencil size={14} />
-      </button>
-      <button
-        class="{modeButton} {mode === 'source' ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500'}"
-        title="Source (Ctrl+Shift+E)"
-        aria-label="Source"
-        aria-pressed={mode === "source"}
-        onclick={() => setMode("source")}
-      >
-        <Code size={14} />
-      </button>
-    </div>
-  </div>
 </div>

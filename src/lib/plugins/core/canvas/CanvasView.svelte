@@ -90,7 +90,7 @@
   <div class="p-8 text-sm text-red-400">{error}</div>
 {:else}
   <div
-    class="relative h-full cursor-grab overflow-hidden bg-zinc-950 bg-[radial-gradient(circle,#27272a_1px,transparent_1px)] [background-size:24px_24px] select-none"
+    class="relative h-full cursor-grab overflow-hidden bg-zinc-950 bg-[radial-gradient(circle,var(--color-zinc-800)_1px,transparent_1px)] [background-size:24px_24px] select-none"
     style:background-position="{pan.x}px {pan.y}px"
     role="application"
     aria-label="Canvas"
@@ -110,7 +110,7 @@
               y1={center(a).y}
               x2={center(b).x}
               y2={center(b).y}
-              stroke={colorOf(edge.color) ?? "#52525b"}
+              stroke={colorOf(edge.color) ?? "var(--color-zinc-600)"}
               stroke-width="2"
             />
           {/if}
@@ -125,7 +125,7 @@
           style:top="{node.y}px"
           style:width="{node.width}px"
           style:height="{node.height}px"
-          style:border-color={colorOf(node.color) ?? "#3f3f46"}
+          style:border-color={colorOf(node.color) ?? "var(--color-zinc-700)"}
           role="group"
           onpointerdown={(e) => startNodeDrag(e, node)}
         >

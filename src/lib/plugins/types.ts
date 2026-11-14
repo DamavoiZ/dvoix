@@ -117,6 +117,15 @@ export interface PaneHeaderSpec {
   order?: number;
 }
 
+/** An item shown in the bottom status bar. */
+export interface StatusBarItemSpec {
+  id: string;
+  component: Component;
+  /** Which side of the status bar the item sits on (default "left"). */
+  align?: "left" | "right";
+  order?: number;
+}
+
 /** A component mounted once at the top level of the app, e.g. a dialog. */
 export interface OverlaySpec {
   id: string;
@@ -168,6 +177,7 @@ export interface PluginContext {
   registerEditorExtension(extension: Extension): Dispose;
   addFileFooter(footer: FileFooterSpec): Dispose;
   addPaneHeader(header: PaneHeaderSpec): Dispose;
+  addStatusBarItem(item: StatusBarItemSpec): Dispose;
   addOverlay(overlay: OverlaySpec): Dispose;
   /** A view that opens in a tab instead of a file, e.g. the graph. */
   registerView(view: ViewSpec): Dispose;

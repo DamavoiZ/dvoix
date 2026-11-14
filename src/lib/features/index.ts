@@ -15,6 +15,8 @@ import { attachmentsFeature } from "./attachments";
 import { quickSwitcherFeature } from "./quick-switcher";
 import { tabsFeature } from "./tabs";
 import { editorModesFeature } from "./editor-modes";
+import { statusBarFeature } from "./status-bar";
+import { editorToolbarFeature } from "./editor-toolbar";
 
 export const coreFeatures: Plugin[] = [
   fileExplorerFeature,
@@ -27,4 +29,6 @@ export const coreFeatures: Plugin[] = [
   quickSwitcherFeature,
   tabsFeature,
   editorModesFeature,
+  statusBarFeature,
+  editorToolbarFeature,
 ];

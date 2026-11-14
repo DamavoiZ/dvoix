@@ -30,11 +30,20 @@
     return () => window.removeEventListener("beforeunload", beforeUnload);
   });
 
-  // Appearance settings as CSS variables (used by the editor theme and app.css).
+  // Appearance settings as CSS variables and root attributes (used by Tailwind tokens, the editor theme, and app.css).
   $effect(() => {
-    const root = document.documentElement.style;
-    root.setProperty("--editor-font-size", `${settings.appearance.fontSize}px`);
-    root.fontSize = `${settings.appearance.interfaceFontSize}px`;
+    const el = document.documentElement;
+    const root = el.style;
+    const a = settings.appearance;
+    el.dataset.theme = a.theme;
+    el.dataset.accent = a.accentColor;
+    el.classList.toggle("dark", a.theme !== "light");
+    const appFont = a.interfaceFont === "system" ? "var(--font-system)" : a.interfaceFont === "mono" ? "var(--font-mono)" : "var(--font-sans)";
+    const edFont = a.editorFont === "serif" ? "var(--font-serif)" : a.editorFont === "mono" ? "var(--font-mono)" : "var(--font-sans)";
+    root.setProperty("--app-font-sans", appFont);
+    root.setProperty("--editor-font-family", edFont);
+    root.setProperty("--editor-font-size", `${a.fontSize}px`);
+    root.fontSize = `${a.interfaceFontSize}px`;
     root.setProperty("--editor-max-width", settings.app.readableLineLength ? "48rem" : "none");
   });
 
@@ -86,6 +95,20 @@
         </div>
       </div>
     </div>
+    {#if plugins.statusBarLeft.length || plugins.statusBarRight.length}
+      <footer class="flex h-6 shrink-0 items-center justify-between gap-4 border-t border-zinc-800 bg-zinc-900/60 px-3 text-[11px] text-zinc-500">
+        <div class="flex min-w-0 items-center gap-3">
+          {#each plugins.statusBarLeft as item (item.pluginId + item.id)}
+            <item.component />
+          {/each}
+        </div>
+        <div class="flex shrink-0 items-center gap-3">
+          {#each plugins.statusBarRight as item (item.pluginId + item.id)}
+            <item.component />
+          {/each}
+        </div>
+      </footer>
+    {/if}
   </div>
   <ContextMenu />
   {#each plugins.overlays as overlay (overlay.pluginId + overlay.id)}

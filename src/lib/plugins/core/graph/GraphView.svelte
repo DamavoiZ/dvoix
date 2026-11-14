@@ -7,6 +7,7 @@
   import { onMount } from "svelte";
   import { Maximize, SlidersHorizontal, X } from "@lucide/svelte";
   import { api, type GraphData } from "../../../api";
+  import { settings as appSettings } from "../../../settings.svelte";
   import { vault } from "../../../vault.svelte";
   import GraphOptions from "./GraphOptions.svelte";
   import { buildGraph, colorGroups, type EdgeKind, type GraphNode, type NodeKind } from "./model";
@@ -274,6 +275,15 @@
       graph?._destructor();
       graph = undefined;
     };
+  });
+
+  $effect(() => {
+    void [appSettings.appearance.theme, appSettings.appearance.accentColor];
+    const id = requestAnimationFrame(() => {
+      colors = readColors();
+      redraw();
+    });
+    return () => cancelAnimationFrame(id);
   });
 
   // Reload when files change on disk: once per burst of changes, and only

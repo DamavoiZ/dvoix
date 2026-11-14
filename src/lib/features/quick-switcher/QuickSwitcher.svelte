@@ -1,6 +1,6 @@
 <script lang="ts">
   // Quick switcher (Ctrl+O): fuzzy search over all files of the vault, like Obsidian's.
-  import { FilePlus } from "@lucide/svelte";
+  import { FilePlus, Search } from "@lucide/svelte";
   import { fileTypeFor } from "../../filetypes";
   import { fuzzyMatch, highlight } from "../../fuzzy";
   import { ui } from "../../ui.svelte";
@@ -91,24 +91,27 @@
 
 {#if ui.modal === "quick-switcher"}
   <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
-  <div class="fixed inset-0 z-40 bg-black/40" onclick={close}></div>
+  <div class="fixed inset-0 z-40 bg-black/50 backdrop-blur-[2px]" onclick={close}></div>
   <div
     class="fixed top-[12vh] left-1/2 z-50 flex max-h-[70vh] w-[min(640px,92vw)] -translate-x-1/2 flex-col overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl"
     role="dialog"
     aria-label="Quick switcher"
   >
-    <input
-      class="border-b border-zinc-800 bg-transparent px-4 py-3 text-[15px] text-zinc-100 outline-none placeholder:text-zinc-600"
-      placeholder="Find a file …"
-      use:focus
-      bind:value={query}
-      onkeydown={keydown}
-      onblur={close}
-    />
+    <div class="flex items-center gap-2.5 border-b border-zinc-800 px-4">
+      <Search size={16} class="shrink-0 text-zinc-500" />
+      <input
+        class="w-full bg-transparent py-3 text-[15px] text-zinc-100 outline-none placeholder:text-zinc-500"
+        placeholder="Find a file …"
+        use:focus
+        bind:value={query}
+        onkeydown={keydown}
+        onblur={close}
+      />
+    </div>
     <div class="min-h-0 flex-1 overflow-y-auto p-1.5" bind:this={list} role="listbox">
       {#each items as item, i (item.path)}
         <button
-          class="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left {i === selected ? 'bg-zinc-800' : ''}"
+          class="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left transition-colors {i === selected ? 'bg-zinc-800' : ''}"
           data-index={i}
           role="option"
           aria-selected={i === selected}
@@ -131,13 +134,13 @@
             {/if}
           </span>
           {#if item.badge}
-            <span class="shrink-0 rounded bg-zinc-800 px-1 py-px text-[9px] font-semibold tracking-wider text-zinc-400">{item.badge}</span>
+            <span class="shrink-0 rounded bg-zinc-800/90 px-1.5 py-px text-[10px] font-medium tracking-wider text-zinc-400">{item.badge}</span>
           {/if}
         </button>
       {/each}
       {#if canCreate}
         <button
-          class="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-sm text-zinc-300 {selected === items.length ? 'bg-zinc-800' : ''}"
+          class="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-sm text-zinc-300 transition-colors {selected === items.length ? 'bg-zinc-800' : ''}"
           data-index={items.length}
           role="option"
           aria-selected={selected === items.length}
@@ -145,20 +148,20 @@
           onmousemove={() => (selected = items.length)}
           onclick={(e) => choose(items.length, e.ctrlKey || e.metaKey)}
         >
-          <FilePlus size={15} strokeWidth={1.75} class="text-zinc-500" />
+          <FilePlus size={15} strokeWidth={1.75} class="text-violet-400" />
           Create note "{query.trim()}"
         </button>
       {/if}
       {#if !count}
-        <p class="px-3 py-2 text-sm text-zinc-500">No files in the vault.</p>
+        <p class="px-3 py-3 text-xs text-zinc-500">No files in the vault.</p>
       {/if}
     </div>
-    <footer class="flex gap-4 border-t border-zinc-800 px-4 py-2 text-[11px] text-zinc-500">
-      <span><kbd>↑↓</kbd> to select</span>
-      <span><kbd>Enter</kbd> to open</span>
-      <span><kbd>Ctrl+Enter</kbd> in new tab</span>
-      <span><kbd>Shift+Enter</kbd> to create new</span>
-      <span><kbd>Esc</kbd> to close</span>
+    <footer class="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-zinc-800 bg-zinc-950/50 px-4 py-2 text-[11px] text-zinc-500">
+      <span class="inline-flex items-center gap-1"><kbd>↑↓</kbd> to select</span>
+      <span class="inline-flex items-center gap-1"><kbd>Enter</kbd> to open</span>
+      <span class="inline-flex items-center gap-1"><kbd>Ctrl+Enter</kbd> in new tab</span>
+      <span class="inline-flex items-center gap-1"><kbd>Shift+Enter</kbd> to create new</span>
+      <span class="inline-flex items-center gap-1"><kbd>Esc</kbd> to close</span>
     </footer>
   </div>
 {/if}

@@ -1,5 +1,6 @@
 <script lang="ts">
   // "Linked from": notes that link to the open note.
+  import { Link2 } from "@lucide/svelte";
   import { api, type NoteSummary } from "../../api";
   import { fileTypeFor } from "../../filetypes";
   import { vault } from "../../vault.svelte";
@@ -59,14 +60,25 @@
 </script>
 
 {#if shownFor === path && backlinks.length}
-  <footer class="border-t border-zinc-800 px-4 py-2 text-xs text-zinc-500">
-    Linked from:
+  <footer class="flex flex-wrap items-center gap-1.5 border-t border-zinc-800 bg-zinc-950/50 px-4 py-2 text-xs text-zinc-500">
+    <span class="mr-1 inline-flex items-center gap-1 text-[11px] font-medium text-zinc-400">
+      <Link2 size={12} strokeWidth={1.75} />
+      Linked from
+    </span>
     {#each shown as b (b.path)}
-      <button class="ml-2 text-violet-300 hover:underline" onclick={() => vault.openFile(b.path)}>{b.title}</button>
+      <button
+        class="rounded-md border border-zinc-800 bg-zinc-900/70 px-2 py-0.5 text-xs text-violet-300 transition-colors hover:border-zinc-700 hover:bg-zinc-800"
+        onclick={() => vault.openFile(b.path)}
+      >
+        {b.title}
+      </button>
     {/each}
     {#if hiddenCount > 0}
-      <button class="ml-2 text-zinc-400 hover:text-zinc-200 hover:underline" onclick={() => (limit += PAGE)}>
-        and {hiddenCount} more
+      <button
+        class="rounded-md px-1.5 py-0.5 text-xs text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-200"
+        onclick={() => (limit += PAGE)}
+      >
+        +{hiddenCount} more
       </button>
     {/if}
   </footer>

@@ -75,6 +75,7 @@ Views are `mount(el, props)` functions: they draw into an empty element and opti
 | `addCommand({ id, name, hotkeys, run })` | command with an optional keyboard shortcut |
 | `addFileFooter({ id, mount })` | something below the open file; `props.path` is the file |
 | `addPaneHeader({ id, mount })` | something above the open file |
+| `addStatusBarItem({ id, mount, align, order })` | item in the bottom status bar (`align: "left" \| "right"`) |
 | `addOverlay({ id, mount })` | element on the top layer (dialogs) |
 | `registerView({ id, label, icon, mount })` | own view in a tab, open with `dvoix.openView(id)` |
 | `registerFileType({ id, label, extensions, icon, template, mount })` | new file type; `props` has `path`, `content`, `onchange(text)`, `onopen(path)`, `update(props)` is called when the file changes on disk |

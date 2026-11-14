@@ -3,7 +3,7 @@
   // that are on (file explorer, search, tags, ...). Resizable by dragging its
   // right edge, collapsible from the ribbon. Its top row is part of the app's
   // own title bar and moves the window.
-  import { PanelLeftClose } from "@lucide/svelte";
+  import { Folder, PanelLeftClose } from "@lucide/svelte";
   import { plugins } from "../plugins";
   import { PANEL_DEFAULT, ui } from "../ui.svelte";
   import { vault } from "../vault.svelte";
@@ -39,7 +39,7 @@
   >
     <header class="flex h-9 shrink-0 items-center border-b border-zinc-800 pr-1.5 {panel.header === false && panel.actions ? 'pl-1.5' : 'pl-4'}" use:dragRegion>
       {#if panel.header !== false}
-        <span class="truncate text-xs font-medium tracking-wide text-zinc-500 uppercase">{panel.label}</span>
+        <span class="truncate text-xs font-medium tracking-wide text-zinc-400 uppercase">{panel.label}</span>
       {/if}
       {#if panel.actions}
         {#key panel.id}
@@ -49,7 +49,7 @@
         {/key}
       {/if}
       <button
-        class="ml-auto flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
+        class="ml-auto flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-200"
         title="Collapse sidebar"
         aria-label="Collapse sidebar"
         onclick={() => ui.togglePanel(panel.id)}
@@ -62,18 +62,21 @@
       <panel.component />
     {/key}
 
-    <footer class="truncate border-t border-zinc-800 px-4 py-2 text-xs text-zinc-500" title={vault.info?.path}>
-      {vault.info?.name}
+    <footer class="flex h-8 shrink-0 items-center gap-2 border-t border-zinc-800 bg-zinc-950/30 px-3 text-xs text-zinc-400" title={vault.info?.path}>
+      <Folder size={13} strokeWidth={1.75} class="shrink-0 text-zinc-500" />
+      <span class="truncate">{vault.info?.name}</span>
     </footer>
 
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
-      class="absolute top-0 -right-1 z-10 h-full w-2 cursor-col-resize {resizing ? 'bg-violet-500/40' : 'hover:bg-violet-500/20'}"
+      class="group/resize absolute top-0 -right-1 z-10 flex h-full w-2 cursor-col-resize justify-center"
       onpointerdown={startResize}
       ondblclick={() => {
         ui.setWidth(PANEL_DEFAULT);
         ui.save();
       }}
-    ></div>
+    >
+      <div class="h-full w-px transition-colors {resizing ? 'bg-violet-500' : 'bg-transparent group-hover/resize:bg-violet-500/50'}"></div>
+    </div>
   </aside>
 {/if}
