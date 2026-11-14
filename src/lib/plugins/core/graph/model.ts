@@ -37,6 +37,40 @@ export interface GraphModel {
   edges: GraphEdge[];
 }
 
+export function neighborhood(model: GraphModel, rootId: string, depth: number): GraphModel {
+  if (!model.nodes.some((node) => node.id === rootId)) return { nodes: [], edges: [] };
+
+  const adjacency = new Map<string, string[]>();
+  for (const edge of model.edges) {
+    const from = adjacency.get(edge.source) ?? [];
+    from.push(edge.target);
+    adjacency.set(edge.source, from);
+    const to = adjacency.get(edge.target) ?? [];
+    to.push(edge.source);
+    adjacency.set(edge.target, to);
+  }
+
+  const included = new Set<string>([rootId]);
+  let frontier = [rootId];
+  const hops = Math.max(1, Math.floor(depth));
+  for (let level = 0; level < hops && frontier.length; level++) {
+    const next: string[] = [];
+    for (const id of frontier) {
+      for (const neighbor of adjacency.get(id) ?? []) {
+        if (included.has(neighbor)) continue;
+        included.add(neighbor);
+        next.push(neighbor);
+      }
+    }
+    frontier = next;
+  }
+
+  return {
+    nodes: model.nodes.filter((node) => included.has(node.id)),
+    edges: model.edges.filter((edge) => included.has(edge.source) && included.has(edge.target)),
+  };
+}
+
 /**
  * Above this many notes a tag is drawn as a node even in "shared" mode:
  * lines between every pair would be n² lines and only make a hairball.
@@ -146,26 +180,37 @@ export function buildGraph(data: GraphData, entries: VaultEntry[], s: ModelSetti
  * often they occur (0 = most frequent), so the palette goes to the big groups.
  */
 export function colorGroups(nodes: GraphNode[], by: ColorBy): Map<string, number> {
-  const groupOf = new Map<string, string>();
-  const counts = new Map<string, number>();
-  if (by === "none") return new Map();
-  for (const n of nodes) {
-    const g = by === "tag" ? n.tag : folderGroup(n);
-    if (g === null) continue;
-    groupOf.set(n.id, g);
-    counts.set(g, (counts.get(g) ?? 0) + 1);
-  }
-  const order = [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([g]) => g);
-  const index = new Map(order.map((g, i) => [g, i]));
-  return new Map([...groupOf].map(([id, g]) => [id, index.get(g)!]));
+  const { groupOf, order } = groupOrder(nodes, by);
+  const index = new Map(order.map((group, position) => [group, position]));
+  return new Map([...groupOf].map(([id, group]) => [id, index.get(group)!]));
 }
 
-function folderGroup(n: GraphNode): string | null {
-  if (n.kind === "tag" || n.kind === "unresolved") return null;
-  const top = n.path.split("/")[0];
+export function colorGroupNames(nodes: GraphNode[], by: ColorBy): string[] {
+  return groupOrder(nodes, by).order;
+}
+
+function groupOrder(nodes: GraphNode[], by: ColorBy): { groupOf: Map<string, string>; order: string[] } {
+  const groupOf = new Map<string, string>();
+  const counts = new Map<string, number>();
+  if (by === "none") return { groupOf, order: [] };
+  for (const node of nodes) {
+    const group = by === "tag" ? node.tag : folderGroup(node);
+    if (group === null) continue;
+    groupOf.set(node.id, group);
+    counts.set(group, (counts.get(group) ?? 0) + 1);
+  }
+  const order = [...counts]
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .map(([group]) => group);
+  return { groupOf, order };
+}
+
+function folderGroup(node: GraphNode): string | null {
+  if (node.kind === "tag" || node.kind === "unresolved") return null;
+  const top = node.path.split("/")[0];
   // A file in the root has no folder; a top-level folder node is its own group.
-  if (n.kind === "folder") return n.path ? top : null;
-  return n.path.includes("/") ? top : null;
+  if (node.kind === "folder") return node.path ? top : null;
+  return node.path.includes("/") ? top : null;
 }
 
 /**

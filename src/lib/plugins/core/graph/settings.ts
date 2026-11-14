@@ -21,12 +21,16 @@ export const GRAPH_DEFAULTS = {
   attachments: false,
   /** Links to notes that don't exist yet. */
   unresolved: false,
-  colorBy: "none" as ColorBy,
+  /** Hops kept around a focused note. */
+  focusDepth: 1,
+  colorBy: "folder" as ColorBy,
   /** Bigger nodes for notes with more lines. */
   sizeByLinks: true,
   nodeSize: 1,
   linkWidth: 1,
   arrows: false,
+  /** Automatic titles; the hovered note is always labelled. */
+  labels: true,
   /** Zoom level from which titles are shown (always shown for the hovered node). */
   labelZoom: 1.5,
   /** Forces of the layout. */
